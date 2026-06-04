@@ -7,14 +7,16 @@
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
     "dev:client": "vite --port=3000 --host=0.0.0.0",
     "dev:server": "tsx watch server/index.ts",
-    "build": "vite build",
+    "build": "vite build && tsc -p tsconfig.server.json",
+    "build:client": "vite build",
+    "build:server": "tsc -p tsconfig.server.json",
     "preview": "vite preview",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:seed": "tsx server/seed.ts",
     "db:studio": "prisma studio",
     "db:reset": "prisma db push --force-reset && npm run db:seed",
-    "start": "node dist/server/index.js",
+    "start": "NODE_ENV=production node dist/server/index.js",
     "lint": "tsc --noEmit"
   },
   "dependencies": {
