@@ -1,0 +1,154 @@
+// Timia Hub — Prisma Schema
+// Swap DATABASE_URL to postgresql://... for production on AWS RDS
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  avatar    String
+  roleId    String
+  role      Role     @relation(fields: [roleId], references: [id])
+  createdAt DateTime @default(now())
+
+  assignedTasks TaskAssignee[]
+  comments      Comment[]
+  auditLogs     AuditLog[]
+}
+
+model Role {
+  id          String @id
+  name        String
+  description String
+  color       String
+  users       User[]
+  permissions RolePermission[]
+}
+
+model RolePermission {
+  id         String @id @default(cuid())
+  roleId     String
+  permission String
+  status     String // "allowed" | "denied"
+  role       Role   @relation(fields: [roleId], references: [id])
+
+  @@unique([roleId, permission])
+}
+
+model Project {
+  id          String   @id @default(cuid())
+  name        String
+  description String   @default("")
+  templateId  String   @default("ingesta")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tasks    Task[]
+  ansRules AnsRule[]
+}
+
+model Task {
+  id          String   @id @default(cuid())
+  title       String
+  description String   @default("")
+  priority    String   @default("Media") // Baja | Media | Alta | Crítica
+  status      String   @default("backlog") // backlog | in-progress | review | done
+  startDate   String   @default("")
+  endDate     String   @default("")
+  isLocked    Boolean  @default(false)
+  jiraId      String?
+  order       Int      @default(0)
+  projectId   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  ansDeadline DateTime?
+
+  project     Project       @relation(fields: [projectId], references: [id])
+  assignees   TaskAssignee[]
+  comments    Comment[]
+  attachments Attachment[]
+  links       TaskLink[]
+  auditLogs   AuditLog[]
+}
+
+model TaskAssignee {
+  taskId String
+  userId String
+  task   Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@id([taskId, userId])
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  text      String
+  taskId    String
+  userId    String
+  createdAt DateTime @default(now())
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id])
+}
+
+model Attachment {
+  id     String @id @default(cuid())
+  name   String
+  size   String
+  type   String // pdf | doc | image | other
+  url    String
+  date   String
+  taskId String
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+}
+
+model TaskLink {
+  id     String @id @default(cuid())
+  title  String
+  url    String
+  taskId String
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+}
+
+model AnsRule {
+  id              String  @id @default(cuid())
+  name            String
+  complexityLevel Int     // 1=baja 2=media 3=alta 4=crítica
+  maxDaysWork     Int
+  projectId       String
+  project         Project @relation(fields: [projectId], references: [id])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  event     String
+  detail    String
+  status    String
+  code      String
+  type      String   // AUDIT | ALERT
+  taskId    String?
+  userId    String?
+  createdAt DateTime @default(now())
+
+  task Task? @relation(fields: [taskId], references: [id])
+  user User? @relation(fields: [userId], references: [id])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  body      String
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
