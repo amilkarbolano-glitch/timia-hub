@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
+import ProtectedRoute from './components/ProtectedRoute';
 import Layout, { View } from './components/Layout';
 import KanbanBoard from './components/KanbanBoard';
 import ProjectStandards from './components/ProjectStandards';
@@ -14,29 +16,30 @@ import { hasPermission } from './lib/permissions';
 import { INITIAL_TEMPLATES } from './lib/templates';
 import { ProjectTemplate } from './types';
 
-export default function App() {
-  const [currentView, setCurrentView] = useState<View>('setup-project');
-  const [userRole, setUserRole] = useState<string>('leader');
+function AppInner() {
+  const { user } = useAuth();
+  const userRole = user?.role ?? 'guest';
+
+  const [currentView, setCurrentView] = useState<View>('dashboard');
   const [templates, setTemplates] = useState<ProjectTemplate[]>(INITIAL_TEMPLATES);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('ingesta');
 
   const renderView = () => {
-    // Permission checks for specific views
     if (currentView === 'audit' && !hasPermission(userRole, 's_audit')) {
-      return <div className="p-20 text-center text-slate-500 font-bold">Acceso denegado. No tienes permisos para ver la auditoría.</div>;
+      return <div className="p-20 text-center text-slate-500 font-bold">Acceso denegado.</div>;
     }
     if (currentView === 'roles-permissions' && !hasPermission(userRole, 'u_roles')) {
-      return <div className="p-20 text-center text-slate-500 font-bold">Acceso denegado. No tienes permisos para gestionar roles.</div>;
+      return <div className="p-20 text-center text-slate-500 font-bold">Acceso denegado.</div>;
     }
     if (currentView === 'standards' && !hasPermission(userRole, 's_standards')) {
-      return <div className="p-20 text-center text-slate-500 font-bold">Acceso denegado. No tienes permisos para configurar estándares.</div>;
+      return <div className="p-20 text-center text-slate-500 font-bold">Acceso denegado.</div>;
     }
 
     switch (currentView) {
       case 'setup-project':
         return (
-          <SetupProject 
-            onNext={() => setCurrentView('setup-team')} 
+          <SetupProject
+            onNext={() => setCurrentView('setup-team')}
             templates={templates}
             selectedTemplateId={selectedTemplateId}
             onSelectTemplate={setSelectedTemplateId}
@@ -46,14 +49,14 @@ export default function App() {
         return <SetupTeam onNext={() => setCurrentView('setup-tasks')} onBack={() => setCurrentView('setup-project')} />;
       case 'setup-tasks':
         return (
-          <TaskConfirmation 
-            onNext={() => setCurrentView('dashboard')} 
-            onBack={() => setCurrentView('setup-team')} 
+          <TaskConfirmation
+            onNext={() => setCurrentView('dashboard')}
+            onBack={() => setCurrentView('setup-team')}
             initialTasks={templates.find(t => t.id === selectedTemplateId)?.tasks || []}
           />
         );
       case 'dashboard':
-        return <KanbanBoard userRole={userRole} setUserRole={setUserRole} />;
+        return <KanbanBoard userRole={userRole} setUserRole={() => {}} />;
       case 'bank-status':
         return <BankStatus />;
       case 'standards':
@@ -71,10 +74,7 @@ export default function App() {
           <div className="flex flex-col items-center justify-center h-full p-20 text-center">
             <h2 className="text-2xl font-bold text-slate-400">Vista en construcción</h2>
             <p className="text-slate-500 mt-2">Estamos trabajando para traerte esta funcionalidad pronto.</p>
-            <button 
-              onClick={() => setCurrentView('dashboard')}
-              className="mt-6 px-6 py-2 bg-primary text-white rounded-lg font-bold"
-            >
+            <button onClick={() => setCurrentView('dashboard')} className="mt-6 px-6 py-2 bg-primary text-white rounded-lg font-bold">
               Volver al Tablero
             </button>
           </div>
@@ -86,5 +86,15 @@ export default function App() {
     <Layout currentView={currentView} onViewChange={setCurrentView} userRole={userRole}>
       {renderView()}
     </Layout>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <ProtectedRoute>
+        <AppInner />
+      </ProtectedRoute>
+    </AuthProvider>
   );
 }
