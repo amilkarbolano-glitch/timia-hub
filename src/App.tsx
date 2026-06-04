@@ -12,6 +12,7 @@ import SetupTeam from './components/SetupTeam';
 import BankStatus from './components/BankStatus';
 import RolesPermissions from './components/RolesPermissions';
 import ProjectTemplates from './components/ProjectTemplates';
+import PMDashboard from './components/PMDashboard';
 import { INITIAL_TEMPLATES } from './lib/templates';
 import { ProjectTemplate } from './types';
 
@@ -103,7 +104,8 @@ function AppInner() {
         return <BankStatus />;
 
       case 'analytics':
-        return <Analytics />;
+        // PM tiene su propio dashboard ejecutivo
+        return role === 'pm' ? <PMDashboard /> : <Analytics />;
 
       case 'audit':
         return <AuditLog />;

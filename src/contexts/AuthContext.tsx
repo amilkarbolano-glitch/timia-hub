@@ -2,7 +2,12 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
-export type UserRole = 'pm' | 'tech_lead' | 'project_lead' | 'developer';
+// pm: Rodolfo → vista ejecutiva total
+// tech_lead: Juan/Diego/David → multi-proyecto de su área
+// project_lead: Juliana/Jose → lidera un proyecto específico
+// tech_ref: Amilkar/Daniel → referente técnico, asignado por líder, apoya 1+ proyectos
+// developer: Sergio/Fabrizio → ejecuta sus tareas asignadas
+export type UserRole = 'pm' | 'tech_lead' | 'project_lead' | 'tech_ref' | 'developer';
 
 export interface AuthUser {
   id: string;
@@ -26,10 +31,16 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     'view_all_projects', 'view_analytics', 'view_bank_status',
     'view_audit', 'manage_tasks', 'assign_tasks', 'create_projects',
     'manage_team', 'view_inventory', 'view_bitacora',
-    'view_standards', 'view_roles', 'view_controlm',
+    'view_standards', 'view_roles', 'view_controlm', 'assign_tech_ref',
   ],
   project_lead: [
     'view_project', 'view_bank_status', 'manage_tasks', 'assign_tasks',
+    'view_inventory', 'view_bitacora', 'view_controlm', 'assign_tech_ref',
+  ],
+  // Referente Técnico: asignado por líder, apoya 1+ proyectos sin liderar
+  tech_ref: [
+    'view_project', 'view_bank_status', 'manage_tasks',
+    'update_task_status', 'comment_tasks',
     'view_inventory', 'view_bitacora', 'view_controlm',
   ],
   developer: [
@@ -47,7 +58,16 @@ export const ROLE_LANDING: Record<UserRole, string> = {
   pm:           'analytics',
   tech_lead:    'dashboard',
   project_lead: 'dashboard',
+  tech_ref:     'dashboard',
   developer:    'dashboard',
+};
+
+export const ROLE_LABEL: Record<UserRole, string> = {
+  pm:           'Project Manager',
+  tech_lead:    'Líder Técnico',
+  project_lead: 'Líder de Proyecto',
+  tech_ref:     'Referente Técnico',
+  developer:    'Desarrollador',
 };
 
 // ─── Proyectos del sistema ─────────────────────────────────────────────────────
@@ -113,13 +133,20 @@ export const MOCK_ACCOUNTS: AuthUser[] = [
     projectIds: ['FICO'],
     areaLabel: 'Líder Proyecto · FICO',
   },
+  // N4 · Referentes Técnicos (asignados por el líder)
   {
     id: 'u-amilkar', name: 'Amilkar Bolaño', email: 'amilkar.bolano@timia.ai',
-    initials: 'AB', role: 'project_lead', avatarColor: '#dc2626',
+    initials: 'AB', role: 'tech_ref', avatarColor: '#dc2626',
     projectIds: ['FICO'],
-    areaLabel: 'Líder Proyecto · FICO',
+    areaLabel: 'Referente Técnico · FICO',
   },
-  // N4 · Desarrolladores
+  {
+    id: 'u-daniel', name: 'Daniel Gómez', email: 'daniel.gomez@timia.ai',
+    initials: 'DG', role: 'tech_ref', avatarColor: '#0891b2',
+    projectIds: ['SDM2', 'MURIC'],
+    areaLabel: 'Referente Técnico · SDM2 · MURIC',
+  },
+  // N5 · Desarrolladores
   {
     id: 'u-sergio', name: 'Sergio Rodriguez', email: 'sergio.rodriguez@timia.ai',
     initials: 'SR', role: 'developer', avatarColor: '#b45309',

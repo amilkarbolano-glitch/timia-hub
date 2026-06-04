@@ -135,6 +135,7 @@ export default function Layout({ children, currentView, onViewChange, userRole }
                     {user?.role === 'pm' ? 'Project Manager'
                       : user?.role === 'tech_lead' ? 'Líder Técnico'
                       : user?.role === 'project_lead' ? 'Líder Proyecto'
+                      : user?.role === 'tech_ref' ? 'Referente Técnico'
                       : 'Desarrollador'}
                   </p>
                 </div>
