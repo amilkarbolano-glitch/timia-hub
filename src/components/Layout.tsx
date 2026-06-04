@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-import { hasPermission } from '../lib/permissions';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth, canAccess, UserRole } from '../contexts/AuthContext';
 import { 
   LayoutDashboard, 
   Layers, 
@@ -47,36 +46,47 @@ export default function Layout({ children, currentView, onViewChange, userRole }
             </div>
             
             <nav className="hidden md:flex items-center gap-6">
-              <button 
-                onClick={() => onViewChange('dashboard')}
-                className={`text-sm font-medium transition-colors ${currentView === 'dashboard' ? 'text-primary' : 'text-slate-600 hover:text-primary'}`}
-              >
-                Tablero
-              </button>
-              <button 
+              {/* PM no ve Tablero de tareas — ve Analytics directamente */}
+              {userRole !== 'pm' && (
+                <button
+                  onClick={() => onViewChange('dashboard')}
+                  className={`text-sm font-medium transition-colors ${currentView === 'dashboard' ? 'text-primary' : 'text-slate-600 hover:text-primary'}`}
+                >
+                  Tablero
+                </button>
+              )}
+              <button
                 onClick={() => onViewChange('bank-status')}
                 className={`text-sm font-medium transition-colors ${currentView === 'bank-status' ? 'text-primary' : 'text-slate-600 hover:text-primary'}`}
               >
-                Status Semanal
+                {userRole === 'pm' ? 'Seguimiento' : 'Status Semanal'}
               </button>
-              {hasPermission(userRole, 's_standards') && (
-                <button 
+              {canAccess(userRole as UserRole, 'view_analytics') && (
+                <button
+                  onClick={() => onViewChange('analytics')}
+                  className={`text-sm font-medium transition-colors ${currentView === 'analytics' ? 'text-primary' : 'text-slate-600 hover:text-primary'}`}
+                >
+                  Analytics
+                </button>
+              )}
+              {canAccess(userRole as UserRole, 'view_standards') && (
+                <button
                   onClick={() => onViewChange('standards')}
                   className={`text-sm font-medium transition-colors ${currentView === 'standards' ? 'text-primary' : 'text-slate-600 hover:text-primary'}`}
                 >
                   Estándares
                 </button>
               )}
-              {hasPermission(userRole, 'u_roles') && (
-                <button 
+              {canAccess(userRole as UserRole, 'u_roles') && (
+                <button
                   onClick={() => onViewChange('roles-permissions')}
                   className={`text-sm font-medium transition-colors ${currentView === 'roles-permissions' ? 'text-primary' : 'text-slate-600 hover:text-primary'}`}
                 >
                   Roles
                 </button>
               )}
-              {hasPermission(userRole, 's_audit') && (
-                <button 
+              {canAccess(userRole as UserRole, 'view_audit') && (
+                <button
                   onClick={() => onViewChange('audit')}
                   className={`text-sm font-medium transition-colors ${currentView === 'audit' ? 'text-primary' : 'text-slate-600 hover:text-primary'}`}
                 >
@@ -112,14 +122,22 @@ export default function Layout({ children, currentView, onViewChange, userRole }
                 className="flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-slate-100 transition-all"
               >
                 <div
-                  className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium"
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium flex-shrink-0"
                   style={{ background: (user?.avatarColor ?? '#DC2626') + '20', color: user?.avatarColor ?? '#DC2626' }}
                 >
                   {user?.initials ?? '?'}
                 </div>
-                <span className="hidden sm:block text-sm font-medium text-slate-700 max-w-[100px] truncate">
-                  {user?.name?.split(' ')[0] ?? 'Usuario'}
-                </span>
+                <div className="hidden sm:block text-left">
+                  <p className="text-xs font-medium text-slate-700 leading-tight">
+                    {user?.name?.split(' ')[0] ?? 'Usuario'}
+                  </p>
+                  <p className="text-xs leading-tight" style={{ color: user?.avatarColor ?? '#dc2626', fontSize: '10px' }}>
+                    {user?.role === 'pm' ? 'Project Manager'
+                      : user?.role === 'tech_lead' ? 'Líder Técnico'
+                      : user?.role === 'project_lead' ? 'Líder Proyecto'
+                      : 'Desarrollador'}
+                  </p>
+                </div>
               </button>
               {showUserMenu && (
                 <div className="absolute right-0 top-full mt-1 w-52 bg-white border border-slate-200 rounded-xl shadow-sm z-50 overflow-hidden">
