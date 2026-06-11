@@ -120,45 +120,6 @@ export const MOCK_ACCOUNTS: AuthUser[] = [
     projectIds: ['OPTIM', 'FABRICA'],
     areaLabel: 'Líder Técnico · Credicorp Capital',
   },
-  // N3 · Líderes de Proyecto
-  {
-    id: 'u-juliana', name: 'Juliana Garzón', email: 'juliana.garzon@timia.ai',
-    initials: 'JG', role: 'project_lead', avatarColor: '#0f766e',
-    projectIds: ['NGA'],
-    areaLabel: 'Líder Proyecto · NGA',
-  },
-  {
-    id: 'u-jose', name: 'Jose Bolaño', email: 'jose.bolano@timia.ai',
-    initials: 'JB', role: 'project_lead', avatarColor: '#7e22ce',
-    projectIds: ['FICO'],
-    areaLabel: 'Líder Proyecto · FICO',
-  },
-  // N4 · Referentes Técnicos (asignados por el líder)
-  {
-    id: 'u-daniel', name: 'Daniel Gómez', email: 'daniel.gomez@timia.ai',
-    initials: 'DG', role: 'tech_ref', avatarColor: '#0891b2',
-    projectIds: ['SDM2', 'MURIC'],
-    areaLabel: 'Referente Técnico · SDM2 · MURIC',
-  },
-  // N5 · Desarrolladores
-  {
-    id: 'u-sergio', name: 'Sergio Rodriguez', email: 'sergio.rodriguez@timia.ai',
-    initials: 'SR', role: 'developer', avatarColor: '#b45309',
-    projectIds: ['FICO'],
-    areaLabel: 'Desarrollador · FICO',
-  },
-  {
-    id: 'u-fabrizio', name: 'Fabrizio Atiquipa', email: 'fabrizio.atiquipa@timia.ai',
-    initials: 'FA', role: 'developer', avatarColor: '#059669',
-    projectIds: ['FICO'],
-    areaLabel: 'Desarrollador · FICO',
-  },
-  {
-    id: 'u-eric', name: 'Eric Buitrago', email: 'eric.buitrago@timia.ai',
-    initials: 'EB', role: 'developer', avatarColor: '#0891b2',
-    projectIds: ['CRONOS'],
-    areaLabel: 'Desarrollador · CRONOS',
-  },
 ];
 
 // ─── Contexto ─────────────────────────────────────────────────────────────────
