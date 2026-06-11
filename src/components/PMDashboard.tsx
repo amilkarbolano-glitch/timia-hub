@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
-import { X, Calendar, User, Clock, AlertTriangle, CheckCircle, TrendingUp, Users, Activity } from 'lucide-react';
+import { X, Calendar, User, Clock, AlertTriangle, CheckCircle, TrendingUp, Users, Activity, FileText } from 'lucide-react';
+import PlanDeTrabajo from './PlanDeTrabajo';
 import { addWorkingDays, workingDaysBetween, formatCODate, ANS_MAX_DAYS, isHoliday, isWorkingDay } from '../utils/colombiaCalendar';
 import { PROJECTS } from '../contexts/AuthContext';
 
 // ─── Datos mock ───────────────────────────────────────────────────────────────
 
 const PROJ_DATA = [
-  { id:'FICO',     pct:62, tasks:18, done:11, risk:2,  members:['JB','AB','SR','FA'],   lead:'Jose Bolaño',  ref:'Amilkar Bolaño',  area:'Juan Arévalo', jira:'DECRONOS-1997', lastCommit:'2026-06-03', priority:'Alta',    startDate:'2026-01-15' },
+  { id:'FICO',     pct:62, tasks:18, done:11, risk:2,  members:['JB','JG','SR','FA'],   lead:'Jose Bolaño',  ref:'Juliana Garzón',  area:'Juan Arévalo', jira:'DECRONOS-1997', lastCommit:'2026-06-03', priority:'Alta',    startDate:'2026-01-15' },
   { id:'NGA',      pct:91, tasks:12, done:11, risk:0,  members:['JG','CS','CC','JV'],   lead:'Juliana Garzón', ref:null,             area:'Juan Arévalo', jira:'DECRONOS-1400', lastCommit:'2026-06-02', priority:'Media',   startDate:'2026-02-01' },
   { id:'CRONOS',   pct:80, tasks:22, done:18, risk:1,  members:['EB','JA2','LB','AU'],  lead:'Eric Buitrago', ref:null,             area:'Juan Arévalo', jira:'DECRONOS-1682', lastCommit:'2026-06-03', priority:'Alta',    startDate:'2026-01-10' },
   { id:'SDM1',     pct:55, tasks:14, done:8,  risk:2,  members:['OB','MM','JM','YB'],   lead:'Omar Bonilla',  ref:null,             area:'Diego Sánchez', jira:'SDM-0412',     lastCommit:'2026-06-01', priority:'Alta',    startDate:'2026-03-01' },
@@ -18,7 +19,7 @@ const PROJ_DATA = [
 ];
 
 const ANS_TASKS = [
-  { id:'a1', project:'FICO',    task:'Validación calidad datos · LIVE',           priority:'Alta',    responsable:'Amilkar Bolaño',    initials:'AB', color:'#dc2626', startDate:'2026-05-20', jira:'DECRONOS-1997' },
+  { id:'a1', project:'FICO',    task:'Validación calidad datos · LIVE',           priority:'Alta',    responsable:'Juliana Garzón',    initials:'JG', color:'#0f766e', startDate:'2026-05-20', jira:'DECRONOS-1997' },
   { id:'a2', project:'BCBS239', task:'Despliegue Control-M producción',           priority:'Crítica', responsable:'Mauricio Pajoy',    initials:'MP', color:'#7e22ce', startDate:'2026-05-28', jira:'BCB-0189' },
   { id:'a3', project:'SDM1',    task:'Pruebas entorno Work · t_sdm1_output',      priority:'Alta',    responsable:'Omar Bonilla',      initials:'OB', color:'#2563eb', startDate:'2026-05-26', jira:'SDM-0412' },
   { id:'a4', project:'CRONOS',  task:'Construcción reglas Hammurabi',             priority:'Media',   responsable:'Eric Buitrago',     initials:'EB', color:'#0891b2', startDate:'2026-05-15', jira:'DECRONOS-1682' },
@@ -27,14 +28,15 @@ const ANS_TASKS = [
 ];
 
 const ACTIVITY = [
-  { who:'Amilkar Bolaño', action:'movió a Revisión',        detail:'Construcción prediccionario · FICO',       time:'12 min', color:'#dc2626', initials:'AB' },
+  { who:'Juliana Garzón', action:'movió a Revisión',        detail:'Construcción prediccionario · FICO',       time:'12 min', color:'#0f766e', initials:'JG' },
   { who:'Sergio Rodriguez', action:'comentó en',            detail:'Mapeo SQL t_kbrb_output · FICO',            time:'45 min', color:'#b45309', initials:'SR' },
   { who:'Sistema ANS',    action:'alertó vencimiento',      detail:'Validación calidad datos LIVE · FICO ⚠',    time:'1 h',    color:'#ef4444', initials:'⚠' },
   { who:'Eric Buitrago',  action:'completó',                detail:'Gestión repositorios Bitbucket · CRONOS',   time:'2 h',    color:'#0891b2', initials:'EB' },
   { who:'Juliana Garzón', action:'cerró',                   detail:'Despliegue esquemas Work · NGA',            time:'3 h',    color:'#0f766e', initials:'JG' },
   { who:'Juan Arévalo',   action:'creó tarea',              detail:'Solicitud ACLs Live FICO Q2-II',            time:'4 h',    color:'#dc2626', initials:'JA' },
   { who:'Fabrizio Atiquipa', action:'subió commit',         detail:'t_kbrb_output_data_co_proactivo · FICO',   time:'ayer',   color:'#059669', initials:'FA' },
-  { who:'Daniel Gómez',   action:'asignado a',              detail:'Pruebas entorno Work · SDM2',               time:'ayer',   color:'#0891b2', initials:'DG' },
+  { who:'Juliana Garzón',   action:'asignada como ref.',    detail:'Validación calidad LIVE · FICO',            time:'ayer',   color:'#0f766e', initials:'JG' },
+  { who:'Daniel Gómez',     action:'asignado a',            detail:'Pruebas entorno Work · SDM2',               time:'2 días', color:'#0891b2', initials:'DG' },
 ];
 
 // ─── Helpers UI ───────────────────────────────────────────────────────────────
@@ -330,7 +332,7 @@ function ViewProyectos({ onSelect }: { onSelect:(p:typeof PROJ_DATA[0])=>void })
 
 function ViewEquipos() {
   const rows = [
-    { name:'Amilkar Bolaño',    ini:'AB', color:'#dc2626', proj:'FICO',    role:'Ref. Técnico', task:'Construcción prediccionario',   status:'En progreso', ans:'⚠' },
+    { name:'Juliana Garzón',    ini:'JG', color:'#0f766e', proj:'FICO',    role:'Ref. Técnico', task:'Construcción prediccionario',   status:'En progreso', ans:'⚠' },
     { name:'Sergio Rodriguez',  ini:'SR', color:'#b45309', proj:'FICO',    role:'Desarrollador', task:'Mapeo SQL → t_kbrb_output',    status:'En progreso', ans:'✓' },
     { name:'Fabrizio Atiquipa', ini:'FA', color:'#059669', proj:'FICO',    role:'Desarrollador', task:'Reglas Hammurabi calidad',     status:'Revisión',    ans:'✓' },
     { name:'Eric Buitrago',     ini:'EB', color:'#0891b2', proj:'CRONOS',  role:'Desarrollador', task:'Procesamiento Spark pipeline', status:'En progreso', ans:'✓' },
@@ -409,14 +411,15 @@ function ViewActividad() {
 
 // ─── Dashboard principal ──────────────────────────────────────────────────────
 
-type Tab = 'resumen'|'proyectos'|'equipos'|'ans'|'actividad';
+type Tab = 'resumen'|'proyectos'|'equipos'|'ans'|'actividad'|'plan';
 
 const TABS: { id:Tab; label:string; icon:React.ReactNode }[] = [
-  { id:'resumen',    label:'Resumen',      icon:<TrendingUp size={13}/> },
-  { id:'proyectos',  label:'Proyectos',    icon:<Activity size={13}/> },
-  { id:'equipos',    label:'Equipos',      icon:<Users size={13}/> },
-  { id:'ans',        label:'ANS · Alertas', icon:<AlertTriangle size={13}/> },
-  { id:'actividad',  label:'Actividad',    icon:<CheckCircle size={13}/> },
+  { id:'resumen',    label:'Resumen',         icon:<TrendingUp size={13}/> },
+  { id:'proyectos',  label:'Proyectos',       icon:<Activity size={13}/> },
+  { id:'equipos',    label:'Equipos',         icon:<Users size={13}/> },
+  { id:'ans',        label:'ANS · Alertas',   icon:<AlertTriangle size={13}/> },
+  { id:'actividad',  label:'Actividad',       icon:<CheckCircle size={13}/> },
+  { id:'plan',       label:'Plan de trabajo', icon:<FileText size={13}/> },
 ];
 
 export default function PMDashboard() {
@@ -447,6 +450,7 @@ export default function PMDashboard() {
       {tab==='equipos'   && <ViewEquipos/>}
       {tab==='ans'       && <ViewAns onSelect={setAnsModal}/>}
       {tab==='actividad' && <ViewActividad/>}
+      {tab==='plan'      && <PlanDeTrabajo/>}
 
       {/* Modales */}
       {projModal && <ProjectModal proj={projModal} onClose={()=>setProjModal(null)}/>}

@@ -135,12 +135,6 @@ export const MOCK_ACCOUNTS: AuthUser[] = [
   },
   // N4 · Referentes Técnicos (asignados por el líder)
   {
-    id: 'u-amilkar', name: 'Amilkar Bolaño', email: 'amilkar.bolano@timia.ai',
-    initials: 'AB', role: 'tech_ref', avatarColor: '#dc2626',
-    projectIds: ['FICO'],
-    areaLabel: 'Referente Técnico · FICO',
-  },
-  {
     id: 'u-daniel', name: 'Daniel Gómez', email: 'daniel.gomez@timia.ai',
     initials: 'DG', role: 'tech_ref', avatarColor: '#0891b2',
     projectIds: ['SDM2', 'MURIC'],
