@@ -13,6 +13,9 @@ import BankStatus from './components/BankStatus';
 import RolesPermissions from './components/RolesPermissions';
 import ProjectTemplates from './components/ProjectTemplates';
 import PMDashboard from './components/PMDashboard';
+import AdminPanel from './components/AdminPanel';
+import CircuitosBBVA from './components/CircuitosBBVA';
+import Bitacora from './components/Bitacora';
 import { INITIAL_TEMPLATES } from './lib/templates';
 import { ProjectTemplate } from './types';
 
@@ -102,6 +105,15 @@ function AppInner() {
 
       case 'bank-status':
         return <BankStatus />;
+
+      case 'admin':
+        return role === 'pm' ? <AdminPanel /> : <AccessDenied onBack={goHome}/>;
+
+      case 'circuitos-bbva':
+        return <CircuitosBBVA />;
+
+      case 'bitacora':
+        return <Bitacora />;
 
       case 'analytics':
         // PM tiene su propio dashboard ejecutivo

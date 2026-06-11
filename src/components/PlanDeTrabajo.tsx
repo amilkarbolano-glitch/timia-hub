@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
-import { AlertTriangle, CheckCircle, Clock, ChevronRight, ChevronDown } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { AlertTriangle, CheckCircle, Clock, ChevronRight, ChevronDown, FileDown } from 'lucide-react';
 import { PROJECTS } from '../contexts/AuthContext';
+import { adminStore } from '../lib/adminStore';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -112,10 +113,27 @@ interface GanttRowProps {
   expanded: boolean;
   onToggle: () => void;
   isSubtask?: boolean;
+  onPctChange?: (newPct: number) => void;
 }
 
-function GanttRow({ act, idx, expanded, onToggle, isSubtask = false }: GanttRowProps) {
+function GanttRow({ act, idx, expanded, onToggle, isSubtask = false, onPctChange }: GanttRowProps) {
   const hasSubtasks = (act.subtasks?.length ?? 0) > 0;
+  const [editing, setEditing] = useState(false);
+  const [inputVal, setInputVal] = useState(String(act.pct));
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  function startEdit() {
+    if (!onPctChange || isSubtask) return;
+    setInputVal(String(act.pct));
+    setEditing(true);
+    setTimeout(() => inputRef.current?.select(), 30);
+  }
+
+  function confirmEdit() {
+    const n = Math.max(0, Math.min(100, parseInt(inputVal) || 0));
+    onPctChange?.(n);
+    setEditing(false);
+  }
 
   return (
     <tr style={{ background: isSubtask ? '#f8fffb' : idx % 2 === 0 ? '#fff' : '#fafafe' }}>
@@ -128,48 +146,48 @@ function GanttRow({ act, idx, expanded, onToggle, isSubtask = false }: GanttRowP
         minWidth: 230, maxWidth: 230,
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-          {/* Toggle button (solo actividades padre con subtareas) */}
           {hasSubtasks && !isSubtask && (
-            <button
-              onClick={onToggle}
-              style={{ border: 'none', background: 'none', cursor: 'pointer', padding: 0, flexShrink: 0, color: '#0d9488', display: 'flex', alignItems: 'center' }}
-            >
-              {expanded
-                ? <ChevronDown size={12} />
-                : <ChevronRight size={12} />
-              }
+            <button onClick={onToggle} style={{ border: 'none', background: 'none', cursor: 'pointer', padding: 0, flexShrink: 0, color: '#0d9488', display: 'flex', alignItems: 'center' }}>
+              {expanded ? <ChevronDown size={12}/> : <ChevronRight size={12}/>}
             </button>
           )}
-          {/* Indicador subtarea */}
           {isSubtask && <span style={{ color: '#94a3b8', fontSize: 10, flexShrink: 0 }}>└</span>}
-          {/* Badge BBVA */}
           {act.bbva && !isSubtask && (
-            <span style={{ fontSize: 8, padding: '1px 4px', borderRadius: 3, background: '#dbeafe', color: '#1d4ed8', fontWeight: 700, flexShrink: 0, whiteSpace: 'nowrap' }}>
-              BBVA
-            </span>
+            <span style={{ fontSize: 8, padding: '1px 4px', borderRadius: 3, background: '#dbeafe', color: '#1d4ed8', fontWeight: 700, flexShrink: 0, whiteSpace: 'nowrap' }}>BBVA</span>
           )}
-          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {act.name}
-          </span>
-          {(act as any).optional && (
-            <span style={{ fontSize: 8, color: '#94a3b8', flexShrink: 0, marginLeft: 2 }}>(opc.)</span>
-          )}
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{act.name}</span>
+          {(act as any).optional && <span style={{ fontSize: 8, color: '#94a3b8', flexShrink: 0, marginLeft: 2 }}>(opc.)</span>}
         </div>
       </td>
-      {/* % badge */}
-      <td style={{ textAlign: 'center', padding: '5px 6px', borderRight: '0.5px solid #e2e8f0', width: 50 }}>
-        <span style={{
-          display: 'inline-block', padding: '2px 6px', borderRadius: 6,
-          fontSize: 10, fontWeight: 600,
-          background: act.pct >= 100 ? '#dcfce7' : act.pct > 0 ? '#fef9c3' : '#f1f5f9',
-          color:      act.pct >= 100 ? '#15803d' : act.pct > 0 ? '#a16207' : '#94a3b8',
-        }}>
-          {act.pct}%
-        </span>
+      {/* % — editable con click */}
+      <td style={{ textAlign: 'center', padding: '4px 5px', borderRight: '0.5px solid #e2e8f0', width: 56 }}>
+        {editing ? (
+          <input
+            ref={inputRef}
+            value={inputVal}
+            onChange={e => setInputVal(e.target.value)}
+            onBlur={confirmEdit}
+            onKeyDown={e => { if (e.key === 'Enter') confirmEdit(); if (e.key === 'Escape') setEditing(false); }}
+            style={{ width: 44, padding: '2px 4px', fontSize: 11, fontWeight: 600, textAlign: 'center', border: '1.5px solid #0d9488', borderRadius: 5, outline: 'none' }}
+          />
+        ) : (
+          <span
+            onClick={startEdit}
+            title={onPctChange && !isSubtask ? 'Click para editar %' : undefined}
+            style={{
+              display: 'inline-block', padding: '2px 6px', borderRadius: 6,
+              fontSize: 10, fontWeight: 600,
+              background: act.pct >= 100 ? '#dcfce7' : act.pct > 0 ? '#fef9c3' : '#f1f5f9',
+              color:      act.pct >= 100 ? '#15803d' : act.pct > 0 ? '#a16207' : '#94a3b8',
+              cursor: onPctChange && !isSubtask ? 'pointer' : 'default',
+              outline: onPctChange && !isSubtask ? '1.5px dashed #0d948850' : 'none',
+            }}>
+            {act.pct}%
+          </span>
+        )}
       </td>
-      {/* Celdas Gantt */}
       {Array.from({ length: TOTAL_WEEKS }).map((_, wi) => (
-        <GanttCell key={wi} wi={wi} act={act} isSubtask={isSubtask} />
+        <GanttCell key={wi} wi={wi} act={act} isSubtask={isSubtask}/>
       ))}
     </tr>
   );
@@ -177,11 +195,36 @@ function GanttRow({ act, idx, expanded, onToggle, isSubtask = false }: GanttRowP
 
 // ─── Entregable Section ───────────────────────────────────────────────────────
 
-function EntregableSection({ block }: { block: PlanEntregable }) {
-  const dif = parseFloat((block.pctReal - block.pctExp).toFixed(1));
-  // Estado de expansión por índice de actividad
-  const [expanded, setExpanded] = useState<Set<number>>(new Set());
+function EntregableSection({ block, storeKey }: { block: PlanEntregable; storeKey: string }) {
+  // Pct overrides persistidos por actividad (storeKey = `${projectId}-${entregableId}`)
+  const [pctOverrides, setPctOverrides] = useState<Record<number, number>>(() => {
+    const stored = adminStore.getPlanPcts();
+    const result: Record<number, number> = {};
+    block.activities.forEach((_, i) => {
+      const k = `${storeKey}-${i}`;
+      if (k in stored) result[i] = stored[k];
+    });
+    return result;
+  });
 
+  function updatePct(actIdx: number, newPct: number) {
+    const next = { ...pctOverrides, [actIdx]: newPct };
+    setPctOverrides(next);
+    const all = adminStore.getPlanPcts();
+    all[`${storeKey}-${actIdx}`] = newPct;
+    adminStore.savePlanPcts(all);
+  }
+
+  // Calcular pctReal efectivo del entregable según overrides
+  const effectiveActivities = block.activities.map((a, i) =>
+    pctOverrides[i] !== undefined ? { ...a, pct: pctOverrides[i] } : a
+  );
+  const effectivePctReal = block.activities.length > 0
+    ? parseFloat((effectiveActivities.reduce((s, a) => s + a.pct, 0) / effectiveActivities.length).toFixed(1))
+    : block.pctReal;
+  const dif = parseFloat((effectivePctReal - block.pctExp).toFixed(1));
+
+  const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const toggle = (i: number) =>
     setExpanded(prev => {
       const next = new Set(prev);
@@ -194,10 +237,11 @@ function EntregableSection({ block }: { block: PlanEntregable }) {
       {/* Cabecera entregable */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
         <h4 style={{ margin: 0, fontSize: 13, fontWeight: 700, color: '#9f1239' }}>{block.name}</h4>
-        <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+        <div style={{ display: 'flex', gap: 6, flexShrink: 0, alignItems: 'center' }}>
+          <span style={{ fontSize: 9, color: '#94a3b8', marginRight: 4 }}>Click en % para editar</span>
           <div style={{ textAlign: 'center', padding: '4px 12px', background: '#374151', borderRadius: 7 }}>
             <div style={{ fontSize: 8, color: '#9ca3af', marginBottom: 1 }}>Avance real</div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: '#fff' }}>{block.pctReal}%</div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: '#fff' }}>{effectivePctReal}%</div>
           </div>
           <div style={{ textAlign: 'center', padding: '4px 12px', background: '#4b5563', borderRadius: 7 }}>
             <div style={{ fontSize: 8, color: '#9ca3af', marginBottom: 1 }}>Avance esperado</div>
@@ -228,13 +272,14 @@ function EntregableSection({ block }: { block: PlanEntregable }) {
               </tr>
             </thead>
             <tbody>
-              {block.activities.map((act, i) => (
+              {effectiveActivities.map((act, i) => (
                 <React.Fragment key={i}>
                   <GanttRow
                     act={act}
                     idx={i}
                     expanded={expanded.has(i)}
                     onToggle={() => toggle(i)}
+                    onPctChange={(v) => updatePct(i, v)}
                   />
                   {/* Subtareas (visibles si expandido) */}
                   {expanded.has(i) && act.subtasks?.map((sub, si) => (
@@ -394,7 +439,9 @@ function PlanDetail({ plan }: { plan: WorkPlan }) {
       </div>
 
       {/* Entregables con Gantt */}
-      {plan.entregables.map(e => <EntregableSection key={e.id} block={e} />)}
+      {plan.entregables.map(e => (
+        <EntregableSection key={e.id} block={e} storeKey={`${plan.projectId}-${e.id}`}/>
+      ))}
     </div>
   );
 }
@@ -593,11 +640,102 @@ const WORK_PLANS: WorkPlan[] = [
   },
 ];
 
+// ─── PPTX Export ─────────────────────────────────────────────────────────────
+
+async function exportPlanPPTX(plan: WorkPlan) {
+  const pptxgen = (await import('pptxgenjs')).default;
+  const pptx = new pptxgen();
+  pptx.layout = 'LAYOUT_WIDE';
+  pptx.title = `Plan de Trabajo · ${plan.projectId}`;
+
+  const BG = '0F172A';   // slate-900
+  const RED = 'DC2626';
+  const WHITE = 'FFFFFF';
+  const GRAY = '9CA3AF';
+  const LIGHT = 'F1F5F9';
+
+  const overallReal = parseFloat((plan.entregables.reduce((s, e) => s + e.pctReal, 0) / plan.entregables.length).toFixed(1));
+  const overallExp  = parseFloat((plan.entregables.reduce((s, e) => s + e.pctExp, 0)  / plan.entregables.length).toFixed(1));
+  const dif = parseFloat((overallReal - overallExp).toFixed(1));
+  const today = new Date().toLocaleDateString('es-CO', { day:'numeric', month:'long', year:'numeric' });
+
+  // ── Slide 1: Portada ──
+  const s1 = pptx.addSlide();
+  s1.background = { color: BG };
+  s1.addText('TIMIA', { x: 0.4, y: 0.3, w: 2, fontSize: 11, bold: true, color: RED, align: 'left' });
+  s1.addText(`Plan de Trabajo`, { x: 0.4, y: 1.2, w: 8, fontSize: 28, bold: false, color: GRAY, align: 'left' });
+  s1.addText(`Proyecto ${plan.projectId}`, { x: 0.4, y: 1.8, w: 8, fontSize: 48, bold: true, color: WHITE, align: 'left' });
+  s1.addText(today, { x: 0.4, y: 2.9, w: 8, fontSize: 14, color: GRAY, align: 'left' });
+  // Avances overview
+  const cols = [
+    { label: 'AVANCE REAL',     val: `${overallReal}%` },
+    { label: 'AVANCE ESPERADO', val: `${overallExp}%` },
+    { label: 'DIFERENCIA',      val: `${dif >= 0 ? '+' : ''}${dif}%` },
+  ];
+  cols.forEach((c, ci) => {
+    const x = 0.4 + ci * 2.8;
+    s1.addShape((pptxgen as any).ShapeType?.rect ?? 'rect', { x, y: 3.5, w: 2.6, h: 1.1, fill: { color: '1E293B' }, line: { color: '334155', width: 0.5 } });
+    s1.addText(c.label, { x, y: 3.58, w: 2.6, fontSize: 7, color: GRAY, align: 'center' });
+    s1.addText(c.val,   { x, y: 3.88, w: 2.6, fontSize: 22, bold: true, color: ci === 2 ? (dif >= 0 ? '22C55E' : 'EF4444') : WHITE, align: 'center' });
+  });
+  s1.addText(`Resp. Timia: ${plan.respTimia}`, { x: 0.4, y: 4.8, w: 9, fontSize: 10, color: GRAY, align: 'left' });
+
+  // ── Slide 2: Entregables ──
+  const s2 = pptx.addSlide();
+  s2.background = { color: BG };
+  s2.addText('Avance por entregable', { x: 0.4, y: 0.3, w: 9, fontSize: 20, bold: true, color: WHITE });
+  s2.addText(today, { x: 7.5, y: 0.3, w: 2, fontSize: 9, color: GRAY, align: 'right' });
+
+  plan.entregables.forEach((e, ei) => {
+    const yBase = 0.9 + ei * 1.2;
+    const eDif = parseFloat((e.pctReal - e.pctExp).toFixed(1));
+    s2.addText(e.name, { x: 0.4, y: yBase, w: 5, fontSize: 11, bold: true, color: 'FDA4AF' });
+    s2.addText(`${e.pctReal}%`, { x: 5.6, y: yBase, w: 1.2, fontSize: 11, bold: true, color: WHITE, align: 'right' });
+    s2.addText(`esp. ${e.pctExp}%`, { x: 7, y: yBase, w: 1.3, fontSize: 9, color: GRAY, align: 'left' });
+    s2.addText(`${eDif >= 0 ? '+' : ''}${eDif}%`, { x: 8.4, y: yBase, w: 1.2, fontSize: 11, bold: true, color: eDif >= 0 ? '22C55E' : 'EF4444', align: 'right' });
+    // Progress bar background
+    s2.addShape('rect' as any, { x: 0.4, y: yBase + 0.35, w: 9.2, h: 0.15, fill: { color: '1E293B' } });
+    // Progress bar fill
+    if (e.pctReal > 0) {
+      s2.addShape('rect' as any, { x: 0.4, y: yBase + 0.35, w: Math.max(0.05, 9.2 * (e.pctReal / 100)), h: 0.15, fill: { color: RED } });
+    }
+  });
+
+  // ── Slide 3: Siguientes pasos · Alertas · Bloqueantes ──
+  const s3 = pptx.addSlide();
+  s3.background = { color: BG };
+  s3.addText('Estado y próximas acciones', { x: 0.4, y: 0.3, w: 9, fontSize: 20, bold: true, color: WHITE });
+
+  const sections = [
+    { title: '✅ Siguientes pasos', items: plan.pasos, color: '22C55E', x: 0.4 },
+    { title: '⚠ Alertas', items: plan.alertas.length > 0 ? plan.alertas : ['Sin alertas activas'], color: 'EAB308', x: 3.5 },
+    { title: '🚧 Bloqueantes', items: plan.bloqueantes.length > 0 ? plan.bloqueantes : ['Sin bloqueantes'], color: 'EF4444', x: 6.6 },
+  ];
+
+  sections.forEach(sec => {
+    s3.addText(sec.title, { x: sec.x, y: 0.9, w: 2.9, fontSize: 10, bold: true, color: sec.color });
+    sec.items.forEach((item, ii) => {
+      s3.addText(`• ${item}`, { x: sec.x, y: 1.3 + ii * 0.4, w: 2.9, fontSize: 9, color: LIGHT, wrap: true });
+    });
+  });
+
+  s3.addText('Generado por Timia Hub', { x: 0.4, y: 5.1, w: 9, fontSize: 8, color: GRAY, align: 'center' });
+
+  await pptx.writeFile({ fileName: `Plan_${plan.projectId}_${new Date().toISOString().slice(0,10)}.pptx` });
+}
+
 // ─── Export principal ─────────────────────────────────────────────────────────
 
 export default function PlanDeTrabajo() {
   const [selected, setSelected] = useState<string>(WORK_PLANS[0].projectId);
   const plan = WORK_PLANS.find(p => p.projectId === selected);
+  const [exportingPptx, setExportingPptx] = useState(false);
+
+  async function handleExportPptx() {
+    if (!plan) return;
+    setExportingPptx(true);
+    try { await exportPlanPPTX(plan); } finally { setExportingPptx(false); }
+  }
 
   return (
     <div style={{ display:'flex', gap:14 }}>
@@ -644,10 +782,19 @@ export default function PlanDeTrabajo() {
 
       {/* Detalle del plan */}
       <div style={{ flex:1, minWidth:0 }}>
-        {plan
-          ? <PlanDetail plan={plan} />
-          : <div style={{ textAlign:'center', padding:'60px', color:'#94a3b8', fontSize:13 }}>Selecciona un proyecto</div>
-        }
+        {plan ? (
+          <>
+            <div style={{ display:'flex', justifyContent:'flex-end', marginBottom:10 }}>
+              <button onClick={handleExportPptx} disabled={exportingPptx}
+                style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 16px', fontSize:12, background: exportingPptx ? '#64748b' : '#111', color:'#fff', border:'none', borderRadius:8, cursor: exportingPptx ? 'wait' : 'pointer', fontWeight:500 }}>
+                <FileDown size={14}/> {exportingPptx ? 'Generando...' : 'Exportar PPTX'}
+              </button>
+            </div>
+            <PlanDetail plan={plan}/>
+          </>
+        ) : (
+          <div style={{ textAlign:'center', padding:'60px', color:'#94a3b8', fontSize:13 }}>Selecciona un proyecto</div>
+        )}
       </div>
     </div>
   );
