@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Calendar, User, Clock, AlertTriangle, CheckCircle, TrendingUp, Users, Activity, FileText } from 'lucide-react';
+import { X, Calendar, User, Clock, AlertTriangle, CheckCircle, TrendingUp, Users, Activity, FileText, ShieldAlert, Mail } from 'lucide-react';
 import PlanDeTrabajo from './PlanDeTrabajo';
 import { addWorkingDays, workingDaysBetween, formatCODate, ANS_MAX_DAYS, isHoliday, isWorkingDay } from '../utils/colombiaCalendar';
 import { PROJECTS } from '../contexts/AuthContext';
@@ -303,7 +303,7 @@ function ViewProyectos({ onSelect }: { onSelect:(p:typeof PROJ_DATA[0])=>void })
   return (
     <div>
       <p style={{ fontSize:11, fontWeight:500, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'.05em', margin:'0 0 10px' }}>Click en un proyecto para ver detalle</p>
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:8 }}>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(240px, 1fr))', gap:10 }}>
         {PROJ_DATA.map(p => {
           const color = getProjectColor(p.id);
           const status = p.risk > 0 ? (p.risk > 1 ? 'riesgo' : 'alerta') : 'ok';
@@ -409,9 +409,205 @@ function ViewActividad() {
   );
 }
 
+// ─── Risk Score ───────────────────────────────────────────────────────────────
+// Modelo EVM-inspirado (PMI PMBOK): SPI analogue + ANS health + impedimentos + velocidad
+
+function calcRiskScore(proj: typeof PROJ_DATA[0]) {
+  const today = new Date();
+
+  // 1. Schedule performance (35%) — retraso real vs esperado por tiempo transcurrido
+  const startDate = new Date(proj.startDate);
+  const daysSinceStart = Math.max(0, (today.getTime() - startDate.getTime()) / 86400000);
+  const projectDuration = 180; // duración asumida ~6 meses
+  const pctExpected = Math.min(100, (daysSinceStart / projectDuration) * 100);
+  const scheduleDelay = Math.max(0, pctExpected - proj.pct);
+  const scheduleSc = Math.min(100, scheduleDelay * 1.8);
+
+  // 2. ANS health (30%) — tareas vencidas / en alerta
+  const projAns = ANS_TASKS.filter(t => t.project === proj.id);
+  let vencidas = 0; let warnings = 0;
+  projAns.forEach(t => {
+    const s = semaforo(t);
+    if (s.remaining < 0) vencidas++;
+    else if (s.remaining <= 1) warnings++;
+  });
+  const ansSc = Math.min(100, vencidas * 50 + warnings * 20);
+
+  // 3. Impedimentos (20%) — bloqueantes activos
+  const blockSc = Math.min(100, proj.risk * 34);
+
+  // 4. Inactividad (15%) — días sin commit
+  const lastCommit = new Date(proj.lastCommit);
+  const daysSinceCommit = Math.max(0, (today.getTime() - lastCommit.getTime()) / 86400000);
+  const inactivitySc = Math.min(100, daysSinceCommit * 14);
+
+  // Score ponderado
+  const raw = scheduleSc * 0.35 + ansSc * 0.30 + blockSc * 0.20 + inactivitySc * 0.15;
+
+  // Multiplicador de prioridad (proyectos críticos amplifican el riesgo)
+  const mult: Record<string, number> = { Crítica: 1.30, Alta: 1.10, Media: 1.00, Baja: 0.80 };
+  const score = Math.round(Math.min(100, raw * (mult[proj.priority] ?? 1.0)));
+
+  const level   = score >= 70 ? 'CRÍTICO' : score >= 45 ? 'ALTO' : score >= 20 ? 'MEDIO' : 'BAJO';
+  const lvColor = score >= 70 ? '#dc2626' : score >= 45 ? '#d97706' : score >= 20 ? '#2563eb' : '#059669';
+  const lvBg    = score >= 70 ? '#fef2f2' : score >= 45 ? '#fef9c3' : score >= 20 ? '#eff6ff' : '#f0fdf4';
+
+  return {
+    score, level, lvColor, lvBg,
+    spi: pctExpected, // expected %
+    components: {
+      schedule:   { sc: Math.round(scheduleSc), label: `Retraso ${scheduleDelay.toFixed(0)}%`,       w: 35 },
+      ans:        { sc: Math.round(ansSc),       label: `${vencidas} venc. · ${warnings} alerta`,    w: 30 },
+      blockers:   { sc: Math.round(blockSc),     label: `${proj.risk} bloqueante${proj.risk!==1?'s':''}`, w: 20 },
+      inactivity: { sc: Math.round(inactivitySc),label: `${Math.round(daysSinceCommit)}d sin commit`,w: 15 },
+    },
+  };
+}
+
+function ViewRiesgo() {
+  const scored = PROJ_DATA.map(p => ({ proj: p, ...calcRiskScore(p) }))
+    .sort((a, b) => b.score - a.score);
+
+  const criticos = scored.filter(s => s.score >= 70).length;
+  const altos = scored.filter(s => s.score >= 45 && s.score < 70).length;
+
+  return (
+    <div>
+      {/* Summary badges */}
+      <div style={{ display: 'flex', gap: 10, marginBottom: 20, flexWrap: 'wrap' }}>
+        {criticos > 0 && (
+          <div style={{ padding: '8px 16px', background: '#fef2f2', borderRadius: 10, border: '0.5px solid #fecaca' }}>
+            <span style={{ fontSize: 20, fontWeight: 500, color: '#dc2626' }}>{criticos}</span>
+            <span style={{ fontSize: 11, color: '#dc2626', marginLeft: 6 }}>proyecto{criticos>1?'s':''} CRÍTICO{criticos>1?'S':''}</span>
+          </div>
+        )}
+        {altos > 0 && (
+          <div style={{ padding: '8px 16px', background: '#fef9c3', borderRadius: 10, border: '0.5px solid #fde68a' }}>
+            <span style={{ fontSize: 20, fontWeight: 500, color: '#d97706' }}>{altos}</span>
+            <span style={{ fontSize: 11, color: '#d97706', marginLeft: 6 }}>ALTO riesgo</span>
+          </div>
+        )}
+        <div style={{ padding: '8px 16px', background: '#f8fafc', borderRadius: 10, border: '0.5px solid #e2e8f0', marginLeft: 'auto' }}>
+          <span style={{ fontSize: 11, color: '#64748b' }}>Modelo: SPI + ANS + Impedimentos + Inactividad (ponderación PMI)</span>
+        </div>
+      </div>
+
+      {/* Tabla de riesgos */}
+      <div style={{ background: '#fff', border: '0.5px solid #e2e8f0', borderRadius: 12, overflow: 'hidden' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '70px 80px 70px 1fr 1fr 1fr 1fr', gap: 8, padding: '10px 16px', background: '#f8fafc', borderBottom: '0.5px solid #e2e8f0', fontSize: 10, color: '#94a3b8', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.04em' }}>
+          <span>Proyecto</span><span>Score</span><span>Nivel</span>
+          <span>Cronograma (35%)</span><span>ANS (30%)</span><span>Bloqueantes (20%)</span><span>Inactividad (15%)</span>
+        </div>
+        {scored.map((s, i) => {
+          const color = getProjectColor(s.proj.id);
+          return (
+            <div key={s.proj.id} style={{ display: 'grid', gridTemplateColumns: '70px 80px 70px 1fr 1fr 1fr 1fr', gap: 8, alignItems: 'center', padding: '13px 16px', borderBottom: i < scored.length-1 ? '0.5px solid #f1f5f9' : 'none', background: i % 2 === 0 ? '#fff' : '#fafafe' }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color }}>{s.proj.id}</span>
+              {/* Score gauge */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div style={{ position: 'relative', width: 36, height: 36, flexShrink: 0 }}>
+                  <svg viewBox="0 0 36 36" style={{ transform: 'rotate(-90deg)', width: 36, height: 36 }}>
+                    <circle cx="18" cy="18" r="14" fill="none" stroke="#f1f5f9" strokeWidth="4"/>
+                    <circle cx="18" cy="18" r="14" fill="none" stroke={s.lvColor} strokeWidth="4"
+                      strokeDasharray={`${s.score * 0.88} 88`} strokeLinecap="round"/>
+                  </svg>
+                  <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, color: s.lvColor }}>{s.score}</span>
+                </div>
+                <span style={{ fontSize: 11, color: '#374151' }}>{s.proj.priority}</span>
+              </div>
+              <span style={{ fontSize: 10, padding: '3px 8px', borderRadius: 8, background: s.lvBg, color: s.lvColor, fontWeight: 600, display: 'inline-block' }}>{s.level}</span>
+              {/* Componentes */}
+              {([
+                s.components.schedule,
+                s.components.ans,
+                s.components.blockers,
+                s.components.inactivity,
+              ] as { sc: number; label: string; w: number }[]).map((c, ci) => (
+                <div key={ci}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
+                    <span style={{ fontSize: 10, color: '#94a3b8' }}>{c.label}</span>
+                    <span style={{ fontSize: 10, fontWeight: 600, color: c.sc >= 70 ? '#dc2626' : c.sc >= 40 ? '#d97706' : '#94a3b8' }}>{c.sc}</span>
+                  </div>
+                  <div style={{ height: 3, background: '#f1f5f9', borderRadius: 3, overflow: 'hidden' }}>
+                    <div style={{ width: `${c.sc}%`, height: '100%', background: c.sc >= 70 ? '#dc2626' : c.sc >= 40 ? '#d97706' : '#059669' }}/>
+                  </div>
+                </div>
+              ))}
+            </div>
+          );
+        })}
+      </div>
+      <p style={{ margin: '12px 0 0', fontSize: 11, color: '#94a3b8' }}>
+        ⓘ Fórmula: Score = (Retraso×35% + ANS×30% + Bloqueantes×20% + Inactividad×15%) × Multiplicador prioridad (Crítica:1.3× · Alta:1.1× · Media:1.0× · Baja:0.8×)
+      </p>
+    </div>
+  );
+}
+
+// ─── Standup mailer ───────────────────────────────────────────────────────────
+
+function StandupModal({ onClose }: { onClose: () => void }) {
+  const today = new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  const vencidos = ANS_TASKS.filter(t => semaforo(t).remaining < 0);
+  const alertas  = ANS_TASKS.filter(t => { const s = semaforo(t); return s.remaining >= 0 && s.remaining <= 1; });
+  const bloqueados = PROJ_DATA.filter(p => p.risk > 0);
+  const promedio = Math.round(PROJ_DATA.reduce((a, p) => a + p.pct, 0) / PROJ_DATA.length);
+
+  const standupText = `[TIMIA HUB] Standup diario — ${today}
+
+📊 RESUMEN GENERAL
+• Avance global: ${promedio}% (${PROJ_DATA.length} proyectos activos)
+• Proyectos con riesgo: ${bloqueados.length}/${PROJ_DATA.length}
+
+${vencidos.length > 0 ? `🔴 ANS VENCIDOS (${vencidos.length})
+${vencidos.map(t => `• ${t.project} — ${t.task} (${t.responsable})`).join('\n')}
+
+` : ''}${alertas.length > 0 ? `⚠️ ANS EN ALERTA (${alertas.length})
+${alertas.map(t => `• ${t.project} — ${t.task} (${t.responsable})`).join('\n')}
+
+` : ''}📋 ESTADO POR PROYECTO
+${PROJ_DATA.map(p => `• ${p.id}: ${p.pct}%${p.risk > 0 ? ` ⚠ ${p.risk} bloqueante${p.risk > 1 ? 's' : ''}` : ' ✓'}`).join('\n')}
+
+${bloqueados.length > 0 ? `🚧 BLOQUEANTES ACTIVOS
+${bloqueados.map(p => `• ${p.id} (${p.area}): ${p.risk} ítem${p.risk > 1 ? 's' : ''} bloqueado${p.risk > 1 ? 's' : ''}`).join('\n')}
+
+` : ''}— Generado por Timia Hub · ${new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}`;
+
+  const mailtoHref = `mailto:?subject=${encodeURIComponent(`[TIMIA] Standup ${today}`)}&body=${encodeURIComponent(standupText)}`;
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', zIndex: 999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onClick={onClose}>
+      <div style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 580, maxHeight: '90vh', overflow: 'auto', position: 'relative' }} onClick={e => e.stopPropagation()}>
+        <div style={{ padding: '18px 22px', borderBottom: '0.5px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <h3 style={{ margin: 0, fontSize: 14, fontWeight: 500 }}>Standup diario</h3>
+            <p style={{ margin: '2px 0 0', fontSize: 11, color: '#94a3b8' }}>{today}</p>
+          </div>
+          <button onClick={onClose} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#94a3b8' }}><X size={16}/></button>
+        </div>
+        <div style={{ padding: '16px 22px' }}>
+          <pre style={{ margin: 0, fontSize: 11, color: '#374151', lineHeight: 1.7, whiteSpace: 'pre-wrap', background: '#f8fafc', padding: '14px 16px', borderRadius: 10, fontFamily: 'monospace', border: '0.5px solid #e2e8f0', maxHeight: 380, overflowY: 'auto' }}>
+            {standupText}
+          </pre>
+          <div style={{ display: 'flex', gap: 8, marginTop: 14, justifyContent: 'flex-end' }}>
+            <button onClick={() => { navigator.clipboard?.writeText(standupText); }}
+              style={{ padding: '8px 14px', fontSize: 12, border: '0.5px solid #e2e8f0', borderRadius: 7, background: '#fff', cursor: 'pointer' }}>
+              Copiar
+            </button>
+            <a href={mailtoHref} target="_blank" rel="noreferrer"
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', fontSize: 12, background: '#dc2626', color: '#fff', borderRadius: 7, textDecoration: 'none', fontWeight: 500 }}>
+              <Mail size={13}/> Abrir en correo
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Dashboard principal ──────────────────────────────────────────────────────
 
-type Tab = 'resumen'|'proyectos'|'equipos'|'ans'|'actividad'|'plan';
+type Tab = 'resumen'|'proyectos'|'equipos'|'ans'|'actividad'|'plan'|'riesgo';
 
 const TABS: { id:Tab; label:string; icon:React.ReactNode }[] = [
   { id:'resumen',    label:'Resumen',         icon:<TrendingUp size={13}/> },
@@ -420,25 +616,33 @@ const TABS: { id:Tab; label:string; icon:React.ReactNode }[] = [
   { id:'ans',        label:'ANS · Alertas',   icon:<AlertTriangle size={13}/> },
   { id:'actividad',  label:'Actividad',       icon:<CheckCircle size={13}/> },
   { id:'plan',       label:'Plan de trabajo', icon:<FileText size={13}/> },
+  { id:'riesgo',     label:'Risk Score',      icon:<ShieldAlert size={13}/> },
 ];
 
 export default function PMDashboard() {
   const [tab, setTab] = useState<Tab>('resumen');
   const [projModal, setProjModal] = useState<typeof PROJ_DATA[0]|null>(null);
   const [ansModal, setAnsModal]   = useState<typeof ANS_TASKS[0]|null>(null);
+  const [showStandup, setShowStandup] = useState(false);
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
+    <div style={{ padding: '28px 36px', maxWidth: 1600, margin: '0 auto' }}>
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-medium text-slate-900 mb-1">Dashboard ejecutivo</h1>
-        <p className="text-sm text-slate-400">Vista global · BBVA CO &amp; Credicorp Capital · {new Date().toLocaleDateString('es-CO',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</p>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24 }}>
+        <div>
+          <h1 style={{ margin: 0, fontSize: 22, fontWeight: 500, color: '#111' }}>Dashboard ejecutivo</h1>
+          <p style={{ margin: '3px 0 0', fontSize: 13, color: '#94a3b8' }}>Vista global · BBVA CO &amp; Credicorp Capital · {new Date().toLocaleDateString('es-CO',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</p>
+        </div>
+        <button onClick={() => setShowStandup(true)}
+          style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 18px', background: '#111', color: '#fff', border: 'none', borderRadius: 9, cursor: 'pointer', fontSize: 12, fontWeight: 500, flexShrink: 0 }}>
+          <Mail size={14}/> Generar standup
+        </button>
       </div>
 
       {/* Tabs */}
       <div style={{ display:'flex', gap:4, borderBottom:'0.5px solid #e2e8f0', marginBottom:20, overflowX:'auto' }}>
         {TABS.map(t => (
-          <button key={t.id} onClick={()=>setTab(t.id)} style={{ display:'flex', alignItems:'center', gap:5, padding:'8px 14px', fontSize:12, fontWeight: tab===t.id?500:400, color: tab===t.id?'#dc2626':'#64748b', borderBottom: tab===t.id?'2px solid #dc2626':'2px solid transparent', background:'none', border:'none', borderBottom: tab===t.id?'2px solid #dc2626':'2px solid transparent', cursor:'pointer', whiteSpace:'nowrap', transition:'all .15s' }}>
+          <button key={t.id} onClick={()=>setTab(t.id)} style={{ display:'flex', alignItems:'center', gap:5, padding:'8px 14px', fontSize:12, fontWeight: tab===t.id?500:400, color: tab===t.id?'#dc2626':'#64748b', background:'none', border:'none', borderBottom: tab===t.id?'2px solid #dc2626':'2px solid transparent', cursor:'pointer', whiteSpace:'nowrap', transition:'all .15s' }}>
             {t.icon}{t.label}
           </button>
         ))}
@@ -451,10 +655,12 @@ export default function PMDashboard() {
       {tab==='ans'       && <ViewAns onSelect={setAnsModal}/>}
       {tab==='actividad' && <ViewActividad/>}
       {tab==='plan'      && <PlanDeTrabajo/>}
+      {tab==='riesgo'    && <ViewRiesgo/>}
 
       {/* Modales */}
-      {projModal && <ProjectModal proj={projModal} onClose={()=>setProjModal(null)}/>}
-      {ansModal  && <AnsModal task={ansModal} onClose={()=>setAnsModal(null)}/>}
+      {projModal    && <ProjectModal proj={projModal} onClose={()=>setProjModal(null)}/>}
+      {ansModal     && <AnsModal task={ansModal} onClose={()=>setAnsModal(null)}/>}
+      {showStandup  && <StandupModal onClose={() => setShowStandup(false)}/>}
     </div>
   );
 }

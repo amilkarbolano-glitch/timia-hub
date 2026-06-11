@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
 import { useAuth, canAccess, UserRole } from '../contexts/AuthContext';
-import { 
-  LayoutDashboard, 
-  Layers, 
-  Users, 
-  Settings, 
-  Search, 
-  Bell, 
+import {
+  LayoutDashboard,
+  Layers,
+  Users,
+  Settings,
+  Search,
+  Bell,
   Database,
   GitBranch,
   Cloud,
@@ -15,10 +15,12 @@ import {
   Shield,
   History,
   BarChart3,
-  Plus
+  Plus,
+  Building2,
+  BookOpen,
 } from 'lucide-react';
 
-export type View = 'setup-project' | 'setup-team' | 'setup-tasks' | 'dashboard' | 'standards' | 'analytics' | 'audit' | 'bank-status' | 'notifications' | 'roles-permissions' | 'project-templates';
+export type View = 'setup-project' | 'setup-team' | 'setup-tasks' | 'dashboard' | 'standards' | 'analytics' | 'audit' | 'bank-status' | 'notifications' | 'roles-permissions' | 'project-templates' | 'admin' | 'circuitos-bbva' | 'bitacora';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -91,6 +93,26 @@ export default function Layout({ children, currentView, onViewChange, userRole }
                   className={`text-sm font-medium transition-colors ${currentView === 'audit' ? 'text-primary' : 'text-slate-600 hover:text-primary'}`}
                 >
                   Auditoría
+                </button>
+              )}
+              <button
+                onClick={() => onViewChange('circuitos-bbva')}
+                className={`text-sm font-medium transition-colors ${currentView === 'circuitos-bbva' ? 'text-primary' : 'text-slate-600 hover:text-primary'}`}
+              >
+                Circuitos BBVA
+              </button>
+              <button
+                onClick={() => onViewChange('bitacora')}
+                className={`text-sm font-medium transition-colors ${currentView === 'bitacora' ? 'text-primary' : 'text-slate-600 hover:text-primary'}`}
+              >
+                Bitácora
+              </button>
+              {userRole === 'pm' && (
+                <button
+                  onClick={() => onViewChange('admin')}
+                  className={`text-sm font-medium transition-colors flex items-center gap-1 ${currentView === 'admin' ? 'text-primary' : 'text-slate-600 hover:text-primary'}`}
+                >
+                  <Building2 size={14}/> Admin
                 </button>
               )}
             </nav>
