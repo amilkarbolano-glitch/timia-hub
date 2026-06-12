@@ -3,7 +3,7 @@ import {
   ChevronDown, ChevronRight, Plus, Trash2, Save, ArrowRight,
   LayoutList, Clock, CalendarDays, Settings2, CheckSquare,
 } from 'lucide-react';
-import { PROJECTS } from '../contexts/AuthContext';
+import { PROJECTS, useAuth } from '../contexts/AuthContext';
 import { adminStore, type PlanEtapa, type PlanActivityConfig, type PlanEntregableConfig, type PlanConfig } from '../lib/adminStore';
 import type { View } from './Layout';
 
@@ -411,7 +411,16 @@ interface EstimacionesProps {
 }
 
 export default function Estimaciones({ onViewChange }: EstimacionesProps) {
-  const [selectedProjectId, setSelectedProjectId] = useState<string>('FICO');
+  const { user } = useAuth();
+  const role = user?.role ?? 'developer';
+  // PM ve todos los proyectos; otros roles solo los que tienen asignados
+  const visibleProjects = role === 'pm'
+    ? PROJECTS
+    : PROJECTS.filter(p => (user?.projectIds ?? []).includes(p.id));
+
+  const [selectedProjectId, setSelectedProjectId] = useState<string>(
+    () => visibleProjects[0]?.id ?? 'FICO'
+  );
   const [configs, setConfigs] = useState<Record<string, PlanConfig>>(() => adminStore.getPlanConfigs());
   const [dirty, setDirty]     = useState(false);
   const [saved, setSaved]     = useState(false);
@@ -482,7 +491,7 @@ export default function Estimaciones({ onViewChange }: EstimacionesProps) {
       <div style={{ width: 140, flexShrink: 0 }}>
         <p style={{ margin: '0 0 8px', fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '.06em', fontWeight: 600 }}>Proyectos</p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-          {PROJECTS.map(p => {
+          {visibleProjects.map(p => {
             const isActive   = p.id === selectedProjectId;
             const hasConfig  = !!configs[p.id];
             return (

@@ -44,6 +44,88 @@ export interface CircuitoCard {
   historial: { fecha: string; columna: string; nota: string }[];
 }
 
+// ─── Kanban — tareas del tablero ──────────────────────────────────────────────
+
+export type KanbanStatus = 'backlog' | 'in-progress' | 'review' | 'done';
+
+export interface KanbanComment {
+  id: string; userId: string; userName: string;
+  userInitials: string; userColor: string;
+  text: string; date: string;
+}
+
+export interface KanbanLink {
+  id: string; title: string; url: string;
+}
+
+export interface KanbanTask {
+  id: string; title: string; description: string;
+  priority: Priority; startDate: string; endDate: string;
+  status: KanbanStatus;
+  assigneeIds: string[];  // AdminUser IDs
+  jiraId?: string;
+  projectId?: string;
+  entregableId?: string;
+  actIdx?: number;
+  fromPlan?: boolean;
+  isLocked?: boolean;
+  links: KanbanLink[];
+  comments: KanbanComment[];
+}
+
+const DEFAULT_KANBAN_TASKS: KanbanTask[] = [
+  {
+    id: 'kt-1', title: 'Análisis y resolución de dudas',
+    description: 'Recopilación y resolución de dudas técnicas con BBVA para inicio del proyecto FICO.',
+    priority: 'Alta', startDate: '2026-01-26', endDate: '2026-02-08', status: 'done',
+    assigneeIds: ['u-juliana'], projectId: 'FICO', entregableId: 'doc', actIdx: 0, fromPlan: true,
+    links: [], comments: [],
+  },
+  {
+    id: 'kt-2', title: 'Elaboración diccionario técnico (370 campos)',
+    description: 'Levantamiento, envío a Gobierno de Datos BBVA y validación del diccionario técnico.',
+    priority: 'Alta', startDate: '2026-01-26', endDate: '2026-02-08', status: 'in-progress',
+    assigneeIds: ['u-juliana'], projectId: 'FICO', entregableId: 'doc', actIdx: 1, fromPlan: true,
+    links: [], comments: [],
+  },
+  {
+    id: 'kt-3', title: 'Documentación técnica ETL y mapeo de campos',
+    description: 'Documentar flujos ETL y mapeo campo a campo entre fuente (Core Bancario) y destino (VBox FICO).',
+    priority: 'Media', startDate: '2026-01-26', endDate: '2026-03-01', status: 'in-progress',
+    assigneeIds: ['u-juliana', 'u-david'], projectId: 'FICO', entregableId: 'doc', actIdx: 4, fromPlan: true,
+    links: [], comments: [],
+  },
+  {
+    id: 'kt-4', title: 'Construcción procesamiento Spark · Scala',
+    description: 'Desarrollo del componente ADA con Spark-Scala: clases principales, config, test unitarios y validación de salida.',
+    priority: 'Crítica', startDate: '2026-02-02', endDate: '2026-03-22', status: 'in-progress',
+    assigneeIds: ['u-juliana'], projectId: 'FICO', entregableId: 'ada', actIdx: 1, fromPlan: true,
+    links: [], comments: [],
+  },
+  {
+    id: 'kt-5', title: 'Construcción reglas calidad MVP (Hammurabi)',
+    description: 'Implementar reglas de calidad de datos usando el framework Hammurabi de BBVA.',
+    priority: 'Alta', startDate: '2026-02-23', endDate: '2026-03-22', status: 'backlog',
+    assigneeIds: ['u-david'], projectId: 'FICO', entregableId: 'ada', actIdx: 3, fromPlan: true,
+    links: [], comments: [],
+  },
+  {
+    id: 'kt-6', title: 'Circuito validación Gobierno Técnico · BBVA',
+    description: 'Presentación al comité técnico BBVA, gestión de observaciones y obtención de aprobación definitiva.',
+    priority: 'Alta', startDate: '2026-02-09', endDate: '2026-03-08', status: 'review',
+    assigneeIds: ['u-david', 'u-juliana'], projectId: 'FICO', entregableId: 'doc', actIdx: 3,
+    fromPlan: true, jiraId: 'FICO-142',
+    links: [], comments: [],
+  },
+  {
+    id: 'kt-7', title: 'Despliegue y pruebas entornos Work',
+    description: 'Creación y ejecución del job ADA en entorno Work, verificación de escritura en VBox y prueba de aceptación.',
+    priority: 'Alta', startDate: '2026-03-22', endDate: '2026-03-29', status: 'backlog',
+    assigneeIds: ['u-juliana'], projectId: 'FICO', entregableId: 'ada', actIdx: 6, fromPlan: true,
+    links: [], comments: [],
+  },
+];
+
 // ─── Plan de Trabajo — Etapas y trazabilidad ─────────────────────────────────
 
 /** Una etapa dentro de una actividad del plan */
@@ -285,5 +367,18 @@ export const adminStore = {
     const all = load<Record<string, PlanConfig>>('plan_configs', {});
     all[projectId] = config;
     save('plan_configs', all);
+  },
+
+  // Kanban tasks
+  getKanbanTasks:  (): KanbanTask[] => load('kanban_tasks', DEFAULT_KANBAN_TASKS),
+  saveKanbanTasks: (t: KanbanTask[]) => save('kanban_tasks', t),
+  // Sync a specific plan-activity assignee to its kanban card
+  syncKanbanAssignees: (projectId: string, entregableId: string, actIdx: number, assigneeIds: string[]) => {
+    const tasks = load<KanbanTask[]>('kanban_tasks', DEFAULT_KANBAN_TASKS);
+    const idx = tasks.findIndex(t => t.projectId === projectId && t.entregableId === entregableId && t.actIdx === actIdx);
+    if (idx >= 0) {
+      tasks[idx] = { ...tasks[idx], assigneeIds };
+      save('kanban_tasks', tasks);
+    }
   },
 };

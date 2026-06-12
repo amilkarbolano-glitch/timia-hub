@@ -1254,16 +1254,24 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
     const k = `${projectId}__${entregableId}__${actIdx}`;
     const current = activityAssignees[k] ?? [];
     if (current.includes(userId)) return;
-    const next = { ...activityAssignees, [k]: [...current, userId] };
-    setActivityAssignees(next); adminStore.saveActivityAssignees(next);
+    const newIds = [...current, userId];
+    const next = { ...activityAssignees, [k]: newIds };
+    setActivityAssignees(next);
+    adminStore.saveActivityAssignees(next);
+    // Sync al Kanban: si existe una tarea vinculada a este plan, actualiza sus assignees
+    adminStore.syncKanbanAssignees(projectId, entregableId, actIdx, newIds);
   }
 
   function handleAssigneeRemove(userId: string) {
     if (!drawer) return;
     const { projectId, entregableId, actIdx } = drawer;
     const k = `${projectId}__${entregableId}__${actIdx}`;
-    const next = { ...activityAssignees, [k]: (activityAssignees[k] ?? []).filter(id => id !== userId) };
-    setActivityAssignees(next); adminStore.saveActivityAssignees(next);
+    const newIds = (activityAssignees[k] ?? []).filter(id => id !== userId);
+    const next = { ...activityAssignees, [k]: newIds };
+    setActivityAssignees(next);
+    adminStore.saveActivityAssignees(next);
+    // Sync al Kanban: si existe una tarea vinculada a este plan, actualiza sus assignees
+    adminStore.syncKanbanAssignees(projectId, entregableId, actIdx, newIds);
   }
 
   async function handleExportPptx() {
