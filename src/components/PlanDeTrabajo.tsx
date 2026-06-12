@@ -890,109 +890,253 @@ async function exportPlanPPTX(plan: WorkPlan, getActivityPct: (eid: string, ai: 
   pptx.layout = 'LAYOUT_WIDE';
   pptx.title = `Plan de Trabajo · ${plan.projectId}`;
 
-  const BG='0F172A', CARD='1E293B', BORDER='334155', WHITE='FFFFFF',
-        LIGHT='F1F5F9', RED='DC2626', TEAL='0D9488', GREEN='22C55E',
-        ERR='EF4444', WARN='EAB308', GRAY='9CA3AF', MUT='64748B',
-        VIOLET='7C3AED', BBVA='1D4ED8';
-  const ENT_COLORS = [RED, TEAL, VIOLET, '0891B2', 'BE185D'];
+  // ── Paleta ───────────────────────────────────────────────────────────────────
+  const BG_DARK  = '0F172A';                   // portada y última slide
+  const WHITE    = 'FFFFFF';
+  const TBL_HDR  = '881337';                   // header row de la tabla (maroon)
+  const ROW_ODD  = 'FFFFFF';
+  const ROW_EVEN = 'F8FAFC';
+  const ROW_BORD = 'E2E8F0';
+  const BAR_DONE = '0D9488';                   // barra ejecutado (teal sólido)
+  const BAR_PLAN = 'CCFBF1';                   // barra planificado (teal claro)
+  const BBVA_BG  = '1D4ED8';
+  const GREEN    = '15803D';
+  const GREEN_L  = '22C55E';
+  const AMBER    = 'A16207';
+  const RED      = 'DC2626';
+  const ERR      = 'EF4444';
+  const WARN     = 'EAB308';
+  const GRAY     = '9CA3AF';
+  const MUT      = '64748B';
+  const DARK     = '1E293B';
+  const CARD     = '1E293B';
+  const BORDER_D = '334155';
+  const ENT_COLORS = [RED,'0D9488','7C3AED','0891B2','BE185D'];
+
+  // ── Semanas (reutiliza las mismas del Gantt de la app) ────────────────────
+  const WKS = [
+    {l:'S1',d:'26/01'},{l:'S2',d:'02/02'},{l:'S3',d:'09/02'},
+    {l:'S4',d:'16/02'},{l:'S5',d:'23/02'},{l:'S6',d:'02/03'},
+    {l:'S7',d:'09/03'},{l:'S8',d:'16/03'},{l:'S9',d:'24/03'},
+    {l:'S10',d:'31/03'},{l:'S11',d:'09/04'},{l:'S12',d:'16/04'},{l:'S13',d:'23/04'},
+  ];
+
+  // ── Layout de la tabla ────────────────────────────────────────────────────
+  const LM      = 0.18;       // left margin
+  const RM      = 0.18;       // right margin
+  const TW      = 10 - LM - RM;          // total table width: 9.64"
+  const NAME_W  = 4.55;       // column: actividad
+  const PCT_W   = 0.52;       // column: %
+  const WK_X0   = LM + NAME_W + PCT_W;   // x donde empiezan las semanas
+  const WK_TOTAL= TW - NAME_W - PCT_W;   // 4.57"
+  const WK_W    = WK_TOTAL / 13;         // ~0.351" por semana
+  const TBL_Y   = 0.76;       // y donde empieza la tabla
+  const HDR_H   = 0.31;       // altura header
+  const ROW_H   = 0.285;      // altura fila actividad
+  const BAR_H   = ROW_H * 0.38; // altura de la barra Gantt
+  const BAR_PAD = 0.018;      // padding horizontal dentro de cada celda de semana
 
   const today = new Date().toLocaleDateString('es-CO',{day:'numeric',month:'long',year:'numeric'});
   const overallReal = parseFloat((
     plan.entregables.map(e=>e.activities.length?e.activities.reduce((s,a,i)=>s+getActivityPct(e.id,i,a),0)/e.activities.length:e.pctReal)
       .reduce((s,v)=>s+v,0)/Math.max(1,plan.entregables.length)
   ).toFixed(1));
-  const overallExp = parseFloat((plan.entregables.reduce((s,e)=>s+e.pctExp,0)/Math.max(1,plan.entregables.length)).toFixed(1));
+  const overallExp  = parseFloat((plan.entregables.reduce((s,e)=>s+e.pctExp,0)/Math.max(1,plan.entregables.length)).toFixed(1));
   const dif = parseFloat((overallReal-overallExp).toFixed(1));
 
-  // ── Slide 1: Portada ───────────────────────────────────────────────────────
-  const s1=pptx.addSlide(); s1.background={color:BG};
+  // ══ SLIDE 1: Portada ═════════════════════════════════════════════════════════
+  const s1=pptx.addSlide(); s1.background={color:BG_DARK};
   s1.addShape('rect'as any,{x:0,y:0,w:0.07,h:5.63,fill:{color:RED}});
   s1.addText('TIMIA',{x:0.4,y:0.28,w:3,fontSize:12,bold:true,color:RED,align:'left'});
   s1.addText('Plan de Trabajo',{x:0.4,y:1.05,w:9,fontSize:22,bold:false,color:GRAY,align:'left'});
   s1.addText(`Proyecto ${plan.projectId}`,{x:0.4,y:1.55,w:9,fontSize:50,bold:true,color:WHITE,align:'left'});
   s1.addText(today,{x:0.4,y:2.85,w:9,fontSize:12,color:GRAY,align:'left'});
-  // KPI cards
-  [{label:'AVANCE REAL',val:`${overallReal}%`,col:WHITE},{label:'AVANCE ESPERADO',val:`${overallExp}%`,col:WHITE},{label:'DIFERENCIA',val:`${dif>=0?'+':''}${dif}%`,col:dif>=0?GREEN:ERR}].forEach((c,ci)=>{
+  [{label:'AVANCE REAL',val:`${overallReal}%`,col:WHITE},{label:'AVANCE ESPERADO',val:`${overallExp}%`,col:WHITE},{label:'DIFERENCIA',val:`${dif>=0?'+':''}${dif}%`,col:dif>=0?GREEN_L:ERR}].forEach((c,ci)=>{
     const x=0.4+ci*3.1;
-    s1.addShape('rect'as any,{x,y:3.4,w:2.9,h:1.1,fill:{color:CARD},line:{color:BORDER,width:0.5}});
+    s1.addShape('rect'as any,{x,y:3.4,w:2.9,h:1.1,fill:{color:CARD},line:{color:BORDER_D,width:0.5}});
     s1.addText(c.label,{x,y:3.48,w:2.9,fontSize:7,color:GRAY,align:'center'});
     s1.addText(c.val,  {x,y:3.75,w:2.9,fontSize:26,bold:true,color:c.col,align:'center'});
   });
   s1.addText(`Resp. Timia: ${plan.respTimia}   ·   Resp. BBVA: ${plan.respBBVA}`,{x:0.4,y:4.82,w:9.2,fontSize:9,color:MUT,align:'left'});
 
-  // ── Slides 2+: Un slide por entregable ────────────────────────────────────
-  const PAGE_SIZE=10;
+  // ══ SLIDES 2+: Una tabla Gantt por entregable (mismo visual que la app) ═══════
+  const PAGE=13; // max actividades por slide antes de paginar
+
   plan.entregables.forEach((ent,ei)=>{
-    const ACC=ENT_COLORS[ei]??TEAL;
-    const ePct=ent.activities.length
-      ?parseFloat((ent.activities.reduce((s,a,i)=>s+getActivityPct(ent.id,i,a),0)/ent.activities.length).toFixed(1))
-      :ent.pctReal;
-    const eDif=parseFloat((ePct-ent.pctExp).toFixed(1));
-    const pages:PlanActivity[][]=[];
-    for(let i=0;i<Math.max(1,ent.activities.length);i+=PAGE_SIZE) pages.push(ent.activities.slice(i,i+PAGE_SIZE));
+    const ACC = ENT_COLORS[ei]??'0D9488';
+    const ePct = ent.activities.length
+      ? parseFloat((ent.activities.reduce((s,a,i)=>s+getActivityPct(ent.id,i,a),0)/ent.activities.length).toFixed(1))
+      : ent.pctReal;
+    const eDif = parseFloat((ePct-ent.pctExp).toFixed(1));
 
-    pages.forEach((acts,pi)=>{
-      const sl=pptx.addSlide(); sl.background={color:BG};
-      sl.addShape('rect'as any,{x:0,y:0,w:0.07,h:5.63,fill:{color:ACC}});
+    for(let page=0; page*PAGE<Math.max(1,ent.activities.length); page++){
+      const acts = ent.activities.slice(page*PAGE,(page+1)*PAGE);
+      const totalPages = Math.ceil(Math.max(1,ent.activities.length)/PAGE);
 
-      // Header
+      // ── fondo blanco (como la app) ──────────────────────────────────────────
+      const sl=pptx.addSlide(); sl.background={color:WHITE};
+
+      // ── Título del entregable (arriba a la izquierda) ───────────────────────
       const roman=['I','II','III','IV','V'][ei]??(ei+1).toString();
-      sl.addText(`${roman}. ${ent.name}`,{x:0.4,y:0.2,w:pages.length>1?7.3:9,fontSize:17,bold:true,color:WHITE,align:'left'});
-      if(pages.length>1) sl.addText(`(${pi+1}/${pages.length})`,{x:7.7,y:0.24,w:2,fontSize:10,color:MUT,align:'right'});
+      const titleStr=`${roman}. ${ent.name}${totalPages>1?` (${page+1}/${totalPages})`:''}`;
+      sl.addText(titleStr,{x:LM,y:0.14,w:5.6,fontSize:14,bold:true,color:DARK,align:'left'});
 
-      // Subline %
-      sl.addText(`${ePct}%`,{x:0.4,y:0.63,w:1.4,fontSize:13,bold:true,color:ePct>=ent.pctExp?GREEN:ERR,align:'left'});
-      sl.addText(`real  ·  ${ent.pctExp}% esperado`,{x:1.6,y:0.66,w:4,fontSize:10,color:MUT,align:'left'});
-      sl.addText(`${eDif>=0?'+':''}${eDif}%`,{x:9.1,y:0.63,w:0.7,fontSize:13,bold:true,color:eDif>=0?GREEN:ERR,align:'right'});
+      // ── KPI badges (arriba a la derecha, mismo look que la app) ────────────
+      // "Click actividad para etapas" hint label
+      sl.addText('⊞  Click actividad para etapas',{x:5.85,y:0.17,w:2.1,fontSize:6,color:MUT,align:'right'});
+      const badges=[
+        {label:'Avance real',val:`${ePct}%`, bg:DARK, vc:WHITE},
+        {label:'Esperado',   val:`${ent.pctExp}%`,bg:DARK,vc:WHITE},
+        {label:'Diferencia', val:`${eDif>=0?'+':''}${eDif}%`, bg:DARK,vc:eDif>=0?GREEN_L:ERR},
+      ];
+      badges.forEach((b,bi)=>{
+        const bx=8.0+bi*0.67; // 3 badges in 2"
+        const bw=0.63;
+        sl.addShape('rect'as any,{x:bx,y:0.1,w:bw,h:0.58,fill:{color:b.bg},line:{color:BORDER_D,width:0.3}});
+        sl.addText(b.label,{x:bx,y:0.12,w:bw,fontSize:5,color:GRAY,align:'center'});
+        sl.addText(b.val,  {x:bx,y:0.28,w:bw,fontSize:13,bold:true,color:b.vc,align:'center'});
+      });
 
-      // Entregable bar
-      sl.addShape('rect'as any,{x:0.4,y:1.03,w:9.4,h:0.09,fill:{color:CARD},line:{color:BORDER,width:0.2}});
-      if(ePct>0) sl.addShape('rect'as any,{x:0.4,y:1.03,w:Math.max(0.06,9.4*(ePct/100)),h:0.09,fill:{color:ACC}});
+      // ── Tabla header row (fondo maroon oscuro) ──────────────────────────────
+      const hY=TBL_Y;
+      sl.addShape('rect'as any,{x:LM,y:hY,w:TW,h:HDR_H,fill:{color:TBL_HDR}});
+      // Cabecera izquierda
+      sl.addText('Actividades / Avance',{x:LM+0.1,y:hY+0.09,w:NAME_W-0.1,fontSize:7,bold:true,color:WHITE,align:'left'});
+      sl.addText('%',{x:LM+NAME_W+0.04,y:hY+0.09,w:PCT_W-0.08,fontSize:7,bold:true,color:WHITE,align:'center'});
+      // Divisores verticales en header
+      sl.addShape('rect'as any,{x:LM+NAME_W,y:hY,w:0.008,h:HDR_H,fill:{color:'9B1C2C'}});
+      sl.addShape('rect'as any,{x:WK_X0-0.008,y:hY,w:0.008,h:HDR_H,fill:{color:'9B1C2C'}});
+      // Cabecera semanas: S1-S13 con fechas
+      WKS.forEach((wk,wi)=>{
+        const wx=WK_X0+wi*WK_W;
+        sl.addText(wk.l,{x:wx,y:hY+0.03,w:WK_W,fontSize:6.5,bold:true,color:WHITE,align:'center'});
+        sl.addText(wk.d,{x:wx,y:hY+0.165,w:WK_W,fontSize:4.5,color:'FFCDD2',align:'center'});
+      });
 
-      // Column headers
-      const hY=1.24;
-      sl.addText('Actividad',{x:0.45,y:hY,w:4.5,fontSize:6.5,bold:true,color:MUT,align:'left'});
-      sl.addText('Semanas',  {x:5.0,y:hY,w:0.9,fontSize:6.5,bold:true,color:MUT,align:'center'});
-      sl.addText('Progreso', {x:6.0,y:hY,w:2.0,fontSize:6.5,bold:true,color:MUT,align:'center'});
-      sl.addText('Real',     {x:8.05,y:hY,w:0.75,fontSize:6.5,bold:true,color:MUT,align:'right'});
-      sl.addText('Δ',        {x:8.85,y:hY,w:0.75,fontSize:6.5,bold:true,color:MUT,align:'right'});
-      sl.addShape('rect'as any,{x:0.4,y:hY+0.22,w:9.4,h:0.01,fill:{color:BORDER}});
-
+      // ── Filas de actividades ────────────────────────────────────────────────
       if(acts.length===0){
-        sl.addText('Sin actividades — genera el plan desde Estimaciones',{x:0.4,y:2.5,w:9.4,fontSize:11,color:MUT,align:'center',italic:true});
+        sl.addText('Sin actividades — genera el plan desde Estimaciones',
+          {x:LM,y:hY+HDR_H+0.7,w:TW,fontSize:11,color:MUT,align:'center',italic:true});
       } else {
+        // Borde exterior de la tabla
+        const tblH=HDR_H+acts.length*ROW_H;
+        sl.addShape('rect'as any,{x:LM,y:hY,w:TW,h:tblH,fill:{color:'00000000'},line:{color:ROW_BORD,width:0.5}});
+
         acts.forEach((act,ai)=>{
-          const gIdx=pi*PAGE_SIZE+ai;
+          const gIdx=page*PAGE+ai;
           const aPct=getActivityPct(ent.id,gIdx,act);
-          const aDif=parseFloat((aPct-act.pctExp).toFixed(1));
-          const yR=1.57+ai*0.35;
-          if(ai%2===0) sl.addShape('rect'as any,{x:0.4,y:yR-0.04,w:9.4,h:0.33,fill:{color:'131E35'},line:{color:'1E2D40',width:0.15}});
-          sl.addText(act.name,{x:0.45,y:yR,w:act.bbva?4.15:4.5,fontSize:8.5,color:aPct>=100?GREEN:WHITE,align:'left',shrinkText:true});
-          if(act.bbva){sl.addShape('rect'as any,{x:4.65,y:yR+0.05,w:0.55,h:0.16,fill:{color:BBVA}});sl.addText('BBVA',{x:4.65,y:yR+0.055,w:0.55,fontSize:5.5,color:WHITE,align:'center',bold:true});}
-          sl.addText(`S${act.startWeek}→S${act.endWeek}`,{x:5.0,y:yR,w:0.9,fontSize:8,color:MUT,align:'center'});
-          sl.addShape('rect'as any,{x:6.0,y:yR+0.08,w:2.0,h:0.09,fill:{color:BORDER}});
-          if(aPct>0) sl.addShape('rect'as any,{x:6.0,y:yR+0.08,w:Math.max(0.02,2.0*(aPct/100)),h:0.09,fill:{color:aPct>=100?GREEN:ACC}});
-          sl.addText(`${aPct}%`,{x:8.05,y:yR,w:0.75,fontSize:8.5,bold:true,color:aPct>=100?GREEN:WHITE,align:'right'});
-          sl.addText(`${aDif>=0?'+':''}${aDif}%`,{x:8.85,y:yR,w:0.75,fontSize:8.5,bold:true,color:aDif>=0?GREEN:ERR,align:'right'});
+          const rY=hY+HDR_H+ai*ROW_H;
+          const isEven=ai%2===0;
+
+          // Fondo de fila
+          sl.addShape('rect'as any,{x:LM,y:rY,w:TW,h:ROW_H,fill:{color:isEven?ROW_ODD:ROW_EVEN}});
+          // Borde inferior de fila
+          sl.addShape('rect'as any,{x:LM,y:rY+ROW_H-0.006,w:TW,h:0.006,fill:{color:ROW_BORD}});
+
+          // Divisor vertical nombre|%
+          sl.addShape('rect'as any,{x:LM+NAME_W,y:rY,w:0.006,h:ROW_H,fill:{color:ROW_BORD}});
+          // Divisor vertical %|semanas
+          sl.addShape('rect'as any,{x:WK_X0-0.006,y:rY,w:0.006,h:ROW_H,fill:{color:ROW_BORD}});
+
+          // ── BBVA badge ────────────────────────────────────────────────────
+          let nameX=LM+0.08;
+          if(act.bbva){
+            sl.addShape('rect'as any,{x:LM+0.07,y:rY+0.075,w:0.35,h:0.135,fill:{color:BBVA_BG}});
+            sl.addText('BBVA',{x:LM+0.07,y:rY+0.077,w:0.35,fontSize:5.5,bold:true,color:WHITE,align:'center'});
+            nameX=LM+0.45;
+          }
+
+          // ── Icono etapas (⊞ como en la app) ──────────────────────────────
+          const hasEtapas=!!(act.etapas&&act.etapas.length>0);
+
+          // ── Nombre de la actividad ────────────────────────────────────────
+          const nameW=NAME_W-nameX+LM-(hasEtapas?0.22:0.1);
+          const nameColor=aPct>=100?GREEN:DARK;
+          sl.addText(act.name,{x:nameX,y:rY+0.078,w:nameW,fontSize:8,color:nameColor,align:'left',shrinkText:true});
+
+          // Icono ⊞ si tiene etapas
+          if(hasEtapas){
+            sl.addText('⊞',{x:LM+NAME_W-0.2,y:rY+0.065,w:0.18,fontSize:9,color:'0D9488',align:'right'});
+          }
+
+          // ── % ─────────────────────────────────────────────────────────────
+          const pctColor=aPct>=100?GREEN:aPct>0?AMBER:MUT;
+          sl.addText(`${aPct}%`,{x:LM+NAME_W+0.04,y:rY+0.078,w:PCT_W-0.08,fontSize:7.5,bold:true,color:pctColor,align:'center'});
+
+          // ── Barras Gantt por semana ────────────────────────────────────────
+          // Calculamos cuántas semanas de las planificadas están "ejecutadas"
+          const sw=act.startWeek??1;
+          const ew=act.endWeek??13;
+          const spanWeeks=Math.max(1,ew-sw+1);
+          const execWeeks=aPct/100*spanWeeks;
+          const barY=rY+(ROW_H-BAR_H)/2;
+
+          // Para cada semana, dibujamos la celda Gantt
+          for(let wi=0;wi<13;wi++){
+            const weekNum=wi+1;
+            const wx=WK_X0+wi*WK_W;
+            if(weekNum<sw||weekNum>ew) continue; // fuera del rango → nada
+
+            const cellX=wx+BAR_PAD;
+            const cellW=WK_W-BAR_PAD*2;
+
+            // Siempre: barra planificado (fondo claro)
+            sl.addShape('rect'as any,{x:cellX,y:barY,w:cellW,h:BAR_H,fill:{color:BAR_PLAN}});
+
+            // Barra ejecutado: calculamos qué fracción de esta semana está done
+            const relativeStart=weekNum-sw;           // 0-indexed dentro del span
+            const weekStartFrac=relativeStart/spanWeeks;
+            const weekEndFrac=(relativeStart+1)/spanWeeks;
+            const execFrac=Math.min(1,Math.max(0,execWeeks/spanWeeks));
+
+            if(execFrac>weekStartFrac){
+              const fillFrac=Math.min(weekEndFrac,execFrac)-weekStartFrac;
+              const normFill=fillFrac/(weekEndFrac-weekStartFrac);
+              sl.addShape('rect'as any,{x:cellX,y:barY,w:Math.max(0.01,cellW*normFill),h:BAR_H,fill:{color:BAR_DONE}});
+            }
+          }
         });
       }
-      // Footer stripe
-      sl.addShape('rect'as any,{x:0,y:5.44,w:10,h:0.19,fill:{color:CARD}});
-      sl.addText(`Plan de Trabajo · ${plan.projectId}  ·  Timia Hub`,{x:0.4,y:5.46,w:9.2,fontSize:7,color:MUT,align:'center'});
-    });
+
+      // ── Leyenda (parte inferior, idéntica a la app) ─────────────────────────
+      const legY=5.33;
+      // Fondo sutil para la leyenda
+      sl.addShape('rect'as any,{x:LM,y:legY-0.04,w:TW,h:0.26,fill:{color:'F8FAFC'},line:{color:ROW_BORD,width:0.3}});
+
+      let lx=LM+0.12;
+      // Ejecutado
+      sl.addShape('rect'as any,{x:lx,y:legY+0.05,w:0.14,h:0.11,fill:{color:BAR_DONE}});
+      sl.addText('Ejecutado',{x:lx+0.17,y:legY+0.02,w:0.85,fontSize:6.5,color:MUT});
+      lx+=1.1;
+      // Planificado
+      sl.addShape('rect'as any,{x:lx,y:legY+0.05,w:0.14,h:0.11,fill:{color:BAR_PLAN},line:{color:ROW_BORD,width:0.3}});
+      sl.addText('Planificado',{x:lx+0.17,y:legY+0.02,w:0.85,fontSize:6.5,color:MUT});
+      lx+=1.1;
+      // BBVA
+      sl.addShape('rect'as any,{x:lx,y:legY+0.035,w:0.35,h:0.135,fill:{color:BBVA_BG}});
+      sl.addText('BBVA',{x:lx,y:legY+0.037,w:0.35,fontSize:5.5,bold:true,color:WHITE,align:'center'});
+      sl.addText('Depende de BBVA',{x:lx+0.38,y:legY+0.02,w:1.3,fontSize:6.5,color:MUT});
+      lx+=1.8;
+      // Etapas
+      sl.addText('⊞',{x:lx,y:legY-0.005,w:0.15,fontSize:10,color:'0D9488'});
+      sl.addText('Tiene etapas (click)',{x:lx+0.17,y:legY+0.02,w:1.4,fontSize:6.5,color:MUT});
+
+      // Pie de página
+      sl.addText(`Plan de Trabajo · ${plan.projectId} · Timia Hub`,{x:7,y:legY+0.02,w:2.8,fontSize:6,color:MUT,align:'right'});
+    }
   });
 
-  // ── Último slide: Estado y próximas acciones ──────────────────────────────
-  const sL=pptx.addSlide(); sL.background={color:BG};
+  // ══ SLIDE FINAL: Estado y próximas acciones ═══════════════════════════════════
+  const sL=pptx.addSlide(); sL.background={color:BG_DARK};
   sL.addShape('rect'as any,{x:0,y:0,w:0.07,h:5.63,fill:{color:WARN}});
   sL.addText('Estado y próximas acciones',{x:0.4,y:0.22,w:9,fontSize:18,bold:true,color:WHITE});
-  [{title:'✅ Siguientes pasos',items:plan.pasos.length?plan.pasos:['Sin pasos registrados'],col:GREEN,x:0.4},
+  [{title:'✅ Siguientes pasos',items:plan.pasos.length?plan.pasos:['Sin pasos registrados'],col:GREEN_L,x:0.4},
    {title:'⚠ Alertas',        items:plan.alertas.length?plan.alertas:['Sin alertas'],col:WARN,x:3.5},
    {title:'🚧 Bloqueantes',    items:plan.bloqueantes.length?plan.bloqueantes:['Sin bloqueantes'],col:ERR,x:6.6}
   ].forEach(sec=>{
-    sL.addShape('rect'as any,{x:sec.x,y:0.88,w:2.9,h:4.3,fill:{color:CARD},line:{color:BORDER,width:0.5}});
+    sL.addShape('rect'as any,{x:sec.x,y:0.88,w:2.9,h:4.3,fill:{color:CARD},line:{color:BORDER_D,width:0.5}});
     sL.addText(sec.title,{x:sec.x+0.1,y:0.98,w:2.7,fontSize:9.5,bold:true,color:sec.col});
-    sec.items.forEach((item,ii)=>sL.addText(`• ${item}`,{x:sec.x+0.1,y:1.5+ii*0.42,w:2.7,fontSize:9,color:LIGHT,wrap:true}));
+    sec.items.forEach((item,ii)=>sL.addText(`• ${item}`,{x:sec.x+0.1,y:1.5+ii*0.42,w:2.7,fontSize:9,color:'F1F5F9',wrap:true}));
   });
   sL.addText('Generado por Timia Hub',{x:0.4,y:5.1,w:9,fontSize:8,color:MUT,align:'center'});
 
