@@ -134,6 +134,13 @@ function ActivityDrawer({ projectId, entregableId, actIdx, act, effectivePct, et
   const searchRef                   = useRef<HTMLInputElement>(null);
   const dropdownRef                 = useRef<HTMLDivElement>(null);
 
+  // Cerrar drawer con Escape
+  useEffect(() => {
+    function handleKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose(); }
+    document.addEventListener('keydown', handleKey);
+    return () => document.removeEventListener('keydown', handleKey);
+  }, [onClose]);
+
   const myAssignees = allUsers.filter(u => assigneeIds.includes(u.id));
   const searchTrimmed = search.trim().toLowerCase();
   const filteredUsers = searchTrimmed.length >= 2
@@ -403,9 +410,14 @@ function EntregableSection({ block, projectId, getActivityPct, setActivityPct, o
           </table>
         </div>
       ) : (
-        <div style={{ padding:'14px 18px', background:'#f8fafc', borderRadius:8, border:'0.5px solid #e2e8f0', display:'flex', alignItems:'center', gap:8 }}>
-          <Clock size={14} color="#94a3b8"/>
-          <p style={{ margin:0, fontSize:12, color:'#94a3b8' }}>Detalle de actividades pendiente · El líder técnico actualizará el desglose</p>
+        <div style={{ padding:'16px 20px', background:'#fafbff', borderRadius:8, border:'1px dashed #e2e8f0', display:'flex', alignItems:'center', gap:12 }}>
+          <div style={{ width:32, height:32, borderRadius:8, background:'#f1f5f9', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+            <Clock size={15} color="#94a3b8"/>
+          </div>
+          <div>
+            <p style={{ margin:'0 0 2px', fontSize:12, fontWeight:500, color:'#64748b' }}>Plan de actividades pendiente de configuración</p>
+            <p style={{ margin:0, fontSize:11, color:'#94a3b8' }}>El líder técnico cargará el desglose de tareas y etapas en la sección Estimaciones</p>
+          </div>
         </div>
       )}
     </div>
@@ -807,15 +819,15 @@ const WORK_PLANS: WorkPlan[] = [
     ],
   },
 
-  // ── Proyectos resumen ────────────────────────────────────────────────────────
-  { projectId:'NGA', respBBVA:'TBD · BBVA', respTimia:'Juan Pablo Arévalo M.', pasos:['Cerrar documentación ETL','Validar esquemas en producción','Preparar cierre formal'], alertas:['Documentación ETL al 80% — retraso 1 semana'], bloqueantes:[], entregables:[{id:'doc',name:'I. Documentación y gobierno',pctReal:91,pctExp:88,activities:[]},{id:'etl',name:'II. Componentes ETL',pctReal:85,pctExp:80,activities:[]},{id:'val',name:'III. Validación y despliegue',pctReal:95,pctExp:90,activities:[]}] },
-  { projectId:'CRONOS', respBBVA:'TBD · BBVA', respTimia:'Juan Pablo Arévalo M.', pasos:['Completar pipeline Spark','Iniciar certificación QA','Documentar reglas Hammurabi'], alertas:['Construcción reglas Hammurabi retrasada ~1 semana'], bloqueantes:[], entregables:[{id:'doc',name:'I. Documentación',pctReal:80,pctExp:75,activities:[]},{id:'proc',name:'II. Procesamiento Spark',pctReal:65,pctExp:70,activities:[]},{id:'auto',name:'III. Automatización',pctReal:40,pctExp:50,activities:[]}] },
-  { projectId:'SDM1', respBBVA:'TBD · BBVA', respTimia:'Diego Sánchez', pasos:['Completar pruebas entorno Work','Escalar bloqueo con BBVA','Replantear cronograma'], alertas:['2 actividades bloqueadas esperando BBVA','Avance 10% por debajo del esperado'], bloqueantes:['Validación entorno Work por BBVA pendiente desde S6'], entregables:[{id:'doc',name:'I. Documentación',pctReal:55,pctExp:65,activities:[]},{id:'comp',name:'II. Componentes',pctReal:48,pctExp:60,activities:[]},{id:'int',name:'III. Integración',pctReal:30,pctExp:40,activities:[]}] },
-  { projectId:'SDM2', respBBVA:'TBD · BBVA', respTimia:'Diego Sánchez', pasos:['Finalizar pruebas entorno Work','Preparar documentación Control-M'], alertas:[], bloqueantes:[], entregables:[{id:'doc',name:'I. Documentación',pctReal:70,pctExp:68,activities:[]},{id:'comp',name:'II. Componentes',pctReal:65,pctExp:62,activities:[]},{id:'auto',name:'III. Automatización',pctReal:55,pctExp:50,activities:[]}] },
-  { projectId:'MURIC', respBBVA:'TBD · BBVA', respTimia:'Diego Sánchez', pasos:['Completar certificación QA','Preparar despliegue producción'], alertas:[], bloqueantes:[], entregables:[{id:'doc',name:'I. Documentación',pctReal:72,pctExp:70,activities:[]},{id:'comp',name:'II. Componentes',pctReal:68,pctExp:65,activities:[]},{id:'auto',name:'III. Automatización',pctReal:60,pctExp:58,activities:[]}] },
-  { projectId:'BCBS239', respBBVA:'TBD · BBVA', respTimia:'Diego Sánchez', pasos:['Despliegue Control-M producción — URGENTE','Reunión de crisis con BBVA esta semana'], alertas:['3 actividades bloqueadas — riesgo ANS CRÍTICA activo','Proyecto con mayor riesgo del portafolio'], bloqueantes:['Despliegue Control-M bloqueado por ambientes BBVA','Validación datos producción pendiente 3 semanas'], entregables:[{id:'doc',name:'I. Documentación',pctReal:48,pctExp:60,activities:[]},{id:'comp',name:'II. Componentes ADA',pctReal:35,pctExp:55,activities:[]},{id:'auto',name:'III. Automatización',pctReal:15,pctExp:45,activities:[]}] },
-  { projectId:'BRICKELL', respBBVA:'TBD · BBVA', respTimia:'Diego Sánchez', pasos:['Finalizar última tarea','Documentación de cierre','Presentar entregables finales'], alertas:[], bloqueantes:[], entregables:[{id:'doc',name:'I. Documentación',pctReal:88,pctExp:85,activities:[]},{id:'comp',name:'II. Componentes',pctReal:90,pctExp:88,activities:[]},{id:'close',name:'III. Cierre',pctReal:80,pctExp:85,activities:[]}] },
-  { projectId:'OPTIM', respBBVA:'N/A · Credicorp Capital', respTimia:'David Huamán', pasos:['Validación final Credicorp Capital','Documentación de cierre'], alertas:[], bloqueantes:[], entregables:[{id:'doc',name:'I. Documentación',pctReal:85,pctExp:82,activities:[]},{id:'comp',name:'II. Componentes',pctReal:90,pctExp:88,activities:[]}] },
+  // ── Proyectos resumen — pctReal/pctExp en 0 hasta que se carguen actividades reales ──
+  { projectId:'NGA',     respBBVA:'TBD · BBVA',              respTimia:'Juan Pablo Arévalo M.', pasos:[], alertas:[], bloqueantes:[], entregables:[{id:'doc',name:'I. Documentación y gobierno',pctReal:0,pctExp:0,activities:[]},{id:'etl',name:'II. Componentes ETL',pctReal:0,pctExp:0,activities:[]},{id:'val',name:'III. Validación y despliegue',pctReal:0,pctExp:0,activities:[]}] },
+  { projectId:'CRONOS',  respBBVA:'TBD · BBVA',              respTimia:'Juan Pablo Arévalo M.', pasos:[], alertas:[], bloqueantes:[], entregables:[{id:'doc',name:'I. Documentación',pctReal:0,pctExp:0,activities:[]},{id:'proc',name:'II. Procesamiento Spark',pctReal:0,pctExp:0,activities:[]},{id:'auto',name:'III. Automatización',pctReal:0,pctExp:0,activities:[]}] },
+  { projectId:'SDM1',    respBBVA:'TBD · BBVA',              respTimia:'Diego Sánchez',         pasos:[], alertas:[], bloqueantes:[], entregables:[{id:'doc',name:'I. Documentación',pctReal:0,pctExp:0,activities:[]},{id:'comp',name:'II. Componentes',pctReal:0,pctExp:0,activities:[]},{id:'int',name:'III. Integración',pctReal:0,pctExp:0,activities:[]}] },
+  { projectId:'SDM2',    respBBVA:'TBD · BBVA',              respTimia:'Diego Sánchez',         pasos:[], alertas:[], bloqueantes:[], entregables:[{id:'doc',name:'I. Documentación',pctReal:0,pctExp:0,activities:[]},{id:'comp',name:'II. Componentes',pctReal:0,pctExp:0,activities:[]},{id:'auto',name:'III. Automatización',pctReal:0,pctExp:0,activities:[]}] },
+  { projectId:'MURIC',   respBBVA:'TBD · BBVA',              respTimia:'Diego Sánchez',         pasos:[], alertas:[], bloqueantes:[], entregables:[{id:'doc',name:'I. Documentación',pctReal:0,pctExp:0,activities:[]},{id:'comp',name:'II. Componentes',pctReal:0,pctExp:0,activities:[]},{id:'auto',name:'III. Automatización',pctReal:0,pctExp:0,activities:[]}] },
+  { projectId:'BCBS239', respBBVA:'TBD · BBVA',              respTimia:'Diego Sánchez',         pasos:[], alertas:[], bloqueantes:[], entregables:[{id:'doc',name:'I. Documentación',pctReal:0,pctExp:0,activities:[]},{id:'comp',name:'II. Componentes ADA',pctReal:0,pctExp:0,activities:[]},{id:'auto',name:'III. Automatización',pctReal:0,pctExp:0,activities:[]}] },
+  { projectId:'BRICKELL',respBBVA:'TBD · BBVA',              respTimia:'Diego Sánchez',         pasos:[], alertas:[], bloqueantes:[], entregables:[{id:'doc',name:'I. Documentación',pctReal:0,pctExp:0,activities:[]},{id:'comp',name:'II. Componentes',pctReal:0,pctExp:0,activities:[]},{id:'close',name:'III. Cierre',pctReal:0,pctExp:0,activities:[]}] },
+  { projectId:'OPTIM',   respBBVA:'N/A · Credicorp Capital', respTimia:'David Huamán',          pasos:[], alertas:[], bloqueantes:[], entregables:[{id:'doc',name:'I. Documentación',pctReal:0,pctExp:0,activities:[]},{id:'comp',name:'II. Componentes',pctReal:0,pctExp:0,activities:[]}] },
 ];
 
 // ─── PPTX Export ──────────────────────────────────────────────────────────────
@@ -977,7 +989,10 @@ export default function PlanDeTrabajo() {
               <button key={p.projectId} onClick={()=>setSelected(p.projectId)} style={{ display:'flex', alignItems:'center', gap:6, padding:'7px 10px', background:isActive?`${color}15`:'transparent', border:isActive?`0.5px solid ${color}50`:'0.5px solid transparent', borderRadius:8, cursor:'pointer', textAlign:'left', transition:'all .12s' }}>
                 <div style={{ width:5, height:5, borderRadius:'50%', background:color, flexShrink:0 }}/>
                 <span style={{ fontSize:11, fontWeight:isActive?600:400, color:isActive?color:'#374151', flex:1 }}>{p.projectId}</span>
-                {p.bloqueantes.length>0?<span style={{ fontSize:9 }}>⛔</span>:p.alertas.length>0?<span style={{ fontSize:9 }}>⚠</span>:<span style={{ fontSize:9, color:'#94a3b8' }}>{overall}%</span>}
+                {p.projectId==='FICO'
+                  ? <span style={{ fontSize:7, padding:'1px 4px', borderRadius:3, background:'#dcfce7', color:'#15803d', fontWeight:700, flexShrink:0 }}>✓ activo</span>
+                  : p.bloqueantes.length>0?<span style={{ fontSize:9 }}>⛔</span>:p.alertas.length>0?<span style={{ fontSize:9 }}>⚠</span>:<span style={{ fontSize:9, color:'#94a3b8' }}>{overall}%</span>
+                }
               </button>
             );
           })}
