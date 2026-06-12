@@ -607,14 +607,11 @@ ${bloqueados.map(p => `• ${p.id} (${p.area}): ${p.risk} ítem${p.risk > 1 ? 's
 
 // ─── Dashboard principal ──────────────────────────────────────────────────────
 
-type Tab = 'resumen'|'proyectos'|'equipos'|'ans'|'actividad'|'plan'|'riesgo';
+type Tab = 'resumen'|'proyectos'|'plan'|'riesgo';
 
 const TABS: { id:Tab; label:string; icon:React.ReactNode; highlight?:boolean }[] = [
   { id:'resumen',    label:'Resumen',         icon:<TrendingUp size={13}/> },
   { id:'proyectos',  label:'Proyectos',       icon:<Activity size={13}/> },
-  { id:'equipos',    label:'Equipos',         icon:<Users size={13}/> },
-  { id:'ans',        label:'ANS · Alertas',   icon:<AlertTriangle size={13}/> },
-  { id:'actividad',  label:'Actividad',       icon:<CheckCircle size={13}/> },
   { id:'plan',       label:'Plan de trabajo', icon:<FileText size={13}/>, highlight: true },
   { id:'riesgo',     label:'Risk Score',      icon:<ShieldAlert size={13}/> },
 ];
@@ -624,7 +621,6 @@ interface PMDashboardProps { onViewChange?: (v: string) => void; }
 export default function PMDashboard({ onViewChange }: PMDashboardProps) {
   const [tab, setTab] = useState<Tab>('resumen');
   const [projModal, setProjModal] = useState<typeof PROJ_DATA[0]|null>(null);
-  const [ansModal, setAnsModal]   = useState<typeof ANS_TASKS[0]|null>(null);
   const [showStandup, setShowStandup] = useState(false);
 
   return (
@@ -669,15 +665,11 @@ export default function PMDashboard({ onViewChange }: PMDashboardProps) {
       {/* Contenido */}
       {tab==='resumen'   && <ViewResumen/>}
       {tab==='proyectos' && <ViewProyectos onSelect={setProjModal}/>}
-      {tab==='equipos'   && <ViewEquipos/>}
-      {tab==='ans'       && <ViewAns onSelect={setAnsModal}/>}
-      {tab==='actividad' && <ViewActividad/>}
       {tab==='plan'      && <PlanDeTrabajo onGoEstimaciones={onViewChange ? () => onViewChange('estimaciones') : undefined}/>}
       {tab==='riesgo'    && <ViewRiesgo/>}
 
       {/* Modales */}
       {projModal    && <ProjectModal proj={projModal} onClose={()=>setProjModal(null)}/>}
-      {ansModal     && <AnsModal task={ansModal} onClose={()=>setAnsModal(null)}/>}
       {showStandup  && <StandupModal onClose={() => setShowStandup(false)}/>}
     </div>
   );

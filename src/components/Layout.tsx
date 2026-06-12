@@ -15,9 +15,10 @@ import {
   BarChart3,
   Building2,
   ChevronDown,
+  CalendarRange,
 } from 'lucide-react';
 
-export type View = 'setup-project' | 'setup-team' | 'setup-tasks' | 'dashboard' | 'standards' | 'analytics' | 'audit' | 'bank-status' | 'notifications' | 'roles-permissions' | 'project-templates' | 'admin' | 'circuitos-bbva' | 'bitacora' | 'estimaciones';
+export type View = 'setup-project' | 'setup-team' | 'setup-tasks' | 'dashboard' | 'standards' | 'analytics' | 'audit' | 'bank-status' | 'notifications' | 'roles-permissions' | 'project-templates' | 'admin' | 'circuitos-bbva' | 'bitacora' | 'estimaciones' | 'plan-trabajo';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -94,6 +95,14 @@ export default function Layout({ children, currentView, onViewChange, userRole }
                 <button onClick={() => onViewChange('estimaciones')}
                   className={`text-sm font-medium transition-colors flex items-center gap-1 ${currentView==='estimaciones'?'text-primary':'text-slate-600 hover:text-primary'}`}>
                   <BarChart3 size={13}/> Estimaciones
+                </button>
+              )}
+
+              {/* Plan de Trabajo — visible para roles con acceso, excepto PM que lo ve en su Dashboard */}
+              {canAccess(userRole as UserRole,'view_plan_trabajo') && userRole !== 'pm' && (
+                <button onClick={() => onViewChange('plan-trabajo')}
+                  className={`text-sm font-medium transition-colors flex items-center gap-1 ${currentView==='plan-trabajo'?'text-primary':'text-slate-600 hover:text-primary'}`}>
+                  <CalendarRange size={13}/> Plan de Trabajo
                 </button>
               )}
 
