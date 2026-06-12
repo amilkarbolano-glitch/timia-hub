@@ -609,17 +609,19 @@ ${bloqueados.map(p => `• ${p.id} (${p.area}): ${p.risk} ítem${p.risk > 1 ? 's
 
 type Tab = 'resumen'|'proyectos'|'equipos'|'ans'|'actividad'|'plan'|'riesgo';
 
-const TABS: { id:Tab; label:string; icon:React.ReactNode }[] = [
+const TABS: { id:Tab; label:string; icon:React.ReactNode; highlight?:boolean }[] = [
   { id:'resumen',    label:'Resumen',         icon:<TrendingUp size={13}/> },
   { id:'proyectos',  label:'Proyectos',       icon:<Activity size={13}/> },
   { id:'equipos',    label:'Equipos',         icon:<Users size={13}/> },
   { id:'ans',        label:'ANS · Alertas',   icon:<AlertTriangle size={13}/> },
   { id:'actividad',  label:'Actividad',       icon:<CheckCircle size={13}/> },
-  { id:'plan',       label:'Plan de trabajo', icon:<FileText size={13}/> },
+  { id:'plan',       label:'Plan de trabajo', icon:<FileText size={13}/>, highlight: true },
   { id:'riesgo',     label:'Risk Score',      icon:<ShieldAlert size={13}/> },
 ];
 
-export default function PMDashboard() {
+interface PMDashboardProps { onViewChange?: (v: string) => void; }
+
+export default function PMDashboard({ onViewChange }: PMDashboardProps) {
   const [tab, setTab] = useState<Tab>('resumen');
   const [projModal, setProjModal] = useState<typeof PROJ_DATA[0]|null>(null);
   const [ansModal, setAnsModal]   = useState<typeof ANS_TASKS[0]|null>(null);
@@ -640,12 +642,28 @@ export default function PMDashboard() {
       </div>
 
       {/* Tabs */}
-      <div style={{ display:'flex', gap:4, borderBottom:'0.5px solid #e2e8f0', marginBottom:20, overflowX:'auto' }}>
-        {TABS.map(t => (
-          <button key={t.id} onClick={()=>setTab(t.id)} style={{ display:'flex', alignItems:'center', gap:5, padding:'8px 14px', fontSize:12, fontWeight: tab===t.id?500:400, color: tab===t.id?'#dc2626':'#64748b', background:'none', border:'none', borderBottom: tab===t.id?'2px solid #dc2626':'2px solid transparent', cursor:'pointer', whiteSpace:'nowrap', transition:'all .15s' }}>
-            {t.icon}{t.label}
-          </button>
-        ))}
+      <div style={{ display:'flex', gap:4, borderBottom:'0.5px solid #e2e8f0', marginBottom:20, overflowX:'auto', alignItems:'flex-end' }}>
+        {TABS.map(t => {
+          const isActive = tab === t.id;
+          const isHighlight = t.highlight;
+          return (
+            <button key={t.id} onClick={()=>setTab(t.id)} style={{
+              display:'flex', alignItems:'center', gap:5,
+              padding: isHighlight ? '9px 18px' : '8px 14px',
+              fontSize: isHighlight ? 13 : 12,
+              fontWeight: isActive ? 600 : isHighlight ? 500 : 400,
+              color: isActive ? '#dc2626' : isHighlight ? '#0d9488' : '#64748b',
+              background: isHighlight && !isActive ? '#f0fdfa' : 'none',
+              border: 'none',
+              borderBottom: isActive ? '2px solid #dc2626' : isHighlight ? '2px solid #0d9488' : '2px solid transparent',
+              borderRadius: isHighlight && !isActive ? '6px 6px 0 0' : undefined,
+              cursor:'pointer', whiteSpace:'nowrap', transition:'all .15s',
+            }}>
+              {t.icon}{t.label}
+              {isHighlight && !isActive && <span style={{ fontSize:9, padding:'1px 5px', borderRadius:8, background:'#0d948820', color:'#0d9488', fontWeight:600, marginLeft:2 }}>FICO listo</span>}
+            </button>
+          );
+        })}
       </div>
 
       {/* Contenido */}
@@ -654,7 +672,7 @@ export default function PMDashboard() {
       {tab==='equipos'   && <ViewEquipos/>}
       {tab==='ans'       && <ViewAns onSelect={setAnsModal}/>}
       {tab==='actividad' && <ViewActividad/>}
-      {tab==='plan'      && <PlanDeTrabajo/>}
+      {tab==='plan'      && <PlanDeTrabajo onGoEstimaciones={onViewChange ? () => onViewChange('estimaciones') : undefined}/>}
       {tab==='riesgo'    && <ViewRiesgo/>}
 
       {/* Modales */}

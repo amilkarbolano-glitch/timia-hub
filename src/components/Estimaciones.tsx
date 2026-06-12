@@ -264,10 +264,11 @@ function ActivityCard({
             style={{ cursor: 'pointer' }}/>
           BBVA
         </label>
-        {/* Etapas badge */}
+        {/* Etapas badge — suma de pesos de todas las etapas (debe ser exactamente 100%) */}
         {etapas.length > 0 && (
-          <span style={{ fontSize: 9, padding: '1px 6px', borderRadius: 10, background: overOrUnder ? '#fef2f2' : '#f0fdf4', color: overOrUnder ? '#dc2626' : '#15803d', fontWeight: 600, flexShrink: 0 }}>
-            {total}%
+          <span title={overOrUnder ? `Las etapas suman ${total}% — deben sumar exactamente 100%` : 'Las etapas suman 100% correctamente'}
+            style={{ fontSize: 9, padding: '2px 7px', borderRadius: 10, background: overOrUnder ? '#fef2f2' : '#f0fdf4', color: overOrUnder ? '#dc2626' : '#15803d', fontWeight: 600, flexShrink: 0, display:'flex', alignItems:'center', gap:3 }}>
+            {overOrUnder ? `⚠ ${total}%` : `✓ ${total}%`}
           </span>
         )}
         <button onClick={e => { e.stopPropagation(); onDelete(); }}

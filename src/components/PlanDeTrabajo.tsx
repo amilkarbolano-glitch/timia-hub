@@ -190,6 +190,17 @@ function ActivityDrawer({ projectId, entregableId, actIdx, act, effectivePct, et
           </div>
         </div>
 
+        {/* BBVA banner */}
+        {act.bbva && (
+          <div style={{ padding:'10px 18px', background:'#dbeafe', borderBottom:'1px solid #bfdbfe', display:'flex', alignItems:'flex-start', gap:10, flexShrink:0 }}>
+            <span style={{ fontSize:16, flexShrink:0, lineHeight:1.3 }}>🏦</span>
+            <div>
+              <p style={{ margin:'0 0 2px', fontSize:11, fontWeight:700, color:'#1d4ed8' }}>Tarea con dependencia BBVA</p>
+              <p style={{ margin:0, fontSize:10, color:'#1e40af' }}>Timia inicia y gestiona los pasos previos — la finalización depende de aprobación o acción por parte de BBVA.</p>
+            </div>
+          </div>
+        )}
+
         {/* Body */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '16px 18px' }}>
 
@@ -307,7 +318,10 @@ function ActivityDrawer({ projectId, entregableId, actIdx, act, effectivePct, et
               {actHistorial.length > 0 && <span style={{ fontSize: 9, color: '#94a3b8', fontWeight: 400 }}>({actHistorial.length})</span>}
             </p>
             {actHistorial.length === 0
-              ? <p style={{ margin: 0, fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>Sin cambios registrados aún</p>
+              ? <div style={{ display:'flex', alignItems:'center', gap:8, padding:'10px 12px', background:'#f8fafc', borderRadius:8, border:'1px dashed #e2e8f0' }}>
+                  <Clock size={14} color="#94a3b8" style={{ flexShrink:0 }}/>
+                  <p style={{ margin: 0, fontSize: 11, color: '#94a3b8' }}>Los cambios que marques aquí quedarán registrados automáticamente con fecha, hora y usuario.</p>
+                </div>
               : <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
                   {actHistorial.map(h => (
                     <div key={h.id} style={{ display: 'flex', gap: 9, alignItems: 'flex-start' }}>
@@ -337,11 +351,12 @@ function ActivityDrawer({ projectId, entregableId, actIdx, act, effectivePct, et
 
 // ─── EntregableSection ────────────────────────────────────────────────────────
 
-function EntregableSection({ block, projectId, getActivityPct, setActivityPct, onActivityClick }: {
+function EntregableSection({ block, projectId, getActivityPct, setActivityPct, onActivityClick, onGoEstimaciones }: {
   block: PlanEntregable; projectId: string;
   getActivityPct: (i: number) => number;
   setActivityPct: (i: number, pct: number) => void;
   onActivityClick: (i: number, act: PlanActivity) => void;
+  onGoEstimaciones?: () => void;
 }) {
   const effectiveActivities = block.activities.map((a, i) => ({ ...a, pct: getActivityPct(i) }));
   const effectivePctReal = block.activities.length > 0
@@ -414,10 +429,15 @@ function EntregableSection({ block, projectId, getActivityPct, setActivityPct, o
           <div style={{ width:32, height:32, borderRadius:8, background:'#f1f5f9', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
             <Clock size={15} color="#94a3b8"/>
           </div>
-          <div>
+          <div style={{ flex:1 }}>
             <p style={{ margin:'0 0 2px', fontSize:12, fontWeight:500, color:'#64748b' }}>Plan de actividades pendiente de configuración</p>
-            <p style={{ margin:0, fontSize:11, color:'#94a3b8' }}>El líder técnico cargará el desglose de tareas y etapas en la sección Estimaciones</p>
+            <p style={{ margin:0, fontSize:11, color:'#94a3b8' }}>El líder técnico cargará el desglose de etapas en <strong>Estimaciones</strong></p>
           </div>
+          {onGoEstimaciones && (
+            <button onClick={onGoEstimaciones} style={{ display:'flex', alignItems:'center', gap:5, padding:'7px 13px', background:'#0d9488', color:'#fff', border:'none', borderRadius:7, cursor:'pointer', fontSize:11, fontWeight:500, flexShrink:0, whiteSpace:'nowrap' }}>
+              Ir a Estimaciones →
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -426,11 +446,12 @@ function EntregableSection({ block, projectId, getActivityPct, setActivityPct, o
 
 // ─── PlanDetail ───────────────────────────────────────────────────────────────
 
-function PlanDetail({ plan, getActivityPct, setActivityPct, onActivityClick }: {
+function PlanDetail({ plan, getActivityPct, setActivityPct, onActivityClick, onGoEstimaciones }: {
   plan: WorkPlan;
   getActivityPct: (eid: string, ai: number, a: PlanActivity) => number;
   setActivityPct: (eid: string, ai: number, pct: number) => void;
   onActivityClick: (eid: string, ai: number, a: PlanActivity) => void;
+  onGoEstimaciones?: () => void;
 }) {
   const color = PROJECTS.find(p => p.id === plan.projectId)?.color ?? '#64748b';
   const overallReal = parseFloat((plan.entregables.map(e => e.activities.length
@@ -511,6 +532,7 @@ function PlanDetail({ plan, getActivityPct, setActivityPct, onActivityClick }: {
           getActivityPct={i => getActivityPct(e.id,i,e.activities[i])}
           setActivityPct={(i,pct) => setActivityPct(e.id,i,pct)}
           onActivityClick={(i,a) => onActivityClick(e.id,i,a)}
+          onGoEstimaciones={onGoEstimaciones}
         />
       ))}
     </div>
@@ -879,7 +901,7 @@ async function exportPlanPPTX(plan: WorkPlan, getActivityPct: (eid: string, ai: 
 
 interface DrawerState { projectId: string; entregableId: string; actIdx: number; act: PlanActivity; }
 
-export default function PlanDeTrabajo() {
+export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?: () => void }) {
   const { user } = useAuth();
   const canMark = user ? (['pm','tech_lead','tech_ref'] as string[]).includes(user.role) : false;
 
@@ -1020,6 +1042,7 @@ export default function PlanDeTrabajo() {
               getActivityPct={(eid,ai,a)=>getActivityPct(plan.projectId,eid,ai,a)}
               setActivityPct={(eid,ai,pct)=>setActivityPctManual(eid,ai,pct)}
               onActivityClick={(eid,ai,a)=>setDrawer({projectId:plan.projectId,entregableId:eid,actIdx:ai,act:a})}
+              onGoEstimaciones={onGoEstimaciones}
             />
           </>
         ) : (

@@ -40,18 +40,22 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     'view_standards', 'view_controlm', 'assign_tech_ref',
     'view_circuitos',
     'view_plan_trabajo', 'mark_etapas',
+    // Estimaciones: tech_lead crea/edita los planes, el PM los aprueba y genera
+    'view_estimaciones', 'edit_estimaciones',
   ],
   project_lead: [
     'view_project', 'view_bank_status', 'manage_tasks', 'assign_tasks',
     'view_inventory', 'view_bitacora', 'view_controlm', 'assign_tech_ref',
     'view_plan_trabajo',
   ],
-  // Referente Técnico: apoya al líder, puede marcar etapas en actividades asignadas
+  // Referente Técnico: apoya al líder, puede crear borradores de estimaciones
   tech_ref: [
     'view_project', 'view_bank_status', 'manage_tasks',
     'update_task_status', 'comment_tasks',
     'view_inventory', 'view_bitacora', 'write_bitacora', 'view_controlm',
     'view_plan_trabajo', 'mark_etapas',
+    // tech_ref puede crear borradores; el líder técnico los revisa y aprueba
+    'view_estimaciones', 'edit_estimaciones',
   ],
   developer: [
     'view_my_tasks', 'update_task_status', 'comment_tasks',
