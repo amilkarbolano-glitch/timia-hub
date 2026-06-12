@@ -7,7 +7,7 @@ import { PROJECTS } from '../contexts/AuthContext';
 // ─── Datos mock ───────────────────────────────────────────────────────────────
 
 const PROJ_DATA = [
-  { id:'FICO',     pct:62, tasks:18, done:11, risk:2,  members:['JB','JG','SR','FA'],   lead:'Jose Bolaño',  ref:'Juliana Garzón',  area:'Juan Arévalo', jira:'DECRONOS-1997', lastCommit:'2026-06-03', priority:'Alta',    startDate:'2026-01-15' },
+  { id:'FICO',     pct:62, tasks:18, done:11, risk:2,  members:['DH','JG','SR','FA'],   lead:'David Huamán', ref:'Juliana Garzón',  area:'Juan Arévalo', jira:'DECRONOS-1997', lastCommit:'2026-06-03', priority:'Alta',    startDate:'2026-01-15' },
   { id:'NGA',      pct:91, tasks:12, done:11, risk:0,  members:['JG','CS','CC','JV'],   lead:'Juliana Garzón', ref:null,             area:'Juan Arévalo', jira:'DECRONOS-1400', lastCommit:'2026-06-02', priority:'Media',   startDate:'2026-02-01' },
   { id:'CRONOS',   pct:80, tasks:22, done:18, risk:1,  members:['EB','JA2','LB','AU'],  lead:'Eric Buitrago', ref:null,             area:'Juan Arévalo', jira:'DECRONOS-1682', lastCommit:'2026-06-03', priority:'Alta',    startDate:'2026-01-10' },
   { id:'SDM1',     pct:55, tasks:14, done:8,  risk:2,  members:['OB','MM','JM','YB'],   lead:'Omar Bonilla',  ref:null,             area:'Diego Sánchez', jira:'SDM-0412',     lastCommit:'2026-06-01', priority:'Alta',    startDate:'2026-03-01' },

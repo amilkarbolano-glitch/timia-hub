@@ -44,6 +44,65 @@ export interface CircuitoCard {
   historial: { fecha: string; columna: string; nota: string }[];
 }
 
+// ─── Plan de Trabajo — Etapas y trazabilidad ─────────────────────────────────
+
+/** Una etapa dentro de una actividad del plan */
+export interface PlanEtapa {
+  id: string;
+  label: string;
+  peso: number;           // porcentaje de la actividad que representa (0-100)
+  optional?: boolean;
+  subs?: string[];        // sub-ítems descriptivos (no pesan individualmente)
+}
+
+/** Estado de cada etapa (keyed por `${projectId}__${entregableId}__${actIdx}__${etapaId}`) */
+export type EtapaStates = Record<string, {
+  done: boolean;
+  doneBy: string;       // nombre del usuario que marcó
+  doneAt: string;       // ISO timestamp
+}>;
+
+/** Entrada del historial de cambios en etapas */
+export interface PlanHistorialEntry {
+  id: string;
+  projectId: string;
+  entregableId: string;
+  actIdx: number;
+  etapaLabel: string;
+  action: 'checked' | 'unchecked';
+  userName: string;
+  userInitials: string;
+  userColor: string;
+  timestamp: string;    // ISO
+}
+
+/** Asignados a una actividad específica */
+export type ActivityAssignees = Record<string, string[]>;
+// key: `${projectId}__${entregableId}__${actIdx}`, value: array de user IDs
+
+/** Configuración completa del plan de trabajo para un proyecto (generado desde Estimaciones) */
+export interface PlanActivityConfig {
+  label: string;
+  startWeek: number;
+  endWeek: number;
+  bbva?: boolean;
+  etapas?: PlanEtapa[];
+}
+
+export interface PlanEntregableConfig {
+  id: string;
+  label: string;
+  activities: PlanActivityConfig[];
+}
+
+export interface PlanConfig {
+  projectId: string;
+  totalWeeks: number;
+  weekLabels?: string[];
+  entregables: PlanEntregableConfig[];
+  generatedAt: string;  // ISO
+}
+
 // ─── Datos por defecto ────────────────────────────────────────────────────────
 
 const DEFAULT_PROJECTS: AdminProject[] = BASE_PROJECTS.map(p => ({
@@ -67,6 +126,18 @@ const DEFAULT_USERS: AdminUser[] = [
     areaLabel: 'Project Manager · BBVA CO & CAP',
   },
   {
+    id: 'u-david', name: 'David Huamán', email: 'david.huaman@timia.ai',
+    role: 'tech_lead', projectIds: ['FICO','NGA','CRONOS','OPTIM','FABRICA'],
+    initials: 'DH', avatarColor: '#0369a1', active: true,
+    areaLabel: 'Líder Técnico · BBVA CO & Credicorp Capital',
+  },
+  {
+    id: 'u-juliana', name: 'Juliana Garzón', email: 'juliana.garzon@timia.ai',
+    role: 'tech_ref', projectIds: ['FICO','NGA'],
+    initials: 'JG', avatarColor: '#0f766e', active: true,
+    areaLabel: 'Referente Técnico · FICO · NGA',
+  },
+  {
     id: 'u-juan', name: 'Juan Arévalo', email: 'juan.arevalo@timia.ai',
     role: 'tech_lead', projectIds: ['NGA','CRONOS','FICO','PINTO','QA'],
     initials: 'JA', avatarColor: '#dc2626', active: true,
@@ -77,12 +148,6 @@ const DEFAULT_USERS: AdminUser[] = [
     role: 'tech_lead', projectIds: ['SDM1','SDM2','MURIC','BRICKELL','BCBS239'],
     initials: 'DS', avatarColor: '#2563eb', active: true,
     areaLabel: 'Líder Técnico · SDM · MURIC · BRICKELL · BCBS239',
-  },
-  {
-    id: 'u-david', name: 'David Huamán', email: 'david.huaman@timia.ai',
-    role: 'tech_lead', projectIds: ['OPTIM','FABRICA'],
-    initials: 'DH', avatarColor: '#0369a1', active: true,
-    areaLabel: 'Líder Técnico · Credicorp Capital',
   },
 ];
 
@@ -192,4 +257,29 @@ export const adminStore = {
   // Plan % overrides (keyed by projectId.entregableId.activityIndex)
   getPlanPcts:   (): Record<string, number> => load('plan_pcts', {}),
   savePlanPcts:  (p: Record<string, number>) => save('plan_pcts', p),
+
+  // Etapa states: key = `${projectId}__${entregableId}__${actIdx}__${etapaId}`
+  getEtapaStates:  (): EtapaStates          => load('etapa_states', {}),
+  saveEtapaStates: (s: EtapaStates)         => save('etapa_states', s),
+
+  // Historial de cambios en etapas
+  getHistorial:  (): PlanHistorialEntry[]   => load('plan_historial', []),
+  saveHistorial: (h: PlanHistorialEntry[])  => save('plan_historial', h),
+
+  // Asignados por actividad: key = `${projectId}__${entregableId}__${actIdx}`
+  getActivityAssignees:  (): ActivityAssignees       => load('activity_assignees', {}),
+  saveActivityAssignees: (a: ActivityAssignees)      => save('activity_assignees', a),
+
+  // Configuración de planes generados desde Estimaciones (keyed by projectId)
+  getPlanConfigs:  (): Record<string, PlanConfig>   => load('plan_configs', {}),
+  savePlanConfigs: (c: Record<string, PlanConfig>)  => save('plan_configs', c),
+  getPlanConfig:   (projectId: string): PlanConfig | null => {
+    const all = load<Record<string, PlanConfig>>('plan_configs', {});
+    return all[projectId] ?? null;
+  },
+  savePlanConfig: (projectId: string, config: PlanConfig) => {
+    const all = load<Record<string, PlanConfig>>('plan_configs', {});
+    all[projectId] = config;
+    save('plan_configs', all);
+  },
 };

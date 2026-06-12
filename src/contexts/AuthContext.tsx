@@ -2,10 +2,10 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
-// pm: Rodolfo → vista ejecutiva total
-// tech_lead: Juan/Diego/David → multi-proyecto de su área
-// project_lead: Juliana/Jose → lidera un proyecto específico
-// tech_ref: Amilkar/Daniel → referente técnico, asignado por líder, apoya 1+ proyectos
+// pm: Rodo → vista ejecutiva total, acceso admin y estimaciones
+// tech_lead: Juan/Diego/David → multi-proyecto de su área, marca etapas
+// project_lead: lidera un proyecto específico
+// tech_ref: Juliana/Daniel → referente técnico, apoya líder en actividades asignadas
 // developer: Sergio/Fabrizio → ejecuta sus tareas asignadas
 export type UserRole = 'pm' | 'tech_lead' | 'project_lead' | 'tech_ref' | 'developer';
 
@@ -25,23 +25,33 @@ export interface AuthUser {
 export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
   pm: [
     'view_all_projects', 'view_analytics', 'view_bank_status',
-    'view_audit', 'view_team_overview',
+    'view_audit', 'view_team_overview', 'view_standards',
+    's_audit', 'u_roles', 'create_projects',
+    'view_estimaciones', 'edit_estimaciones', 'view_admin',
+    'view_bitacora', 'write_bitacora',
+    'view_circuitos', 'edit_circuitos',
+    'view_plan_trabajo', 'mark_etapas',
+    'generate_standup', 'export_pptx',
   ],
   tech_lead: [
     'view_all_projects', 'view_analytics', 'view_bank_status',
-    'view_audit', 'manage_tasks', 'assign_tasks', 'create_projects',
-    'manage_team', 'view_inventory', 'view_bitacora',
-    'view_standards', 'view_roles', 'view_controlm', 'assign_tech_ref',
+    'view_audit', 'manage_tasks', 'assign_tasks',
+    'view_inventory', 'view_bitacora', 'write_bitacora',
+    'view_standards', 'view_controlm', 'assign_tech_ref',
+    'view_circuitos',
+    'view_plan_trabajo', 'mark_etapas',
   ],
   project_lead: [
     'view_project', 'view_bank_status', 'manage_tasks', 'assign_tasks',
     'view_inventory', 'view_bitacora', 'view_controlm', 'assign_tech_ref',
+    'view_plan_trabajo',
   ],
-  // Referente Técnico: asignado por líder, apoya 1+ proyectos sin liderar
+  // Referente Técnico: apoya al líder, puede marcar etapas en actividades asignadas
   tech_ref: [
     'view_project', 'view_bank_status', 'manage_tasks',
     'update_task_status', 'comment_tasks',
-    'view_inventory', 'view_bitacora', 'view_controlm',
+    'view_inventory', 'view_bitacora', 'write_bitacora', 'view_controlm',
+    'view_plan_trabajo', 'mark_etapas',
   ],
   developer: [
     'view_my_tasks', 'update_task_status', 'comment_tasks',
@@ -94,14 +104,26 @@ export const PROJECTS = [
 // En producción: reemplazar login() por token de Cloudflare Access / Google OAuth
 
 export const MOCK_ACCOUNTS: AuthUser[] = [
-  // N1 · PM
+  // ── Demo principal: 3 roles visibles ──────────────────────────────────────
   {
     id: 'u-rodolfo', name: 'Rodolfo Pereda', email: 'rodolfo.pereda@timia.ai',
     initials: 'RP', role: 'pm', avatarColor: '#7c3aed',
     projectIds: PROJECTS.map(p => p.id),
     areaLabel: 'Project Manager · BBVA CO & CAP',
   },
-  // N2 · Líderes Técnicos
+  {
+    id: 'u-david', name: 'David Huamán', email: 'david.huaman@timia.ai',
+    initials: 'DH', role: 'tech_lead', avatarColor: '#0369a1',
+    projectIds: ['FICO', 'NGA', 'CRONOS', 'OPTIM', 'FABRICA'],
+    areaLabel: 'Líder Técnico · BBVA CO & Credicorp Capital',
+  },
+  {
+    id: 'u-juliana', name: 'Juliana Garzón', email: 'juliana.garzon@timia.ai',
+    initials: 'JG', role: 'tech_ref', avatarColor: '#0f766e',
+    projectIds: ['FICO', 'NGA'],
+    areaLabel: 'Referente Técnico · FICO · NGA',
+  },
+  // ── Resto del equipo ──────────────────────────────────────────────────────
   {
     id: 'u-juan', name: 'Juan Arévalo', email: 'juan.arevalo@timia.ai',
     initials: 'JA', role: 'tech_lead', avatarColor: '#dc2626',
@@ -113,12 +135,6 @@ export const MOCK_ACCOUNTS: AuthUser[] = [
     initials: 'DS', role: 'tech_lead', avatarColor: '#2563eb',
     projectIds: ['SDM1', 'SDM2', 'MURIC', 'BRICKELL', 'BCBS239'],
     areaLabel: 'Líder Técnico · SDM · MURIC · BRICKELL · BCBS239',
-  },
-  {
-    id: 'u-david', name: 'David Huamán', email: 'david.huaman@timia.ai',
-    initials: 'DH', role: 'tech_lead', avatarColor: '#0369a1',
-    projectIds: ['OPTIM', 'FABRICA'],
-    areaLabel: 'Líder Técnico · Credicorp Capital',
   },
 ];
 
