@@ -38,6 +38,11 @@ const CELL_W = 38;
 function difColor(d: number) { return d >= 0 ? '#15803d' : d < -5 ? '#dc2626' : '#d97706'; }
 function difBg(d: number)    { return d >= 0 ? '#dcfce7' : d < -5 ? '#fef2f2' : '#fef9c3'; }
 function fmt1(n: number)     { const d = parseFloat(n.toFixed(1)); return `${d > 0 ? '+' : ''}${d}%`; }
+function hexToRgb(hex: string): [number, number, number] {
+  const c = hex.replace('#', '');
+  const n = parseInt(c.length === 3 ? c.split('').map(x => x+x).join('') : c, 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
 
 // ─── GanttCell ────────────────────────────────────────────────────────────────
 
@@ -1346,104 +1351,248 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
     }
   }
 
-  // ── PDF Export — html2canvas screenshots → jsPDF (visualmente idéntico a la app) ──
+  // ── PDF Export — jsPDF programático (sin html2canvas, 100% fiable) ──────────
   async function handleExportPdf() {
     if (!plan) return;
     setExportingPdf(true);
     setExportError('');
     try {
-      const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
-        import('html2canvas'),
-        import('jspdf') as Promise<{default: any}>,
-      ]);
+      const { default: jsPDF } = await (import('jspdf') as Promise<{ default: any }>);
 
-      const sectionEls = Array.from(document.querySelectorAll<HTMLElement>('[data-gantt-section]'));
-      // Sort by section index
-      sectionEls.sort((a, b) =>
-        parseInt(a.getAttribute('data-gantt-section') ?? '0', 10) -
-        parseInt(b.getAttribute('data-gantt-section') ?? '0', 10)
-      );
+      // ── Constantes de layout ──────────────────────────────────────────────
+      const PW = 297, PH = 210;                          // A4 landscape mm
+      const ML = 14, MR = 14;                           // márgenes laterales
+      const CW = PW - ML - MR;                          // 269mm ancho útil
+      const NAME_COL = 90, PCT_COL = 11;
+      const WEEK_COL = (CW - NAME_COL - PCT_COL) / TOTAL_WEEKS; // ~13mm
+      const HDR_H = 28, TBL_HDR_H = 8, ROW_H = 7.5;
 
-      // A4 landscape in mm
       const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-      const PW = pdf.internal.pageSize.getWidth();
-      const PH = pdf.internal.pageSize.getHeight();
+      const dateStr = new Date().toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' });
 
-      // Cover page
-      pdf.setFillColor(26, 26, 46); // #1a1a2e
+      const ENT_COLORS = ['#9f1239','#0369a1','#0d9488','#7c3aed','#b45309','#059669'];
+
+      // ── PORTADA ───────────────────────────────────────────────────────────
+      pdf.setFillColor(26, 26, 46);
       pdf.rect(0, 0, PW, PH, 'F');
-      pdf.setTextColor(220, 38, 38); // #dc2626
-      pdf.setFontSize(10); pdf.setFont('helvetica','bold');
-      pdf.text('TIMIA', 14, 22);
-      pdf.setTextColor(255, 255, 255);
-      pdf.setFontSize(18); pdf.setFont('helvetica','normal');
-      pdf.text('Plan de Trabajo', 14, 40);
-      pdf.setFontSize(36); pdf.setFont('helvetica','bold');
-      pdf.text(plan.projectId, 14, 64);
-      pdf.setFontSize(9); pdf.setFont('helvetica','normal');
-      pdf.setTextColor(148, 163, 184); // slate-400
-      pdf.text(new Date().toLocaleDateString('es-CO', { day:'numeric', month:'long', year:'numeric' }), 14, 80);
-      pdf.text(`Resp. Timia: ${plan.respTimia}   ·   Resp. BBVA: ${plan.respBBVA}`, 14, 90);
-
-      let firstSection = true;
-      for (const el of sectionEls) {
-        const saved: { el: HTMLElement; prop: string; val: string }[] = [];
-        const expand = (e: HTMLElement, prop: string) => {
-          saved.push({ el: e, prop, val: (e.style as Record<string,string>)[prop] ?? '' });
-          (e.style as Record<string,string>)[prop] = 'visible';
-        };
-        expand(el, 'overflow'); expand(el, 'overflowX');
-        const innerTable = el.querySelector<HTMLElement>('[data-gantt-table]');
-        if (innerTable) { expand(innerTable, 'overflow'); expand(innerTable, 'overflowX'); }
-        await new Promise<void>(r => setTimeout(r, 80));
-
-        try {
-          const canvas = await html2canvas(el, {
-            scale: 1.5,
-            backgroundColor: '#ffffff',
-            useCORS: true,
-            allowTaint: true,
-            logging: false,
-            width: el.scrollWidth,
-            height: el.scrollHeight,
-            windowWidth: el.scrollWidth + 100,
-            onclone: (_doc: Document, clonedEl: HTMLElement) => {
-              clonedEl.querySelectorAll<HTMLElement>('thead tr').forEach(tr => { tr.style.backgroundColor = '#881337'; });
-              clonedEl.querySelectorAll<HTMLElement>('thead th').forEach(th => { th.style.backgroundColor = '#881337'; th.style.color = '#ffffff'; });
-            },
-          });
-          for (const { el: e, prop, val } of saved) { (e.style as Record<string,string>)[prop] = val; }
-
-          if (canvas.width > 0 && canvas.height > 0) {
-            const imgData = canvas.toDataURL('image/png');
-            // Fit canvas on a landscape A4 page with 10mm padding
-            const PAD = 10;
-            const maxW = PW - PAD * 2;
-            const maxH = PH - PAD * 2;
-            const ratio = canvas.width / canvas.height;
-            const pageRatio = maxW / maxH;
-            let imgW = maxW;
-            let imgH = maxW / ratio;
-            if (imgH > maxH) { imgH = maxH; imgW = maxH * ratio; }
-            const x = PAD + (maxW - imgW) / 2;
-            const y = PAD + (maxH - imgH) / 2;
-
-            if (!firstSection) pdf.addPage([297, 210], 'landscape');
-            firstSection = false;
-            pdf.addImage(imgData, 'PNG', x, y, imgW, imgH);
-
-            // Footer watermark
-            pdf.setFontSize(5.5); pdf.setFont('helvetica', 'normal');
-            pdf.setTextColor(148, 163, 184);
-            pdf.text(`Plan de Trabajo · ${plan.projectId} · Timia Hub`, PW - 10, PH - 4, { align: 'right' });
-          } else {
-            for (const { el: e, prop, val } of saved) { (e.style as Record<string,string>)[prop] = val; }
-          }
-        } catch (sErr) {
-          for (const { el: e, prop, val } of saved) { (e.style as Record<string,string>)[prop] = val; }
-          console.warn('PDF screenshot failed for section:', sErr);
-        }
+      // barra roja izquierda
+      pdf.setFillColor(220, 38, 38);
+      pdf.rect(0, 0, 5, PH, 'F');
+      // logo box
+      pdf.roundedRect(ML + 3, 18, 12, 12, 2, 2, 'F');
+      pdf.setFontSize(8); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(255, 255, 255);
+      pdf.text('T', ML + 9.5, 26.5, { align: 'center' });
+      // tagline
+      pdf.setFontSize(7.5); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(148, 163, 184);
+      pdf.text('TIMIA Hub  ·  Gobierno del Dato', ML + 19, 26);
+      // subtítulo
+      pdf.setFontSize(10); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(148, 163, 184);
+      pdf.text('Plan de Trabajo', ML + 3, 50);
+      // nombre proyecto grande
+      pdf.setFontSize(42); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(255, 255, 255);
+      pdf.text(plan.projectId, ML + 3, 80);
+      // info
+      pdf.setFontSize(8.5); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(148, 163, 184);
+      pdf.text(dateStr, ML + 3, 94);
+      pdf.text(`Resp. TIMIA: ${plan.respTimia}`, ML + 3, 103);
+      if (plan.respBBVA && !plan.respBBVA.includes('Credicorp')) {
+        const bbvaLines: string[] = pdf.splitTextToSize(`Resp. BBVA: ${plan.respBBVA}`, CW - 90);
+        bbvaLines.slice(0, 2).forEach((l: string, i: number) => pdf.text(l, ML + 3, 112 + i * 7));
       }
+      // barra progreso global
+      const totalPct = plan.entregables.reduce((s, e) => {
+        const p = e.activities.length
+          ? e.activities.reduce((ss, a, i) => ss + getActivityPct(plan.projectId, e.id, i, a), 0) / e.activities.length
+          : e.pctReal;
+        return s + p;
+      }, 0) / plan.entregables.length;
+      pdf.setFillColor(42, 42, 70);
+      pdf.roundedRect(ML + 3, 130, 100, 4, 1, 1, 'F');
+      pdf.setFillColor(220, 38, 38);
+      pdf.roundedRect(ML + 3, 130, Math.max(2, 100 * Math.min(totalPct, 100) / 100), 4, 1, 1, 'F');
+      pdf.setFontSize(8); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(220, 38, 38);
+      pdf.text(`${totalPct.toFixed(1)}% completado`, ML + 3, 140);
+
+      // tarjetas de entregables (columna derecha)
+      let cardX = PW - MR - 88, cardY = 18;
+      pdf.setFontSize(5.5); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(148, 163, 184);
+      pdf.text('ENTREGABLES', cardX, cardY - 3);
+      plan.entregables.forEach((e, i) => {
+        const [er, eg, eb] = hexToRgb(ENT_COLORS[i % ENT_COLORS.length]);
+        const ePct = e.activities.length
+          ? e.activities.reduce((s, a, ai) => s + getActivityPct(plan.projectId, e.id, ai, a), 0) / e.activities.length
+          : e.pctReal;
+        const cH = 22;
+        pdf.setFillColor(Math.min(255, er * 0.15 + 32), Math.min(255, eg * 0.1 + 30), Math.min(255, eb * 0.1 + 50));
+        pdf.roundedRect(cardX, cardY, 85, cH, 2, 2, 'F');
+        pdf.setFillColor(er, eg, eb);
+        pdf.rect(cardX, cardY, 3, cH, 'F');
+        const nameLines: string[] = pdf.splitTextToSize(e.name, 60);
+        pdf.setFontSize(6); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(er, eg, eb);
+        pdf.text(nameLines[0], cardX + 6, cardY + 7);
+        if (nameLines.length > 1) { pdf.setFontSize(5); pdf.text(nameLines[1], cardX + 6, cardY + 11.5); }
+        pdf.setFontSize(10); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(255, 255, 255);
+        pdf.text(`${ePct.toFixed(0)}%`, cardX + 82, cardY + 13, { align: 'right' });
+        // mini progress bar
+        pdf.setFillColor(42, 42, 70);
+        pdf.roundedRect(cardX + 5, cardY + cH - 5, 60, 2.5, 1, 1, 'F');
+        pdf.setFillColor(er, eg, eb);
+        pdf.roundedRect(cardX + 5, cardY + cH - 5, Math.max(1, 60 * Math.min(ePct, 100) / 100), 2.5, 1, 1, 'F');
+        cardY += cH + 3;
+      });
+
+      // footer portada
+      pdf.setFontSize(6); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(74, 85, 104);
+      pdf.text(`Generado con Timia Hub  ·  ${dateStr}`, PW / 2, PH - 6, { align: 'center' });
+
+      // ── PÁGINAS POR ENTREGABLE ────────────────────────────────────────────
+      plan.entregables.forEach((ent, ei) => {
+        pdf.addPage([297, 210], 'landscape');
+        const [er, eg, eb] = hexToRgb(ENT_COLORS[ei % ENT_COLORS.length]);
+
+        // cabecera de página
+        pdf.setFillColor(26, 26, 46);
+        pdf.rect(0, 0, PW, HDR_H, 'F');
+        pdf.setFillColor(er, eg, eb);
+        pdf.rect(0, 0, 5, HDR_H, 'F');
+
+        pdf.setFontSize(6); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(148, 163, 184);
+        pdf.text(`TIMIA  ·  Plan de Trabajo  ·  ${plan.projectId}`, ML + 3, 9);
+        const entLines: string[] = pdf.splitTextToSize(ent.name, CW - 90);
+        pdf.setFontSize(11); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(255, 255, 255);
+        pdf.text(entLines[0], ML + 3, 21);
+
+        // estadísticas (derecha)
+        const ePct = ent.activities.length
+          ? ent.activities.reduce((s, a, ai) => s + getActivityPct(plan.projectId, ent.id, ai, a), 0) / ent.activities.length
+          : ent.pctReal;
+        const dif = ePct - ent.pctExp;
+        const difClr: [number, number, number] = dif >= 0 ? [34, 197, 94] : dif < -5 ? [220, 38, 38] : [245, 158, 11];
+        let sx = PW - MR;
+        for (const { label, val, clr } of [
+          { label: 'DIF.', val: `${dif > 0 ? '+' : ''}${dif.toFixed(1)}%`, clr: difClr },
+          { label: 'ESP.',  val: `${ent.pctExp.toFixed(1)}%`, clr: [180, 190, 210] as [number, number, number] },
+          { label: 'REAL', val: `${ePct.toFixed(1)}%`, clr: [255, 255, 255] as [number, number, number] },
+        ]) {
+          const bw = 34;
+          sx -= bw + 3;
+          pdf.setFillColor(42, 42, 70);
+          pdf.roundedRect(sx, 3, bw, HDR_H - 5, 2, 2, 'F');
+          pdf.setFontSize(4.5); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(...clr);
+          pdf.text(label, sx + bw / 2, 9, { align: 'center' });
+          pdf.setFontSize(9.5); pdf.setFont('helvetica', 'bold');
+          pdf.text(val, sx + bw / 2, 20, { align: 'center' });
+        }
+
+        // ── TABLA GANTT ───────────────────────────────────────────────────
+        const tY = HDR_H + 2;
+
+        // fila cabecera (crimson)
+        pdf.setFillColor(136, 19, 55);
+        pdf.rect(ML, tY, CW, TBL_HDR_H, 'F');
+        pdf.setFontSize(5.5); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(255, 255, 255);
+        pdf.text('Actividades / Avance', ML + 2, tY + 5.5);
+        pdf.text('%', ML + NAME_COL + PCT_COL / 2, tY + 5.5, { align: 'center' });
+
+        WEEKS.forEach((w, wi) => {
+          const wx = ML + NAME_COL + PCT_COL + wi * WEEK_COL;
+          pdf.setDrawColor(255, 255, 255); pdf.setLineWidth(0.2);
+          pdf.line(wx, tY, wx, tY + TBL_HDR_H);
+          pdf.setFontSize(5.5); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(255, 255, 255);
+          pdf.text(w.l, wx + WEEK_COL / 2, tY + 4, { align: 'center' });
+          pdf.setFontSize(4); pdf.setTextColor(252, 231, 243);
+          pdf.text(w.d, wx + WEEK_COL / 2, tY + 7.2, { align: 'center' });
+        });
+
+        // filas de actividades
+        ent.activities.forEach((act, ai) => {
+          const ry = tY + TBL_HDR_H + ai * ROW_H;
+          const rowPct = getActivityPct(plan.projectId, ent.id, ai, act);
+
+          // fondo alternado
+          pdf.setFillColor(ai % 2 === 0 ? 255 : 249, ai % 2 === 0 ? 255 : 250, ai % 2 === 0 ? 255 : 252);
+          pdf.rect(ML, ry, CW, ROW_H, 'F');
+
+          // nombre actividad
+          const nameLines2: string[] = pdf.splitTextToSize(act.name, NAME_COL - 5);
+          pdf.setFontSize(5.5); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(55, 65, 81);
+          pdf.text(nameLines2[0], ML + 2, ry + 4.5);
+          if (nameLines2.length > 1) {
+            pdf.setFontSize(4.5); pdf.setTextColor(100, 116, 139);
+            pdf.text(nameLines2[1], ML + 2, ry + 7.2);
+          }
+          // badge BBVA
+          if (act.bbva) {
+            pdf.setFillColor(219, 234, 254);
+            pdf.roundedRect(ML + 2, ry + ROW_H - 3.2, 12, 2.4, 0.5, 0.5, 'F');
+            pdf.setFontSize(3.8); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(37, 99, 235);
+            pdf.text('BBVA', ML + 8, ry + ROW_H - 1.4, { align: 'center' });
+          }
+
+          // % con color semáforo
+          const pctClr: [number, number, number] = rowPct >= act.pctExp ? [34, 197, 94]
+            : rowPct >= act.pctExp * 0.75 ? [245, 158, 11] : [220, 38, 38];
+          pdf.setFontSize(6.5); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(...pctClr);
+          pdf.text(`${rowPct.toFixed(0)}%`, ML + NAME_COL + PCT_COL / 2, ry + 5.2, { align: 'center' });
+
+          // barras Gantt por semana
+          for (let wi = 0; wi < TOTAL_WEEKS; wi++) {
+            const wx = ML + NAME_COL + PCT_COL + wi * WEEK_COL;
+            pdf.setDrawColor(226, 232, 240); pdf.setLineWidth(0.12);
+            pdf.line(wx, ry, wx, ry + ROW_H);
+
+            const planStart = act.startWeek - 1, planEnd = act.endWeek;
+            const totalSpan = planEnd - planStart;
+            const execEnd = planStart + (rowPct / 100) * totalSpan;
+            const planOverlap = Math.max(0, Math.min(planEnd, wi + 1) - Math.max(planStart, wi));
+            if (planOverlap === 0) continue;
+            const execOverlap = Math.max(0, Math.min(execEnd, wi + 1) - Math.max(planStart, wi));
+            const execFrac = Math.min(1, execOverlap / planOverlap);
+
+            const bH = 3.5, bY = ry + (ROW_H - bH) / 2;
+            const bX = wx + 0.8, bW = WEEK_COL - 1.6;
+            // fondo plan (teal claro)
+            pdf.setFillColor(204, 236, 234);
+            pdf.roundedRect(bX, bY, bW, bH, 0.8, 0.8, 'F');
+            // ejecución (teal sólido)
+            if (execFrac > 0.01) {
+              pdf.setFillColor(13, 148, 136);
+              pdf.roundedRect(bX, bY, Math.max(0.5, bW * execFrac), bH, 0.8, 0.8, 'F');
+            }
+          }
+
+          // borde inferior fila
+          pdf.setDrawColor(241, 245, 249); pdf.setLineWidth(0.2);
+          pdf.line(ML, ry + ROW_H, ML + CW, ry + ROW_H);
+        });
+
+        const tableH = TBL_HDR_H + ent.activities.length * ROW_H;
+        // borde exterior tabla
+        pdf.setDrawColor(226, 232, 240); pdf.setLineWidth(0.3);
+        pdf.rect(ML, tY, CW, tableH, 'S');
+        // divisores columnas
+        pdf.setLineWidth(0.2);
+        pdf.line(ML + NAME_COL, tY, ML + NAME_COL, tY + tableH);
+        pdf.line(ML + NAME_COL + PCT_COL, tY, ML + NAME_COL + PCT_COL, tY + tableH);
+
+        // leyenda semáforo debajo de tabla
+        const legY = tY + tableH + 4;
+        [
+          { clr: [34,197,94] as [number,number,number], label: 'En tiempo' },
+          { clr: [245,158,11] as [number,number,number], label: 'Con demora leve' },
+          { clr: [220,38,38] as [number,number,number], label: 'Atrasado' },
+        ].forEach(({ clr, label }, i) => {
+          const lx = ML + i * 40;
+          pdf.setFillColor(...clr); pdf.circle(lx + 2, legY + 1.5, 1.5, 'F');
+          pdf.setFontSize(5); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(100, 116, 139);
+          pdf.text(label, lx + 5, legY + 2.5);
+        });
+
+        // pie de página
+        pdf.setFontSize(5.5); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(148, 163, 184);
+        pdf.text(`Plan de Trabajo  ·  ${plan.projectId}  ·  Timia Hub`, PW - MR, PH - 5, { align: 'right' });
+        pdf.text(`Pág. ${ei + 2} / ${plan.entregables.length + 1}`, ML, PH - 5);
+      });
 
       pdf.save(`Plan_${plan.projectId}_${new Date().toISOString().slice(0,10)}.pdf`);
     } catch (err) {
