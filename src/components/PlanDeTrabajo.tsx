@@ -972,8 +972,7 @@ async function exportPlanPPTX(plan: WorkPlan, getActivityPct: (eid: string, ai: 
     // ── Si hay screenshot de DOM, usar slide de imagen (más fiel a la app) ──
     if (screenshots[ei]) {
       const sl=pptx.addSlide(); sl.background={color:WHITE};
-      const roman=['I','II','III','IV','V'][ei]??(ei+1).toString();
-      sl.addText(`${roman}. ${ent.name}`,{x:LM,y:0.07,w:7,fontSize:13,bold:true,color:DARK,align:'left'});
+      sl.addText(ent.name,{x:LM,y:0.07,w:7,fontSize:13,bold:true,color:DARK,align:'left'});
       // KPI badges
       const badges=[
         {label:'Avance real',val:`${ePct}%`,bg:DARK,vc:WHITE},
@@ -1000,8 +999,7 @@ async function exportPlanPPTX(plan: WorkPlan, getActivityPct: (eid: string, ai: 
       const sl=pptx.addSlide(); sl.background={color:WHITE};
 
       // ── Título del entregable (arriba a la izquierda) ───────────────────────
-      const roman=['I','II','III','IV','V'][ei]??(ei+1).toString();
-      const titleStr=`${roman}. ${ent.name}${totalPages>1?` (${page+1}/${totalPages})`:''}`;
+      const titleStr=`${ent.name}${totalPages>1?` (${page+1}/${totalPages})`:''}`;
       sl.addText(titleStr,{x:LM,y:0.14,w:5.6,fontSize:14,bold:true,color:DARK,align:'left'});
 
       // ── KPI badges (arriba a la derecha, mismo look que la app) ────────────
@@ -1193,6 +1191,7 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
   });
   const [drawer,            setDrawer]            = useState<DrawerState | null>(null);
   const [exportingPptx,     setExportingPptx]     = useState(false);
+  const [exportingPdf,      setExportingPdf]      = useState(false);
   const [exportError,       setExportError]       = useState<string>('');
 
   const plan = WORK_PLANS.find(p => p.projectId === selected);
@@ -1313,6 +1312,16 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
             width: el.scrollWidth,
             height: el.scrollHeight,
             windowWidth: el.scrollWidth + 100,
+            onclone: (_doc: Document, clonedEl: HTMLElement) => {
+              // html2canvas no captura 'background' en <tr> correctamente → forzar
+              clonedEl.querySelectorAll<HTMLElement>('thead tr').forEach(tr => {
+                tr.style.backgroundColor = '#881337';
+              });
+              clonedEl.querySelectorAll<HTMLElement>('thead th').forEach(th => {
+                th.style.backgroundColor = '#881337';
+                th.style.color = '#ffffff';
+              });
+            },
           });
 
           // Restore
@@ -1334,6 +1343,115 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
       setExportError(`Error al generar PPTX: ${msg}`);
     } finally {
       setExportingPptx(false);
+    }
+  }
+
+  // ── PDF Export — html2canvas screenshots → jsPDF (visualmente idéntico a la app) ──
+  async function handleExportPdf() {
+    if (!plan) return;
+    setExportingPdf(true);
+    setExportError('');
+    try {
+      const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
+        import('html2canvas'),
+        import('jspdf') as Promise<{default: any}>,
+      ]);
+
+      const sectionEls = Array.from(document.querySelectorAll<HTMLElement>('[data-gantt-section]'));
+      // Sort by section index
+      sectionEls.sort((a, b) =>
+        parseInt(a.getAttribute('data-gantt-section') ?? '0', 10) -
+        parseInt(b.getAttribute('data-gantt-section') ?? '0', 10)
+      );
+
+      // A4 landscape in mm
+      const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+      const PW = pdf.internal.pageSize.getWidth();
+      const PH = pdf.internal.pageSize.getHeight();
+
+      // Cover page
+      pdf.setFillColor(26, 26, 46); // #1a1a2e
+      pdf.rect(0, 0, PW, PH, 'F');
+      pdf.setTextColor(220, 38, 38); // #dc2626
+      pdf.setFontSize(10); pdf.setFont('helvetica','bold');
+      pdf.text('TIMIA', 14, 22);
+      pdf.setTextColor(255, 255, 255);
+      pdf.setFontSize(18); pdf.setFont('helvetica','normal');
+      pdf.text('Plan de Trabajo', 14, 40);
+      pdf.setFontSize(36); pdf.setFont('helvetica','bold');
+      pdf.text(plan.projectId, 14, 64);
+      pdf.setFontSize(9); pdf.setFont('helvetica','normal');
+      pdf.setTextColor(148, 163, 184); // slate-400
+      pdf.text(new Date().toLocaleDateString('es-CO', { day:'numeric', month:'long', year:'numeric' }), 14, 80);
+      pdf.text(`Resp. Timia: ${plan.respTimia}   ·   Resp. BBVA: ${plan.respBBVA}`, 14, 90);
+
+      let firstSection = true;
+      for (const el of sectionEls) {
+        const saved: { el: HTMLElement; prop: string; val: string }[] = [];
+        const expand = (e: HTMLElement, prop: string) => {
+          saved.push({ el: e, prop, val: (e.style as Record<string,string>)[prop] ?? '' });
+          (e.style as Record<string,string>)[prop] = 'visible';
+        };
+        expand(el, 'overflow'); expand(el, 'overflowX');
+        const innerTable = el.querySelector<HTMLElement>('[data-gantt-table]');
+        if (innerTable) { expand(innerTable, 'overflow'); expand(innerTable, 'overflowX'); }
+        await new Promise<void>(r => setTimeout(r, 80));
+
+        try {
+          const canvas = await html2canvas(el, {
+            scale: 1.5,
+            backgroundColor: '#ffffff',
+            useCORS: true,
+            allowTaint: true,
+            logging: false,
+            width: el.scrollWidth,
+            height: el.scrollHeight,
+            windowWidth: el.scrollWidth + 100,
+            onclone: (_doc: Document, clonedEl: HTMLElement) => {
+              clonedEl.querySelectorAll<HTMLElement>('thead tr').forEach(tr => { tr.style.backgroundColor = '#881337'; });
+              clonedEl.querySelectorAll<HTMLElement>('thead th').forEach(th => { th.style.backgroundColor = '#881337'; th.style.color = '#ffffff'; });
+            },
+          });
+          for (const { el: e, prop, val } of saved) { (e.style as Record<string,string>)[prop] = val; }
+
+          if (canvas.width > 0 && canvas.height > 0) {
+            const imgData = canvas.toDataURL('image/png');
+            // Fit canvas on a landscape A4 page with 10mm padding
+            const PAD = 10;
+            const maxW = PW - PAD * 2;
+            const maxH = PH - PAD * 2;
+            const ratio = canvas.width / canvas.height;
+            const pageRatio = maxW / maxH;
+            let imgW = maxW;
+            let imgH = maxW / ratio;
+            if (imgH > maxH) { imgH = maxH; imgW = maxH * ratio; }
+            const x = PAD + (maxW - imgW) / 2;
+            const y = PAD + (maxH - imgH) / 2;
+
+            if (!firstSection) pdf.addPage([297, 210], 'landscape');
+            firstSection = false;
+            pdf.addImage(imgData, 'PNG', x, y, imgW, imgH);
+
+            // Footer watermark
+            pdf.setFontSize(5.5); pdf.setFont('helvetica', 'normal');
+            pdf.setTextColor(148, 163, 184);
+            pdf.text(`Plan de Trabajo · ${plan.projectId} · Timia Hub`, PW - 10, PH - 4, { align: 'right' });
+          } else {
+            for (const { el: e, prop, val } of saved) { (e.style as Record<string,string>)[prop] = val; }
+          }
+        } catch (sErr) {
+          for (const { el: e, prop, val } of saved) { (e.style as Record<string,string>)[prop] = val; }
+          console.warn('PDF screenshot failed for section:', sErr);
+        }
+      }
+
+      pdf.save(`Plan_${plan.projectId}_${new Date().toISOString().slice(0,10)}.pdf`);
+    } catch (err) {
+      console.error('PDF export error:', err);
+      const msg = (err instanceof Error) ? err.message : String(err);
+      setExportError(`Error al generar PDF: ${msg}`);
+    } finally {
+      setExportingPdf(false);
     }
   }
 
@@ -1387,9 +1505,14 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
         {plan ? (
           <>
             <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:6, marginBottom:10 }}>
-              <button onClick={handleExportPptx} disabled={exportingPptx} style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 16px', fontSize:12, background:exportingPptx?'#64748b':'#111', color:'#fff', border:'none', borderRadius:8, cursor:exportingPptx?'not-allowed':'pointer', fontWeight:500 }}>
-                <FileDown size={14}/> {exportingPptx?'Generando…':'Exportar PPTX'}
-              </button>
+              <div style={{ display:'flex', gap:8 }}>
+                <button onClick={handleExportPdf} disabled={exportingPdf || exportingPptx} style={{ display:'flex', alignItems:'center', gap:5, padding:'8px 14px', fontSize:12, background:exportingPdf?'#64748b':'#dc2626', color:'#fff', border:'none', borderRadius:8, cursor:(exportingPdf||exportingPptx)?'not-allowed':'pointer', fontWeight:500 }}>
+                  <FileDown size={13}/> {exportingPdf?'Generando PDF…':'Exportar PDF'}
+                </button>
+                <button onClick={handleExportPptx} disabled={exportingPptx || exportingPdf} style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 16px', fontSize:12, background:(exportingPptx||exportingPdf)?'#64748b':'#111', color:'#fff', border:'none', borderRadius:8, cursor:(exportingPptx||exportingPdf)?'not-allowed':'pointer', fontWeight:500 }}>
+                  <FileDown size={14}/> {exportingPptx?'Generando…':'Exportar PPTX'}
+                </button>
+              </div>
               {exportError && (
                 <div style={{ display:'flex', alignItems:'center', gap:6, padding:'6px 10px', background:'#fef2f2', border:'0.5px solid #fecaca', borderRadius:7, maxWidth:380 }}>
                   <span style={{ fontSize:10, color:'#dc2626' }}>{exportError}</span>

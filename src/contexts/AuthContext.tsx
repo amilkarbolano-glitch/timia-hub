@@ -34,7 +34,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     'generate_standup', 'export_pptx',
   ],
   tech_lead: [
-    'view_all_projects', 'view_analytics', 'view_bank_status',
+    'view_all_projects', 'view_bank_status',
     'view_audit', 'manage_tasks', 'assign_tasks',
     'view_inventory', 'view_bitacora', 'write_bitacora',
     'view_standards', 'view_controlm', 'assign_tech_ref',
@@ -139,6 +139,25 @@ export const MOCK_ACCOUNTS: AuthUser[] = [
     initials: 'DS', role: 'tech_lead', avatarColor: '#2563eb',
     projectIds: ['SDM1', 'SDM2', 'MURIC', 'BRICKELL', 'BCBS239'],
     areaLabel: 'Líder Técnico · SDM · MURIC · BRICKELL · BCBS239',
+  },
+  // ── Desarrolladores ───────────────────────────────────────────────────────
+  {
+    id: 'u-sergio', name: 'Sergio Mendoza', email: 'sergio.mendoza@timia.ai',
+    initials: 'SM', role: 'developer', avatarColor: '#b45309',
+    projectIds: ['FICO', 'NGA'],
+    areaLabel: 'Desarrollador · FICO · NGA',
+  },
+  {
+    id: 'u-fabrizio', name: 'Fabrizio Torres', email: 'fabrizio.torres@timia.ai',
+    initials: 'FT', role: 'developer', avatarColor: '#059669',
+    projectIds: ['CRONOS', 'FICO'],
+    areaLabel: 'Desarrollador · CRONOS · FICO',
+  },
+  {
+    id: 'u-ana', name: 'Ana Restrepo', email: 'ana.restrepo@timia.ai',
+    initials: 'AR', role: 'developer', avatarColor: '#7c3aed',
+    projectIds: ['NGA', 'CRONOS'],
+    areaLabel: 'Desarrolladora · NGA · CRONOS',
   },
 ];
 
