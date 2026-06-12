@@ -496,10 +496,38 @@ export default function KanbanBoard({ userRole }: KanbanBoardProps) {
     <div style={{ padding:'24px 28px' }}>
       {/* Header */}
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:16, flexWrap:'wrap', gap:10 }}>
-        <div>
-          <h1 style={{ margin:0, fontSize:20, fontWeight:600, color:'#111' }}>Tablero</h1>
-          <p style={{ margin:'2px 0 0', fontSize:12, color:'#94a3b8' }}>
-            {role === 'developer' ? 'Mis tareas asignadas' : `${visibleTasks.length} tareas · ${projectFilter === 'all' ? 'todos mis proyectos' : projectFilter}`}
+        <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+            <h1 style={{ margin:0, fontSize:20, fontWeight:600, color:'#111' }}>Tablero</h1>
+            {/* Badge de rol para Referente Técnico — distintivo visual muy importante */}
+            {role === 'tech_ref' && (
+              <span style={{
+                display:'inline-flex', alignItems:'center', gap:5,
+                padding:'3px 10px', borderRadius:20,
+                background:'linear-gradient(135deg,#0f766e18,#0f766e30)',
+                border:'1.5px solid #0f766e60',
+                color:'#0f766e', fontSize:11, fontWeight:700,
+                letterSpacing:'0.02em',
+              }}>
+                <span style={{ width:6, height:6, borderRadius:'50%', background:'#0f766e', flexShrink:0 }}/>
+                Referente Técnico
+              </span>
+            )}
+            {/* Badge para otros roles — más sutil */}
+            {role === 'developer' && (
+              <span style={{
+                display:'inline-flex', alignItems:'center', gap:5,
+                padding:'3px 10px', borderRadius:20,
+                background:'#f8fafc', border:'1px solid #e2e8f0',
+                color:'#64748b', fontSize:11, fontWeight:600,
+              }}>
+                <span style={{ width:6, height:6, borderRadius:'50%', background:'#94a3b8', flexShrink:0 }}/>
+                Desarrollador
+              </span>
+            )}
+          </div>
+          <p style={{ margin:0, fontSize:12, color:'#94a3b8' }}>
+            {role === 'developer' ? `Mis tareas asignadas · ${user?.name?.split(' ')[0]}` : `${visibleTasks.length} tareas · ${projectFilter === 'all' ? 'todos mis proyectos' : projectFilter}`}
           </p>
         </div>
         <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>

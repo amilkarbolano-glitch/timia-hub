@@ -79,10 +79,12 @@ export default function Layout({ children, currentView, onViewChange, userRole }
               )}
 
               {/* Circuitos BBVA */}
-              <button onClick={() => onViewChange('circuitos-bbva')}
-                className={`text-sm font-medium transition-colors ${currentView==='circuitos-bbva'?'text-primary':'text-slate-600 hover:text-primary'}`}>
-                Circuitos BBVA
-              </button>
+              {canAccess(userRole as UserRole, 'view_circuitos') && (
+                <button onClick={() => onViewChange('circuitos-bbva')}
+                  className={`text-sm font-medium transition-colors ${currentView==='circuitos-bbva'?'text-primary':'text-slate-600 hover:text-primary'}`}>
+                  Circuitos BBVA
+                </button>
+              )}
 
               {/* Bitácora */}
               <button onClick={() => onViewChange('bitacora')}

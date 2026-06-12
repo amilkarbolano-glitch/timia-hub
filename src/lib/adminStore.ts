@@ -268,6 +268,25 @@ const DEFAULT_USERS: AdminUser[] = [
     initials: 'DS', avatarColor: '#2563eb', active: true,
     areaLabel: 'Líder Técnico · SDM · MURIC · BRICKELL · BCBS239',
   },
+  // ── Desarrolladores ───────────────────────────────────────────────────────────
+  {
+    id: 'u-sergio', name: 'Sergio Mendoza', email: 'sergio.mendoza@timia.ai',
+    role: 'developer', projectIds: ['FICO','NGA'],
+    initials: 'SM', avatarColor: '#b45309', active: true,
+    areaLabel: 'Desarrollador · FICO · NGA',
+  },
+  {
+    id: 'u-fabrizio', name: 'Fabrizio Torres', email: 'fabrizio.torres@timia.ai',
+    role: 'developer', projectIds: ['CRONOS','FICO'],
+    initials: 'FT', avatarColor: '#059669', active: true,
+    areaLabel: 'Desarrollador · CRONOS · FICO',
+  },
+  {
+    id: 'u-ana', name: 'Ana Restrepo', email: 'ana.restrepo@timia.ai',
+    role: 'developer', projectIds: ['NGA','CRONOS'],
+    initials: 'AR', avatarColor: '#7c3aed', active: true,
+    areaLabel: 'Desarrolladora · NGA · CRONOS',
+  },
 ];
 
 const DEFAULT_HOLIDAYS: Holiday[] = [
@@ -355,7 +374,17 @@ export const adminStore = {
   getProjects:   (): AdminProject[]  => load('admin_projects', DEFAULT_PROJECTS),
   saveProjects:  (p: AdminProject[]) => save('admin_projects', p),
 
-  getUsers:      (): AdminUser[]     => load('admin_users', DEFAULT_USERS),
+  getUsers: (): AdminUser[] => {
+    const stored = load<AdminUser[]>('admin_users', DEFAULT_USERS);
+    // Migration: add any new default users that don't exist in stored data
+    const missing = DEFAULT_USERS.filter(du => !stored.some(u => u.id === du.id));
+    if (missing.length > 0) {
+      const merged = [...stored, ...missing];
+      save('admin_users', merged);
+      return merged;
+    }
+    return stored;
+  },
   saveUsers:     (u: AdminUser[])    => save('admin_users', u),
 
   getAns:        (): AnsConfig       => load('ans_config', DEFAULT_ANS),

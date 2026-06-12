@@ -70,7 +70,7 @@ function AppInner() {
     const guards: Record<string, string> = {
       'audit':            's_audit',
       'roles-permissions':'u_roles',
-      'standards':        's_standards',
+      'standards':        'view_standards',
       'analytics':        'view_analytics',
       'project-templates':'create_projects',
     };
