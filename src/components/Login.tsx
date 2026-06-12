@@ -47,9 +47,14 @@ export default function Login() {
         {/* Panel izquierdo — branding */}
         <div className="hidden md:flex flex-col justify-between p-10 w-5/12" style={{ background: '#1a1a2e' }}>
           <div>
-            {/* Logo oficial de timia.ai (variante clara — texto blanco) */}
-            <div className="mb-6">
-              <TimiaWordmark variant="light" height={34} />
+            {/* Logo TIMIA — inline SVG, siempre visible en fondo oscuro */}
+            <div className="flex items-center gap-3 mb-6">
+              <svg width="38" height="38" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                <path d="M 18,74 L 40,22 L 60,22 L 82,74 Z" fill="white" />
+                <path d="M 29,68 L 43,30 L 57,30 L 71,68 Z" fill="#1a1a2e" />
+                <rect x="14" y="78" width="72" height="12" rx="2" fill="#DC2626" />
+              </svg>
+              <span style={{ color: 'white', fontFamily: "'Arial Black','Helvetica Neue',Arial,sans-serif", fontWeight: 900, fontSize: 28, letterSpacing: '-0.5px', lineHeight: 1 }}>TIMIA</span>
             </div>
             <p className="text-sm mb-8" style={{ color: '#8892b0' }}>Plataforma de gestión de proyectos de datos</p>
             <div className="space-y-3">
