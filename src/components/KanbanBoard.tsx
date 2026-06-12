@@ -392,12 +392,30 @@ export default function KanbanBoard({ userRole }: KanbanBoardProps) {
   const [tasks, setTasks] = useState<KanbanTask[]>(() => adminStore.getKanbanTasks());
   const allUsers = adminStore.getUsers().filter(u => u.active);
 
-  // Filtro "mis tareas" para roles no-PM/no-lead
-  const [myTasksOnly, setMyTasksOnly] = useState(role === 'tech_ref' || role === 'developer');
+  // ── Ámbito de proyectos por rol ──────────────────────────────────────────────
+  // pm ve todo; el resto, solo sus proyectos asignados
+  const userProjectIds: string[] = role === 'pm'
+    ? PROJECTS.map(p => p.id)
+    : (user?.projectIds ?? []);
 
-  const visibleTasks = myTasksOnly && user
-    ? tasks.filter(t => t.assigneeIds.includes(user.id ?? ''))
-    : tasks;
+  // ── Filtro de proyecto (dropdown) ────────────────────────────────────────────
+  const [projectFilter, setProjectFilter] = useState<string>('all');
+
+  // ── Reglas de visibilidad por rol ────────────────────────────────────────────
+  // developer → solo sus tareas asignadas
+  // tech_ref  → todas las tareas de sus proyectos (puede ver y asignar al equipo)
+  // tech_lead → todas las tareas de sus proyectos + opción de filtrar por proyecto
+  // pm        → todas las tareas + opción de filtrar
+
+  // Paso 1: filtrar por proyecto seleccionado
+  const projectFiltered = projectFilter === 'all'
+    ? tasks.filter(t => !t.projectId || userProjectIds.includes(t.projectId))
+    : tasks.filter(t => t.projectId === projectFilter);
+
+  // Paso 2: filtrar por asignee si es developer
+  const visibleTasks = role === 'developer'
+    ? projectFiltered.filter(t => t.assigneeIds.includes(user?.id ?? ''))
+    : projectFiltered;
 
   // Tareas por columna
   const byColumn = (col: KanbanStatus) => visibleTasks.filter(t => t.status === col);
@@ -466,26 +484,41 @@ export default function KanbanBoard({ userRole }: KanbanBoardProps) {
     saveTask({ ...t, status: destination.droppableId as KanbanStatus });
   };
 
-  const totalByStatus = (s: KanbanStatus) => tasks.filter(t=>t.status===s).length;
+  // Totales sobre las tareas visibles (respeta el filtro de proyecto actual)
+  const totalByStatus = (s: KanbanStatus) => visibleTasks.filter(t=>t.status===s).length;
+
+  // Proyectos disponibles para el filtro
+  const filterProjects = userProjectIds.length > 0
+    ? PROJECTS.filter(p => userProjectIds.includes(p.id))
+    : PROJECTS;
 
   return (
     <div style={{ padding:'24px 28px' }}>
       {/* Header */}
-      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:20 }}>
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:16, flexWrap:'wrap', gap:10 }}>
         <div>
           <h1 style={{ margin:0, fontSize:20, fontWeight:600, color:'#111' }}>Tablero</h1>
           <p style={{ margin:'2px 0 0', fontSize:12, color:'#94a3b8' }}>
-            {myTasksOnly ? 'Mis tareas asignadas' : `${tasks.length} tareas en total`}
-            {user && (
-              <button
-                onClick={() => setMyTasksOnly(v => !v)}
-                style={{ marginLeft:10, fontSize:10, padding:'2px 8px', borderRadius:10, background: myTasksOnly?'#0d9488':'#f1f5f9', color: myTasksOnly?'#fff':'#374151', border:'none', cursor:'pointer', fontWeight:600 }}>
-                {myTasksOnly ? '● Mis tareas' : '○ Mis tareas'}
-              </button>
-            )}
+            {role === 'developer' ? 'Mis tareas asignadas' : `${visibleTasks.length} tareas · ${projectFilter === 'all' ? 'todos mis proyectos' : projectFilter}`}
           </p>
         </div>
-        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+        <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+          {/* Filtro de proyecto */}
+          {filterProjects.length > 1 && (
+            <div style={{ display:'flex', alignItems:'center', gap:6, padding:'6px 10px', background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:8 }}>
+              <Search size={11} color="#94a3b8" style={{ flexShrink:0 }}/>
+              <select
+                value={projectFilter}
+                onChange={e => setProjectFilter(e.target.value)}
+                style={{ fontSize:11, border:'none', background:'transparent', outline:'none', color:'#374151', fontWeight:600, cursor:'pointer' }}
+              >
+                <option value="all">Todos mis proyectos</option>
+                {filterProjects.map(p => (
+                  <option key={p.id} value={p.id}>{p.id} — {p.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
           {perm(role,'canCreate') && (
             <button onClick={()=>setShowNew(true)}
               style={{ display:'flex', alignItems:'center', gap:5, padding:'8px 14px', background:'#111', color:'#fff', border:'none', borderRadius:8, cursor:'pointer', fontSize:12, fontWeight:500 }}>

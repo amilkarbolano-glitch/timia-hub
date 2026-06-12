@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Database, Lock, ChevronRight, ArrowLeft, Check } from 'lucide-react';
 import { useAuth, MOCK_ACCOUNTS, AuthUser } from '../contexts/AuthContext';
+import { adminStore } from '../lib/adminStore';
 
 type Step = 'initial' | 'picker' | 'verifying';
 
@@ -26,6 +27,11 @@ export default function Login() {
   const [step, setStep] = useState<Step>('initial');
   const [selected, setSelected] = useState<AuthUser | null>(null);
   const [progress, setProgress] = useState(0);
+
+  // Usar usuarios del adminStore (dinámicos, respeta cambios del AdminPanel)
+  // Fallback a MOCK_ACCOUNTS si adminStore está vacío
+  const storeUsers = adminStore.getUsers().filter(u => u.active);
+  const accounts: AuthUser[] = (storeUsers.length > 0 ? storeUsers : MOCK_ACCOUNTS) as AuthUser[];
 
   const handleSelectAccount = (account: AuthUser) => {
     setSelected(account);
@@ -105,7 +111,7 @@ export default function Login() {
                   <div className="px-3 py-2 bg-slate-50 border-b text-xs text-slate-500" style={{ borderColor: '#f3f4f6' }}>
                     Cuentas disponibles
                   </div>
-                  {MOCK_ACCOUNTS.map((acc) => (
+                  {accounts.map((acc) => (
                     <button
                       key={acc.id}
                       onClick={() => handleSelectAccount(acc)}

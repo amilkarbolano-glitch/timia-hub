@@ -124,6 +124,43 @@ const DEFAULT_KANBAN_TASKS: KanbanTask[] = [
     assigneeIds: ['u-juliana'], projectId: 'FICO', entregableId: 'ada', actIdx: 6, fromPlan: true,
     links: [], comments: [],
   },
+  // ─── NGA ──────────────────────────────────────────────────────────────────────
+  {
+    id: 'kt-nga-1', title: 'Análisis fuentes — Core Bancario NGA',
+    description: 'Levantamiento de fuentes de datos del Core Bancario para el proyecto NGA: inventario de tablas, volúmenes y frecuencias de actualización.',
+    priority: 'Alta', startDate: '2026-02-01', endDate: '2026-02-28', status: 'in-progress',
+    assigneeIds: ['u-juan'], projectId: 'NGA',
+    links: [], comments: [],
+  },
+  {
+    id: 'kt-nga-2', title: 'Diccionario de datos NGA',
+    description: 'Elaboración del diccionario técnico de campos NGA y validación con el área de Gobierno de Datos.',
+    priority: 'Media', startDate: '2026-02-15', endDate: '2026-03-15', status: 'backlog',
+    assigneeIds: ['u-juan', 'u-juliana'], projectId: 'NGA',
+    links: [], comments: [],
+  },
+  {
+    id: 'kt-nga-3', title: 'Revisión arquitectura ETL · NGA',
+    description: 'Revisión del flujo ETL propuesto con el equipo de arquitectura BBVA. Definición de capas de ingestión y transformación.',
+    priority: 'Alta', startDate: '2026-03-01', endDate: '2026-03-22', status: 'review',
+    assigneeIds: ['u-david', 'u-juan'], projectId: 'NGA',
+    links: [], comments: [],
+  },
+  // ─── CRONOS ───────────────────────────────────────────────────────────────────
+  {
+    id: 'kt-cro-1', title: 'Definición modelo estrella CRONOS',
+    description: 'Diseño del modelo estrella para CRONOS: tablas de hechos, dimensiones y granularidad.',
+    priority: 'Crítica', startDate: '2026-02-10', endDate: '2026-03-10', status: 'in-progress',
+    assigneeIds: ['u-juan'], projectId: 'CRONOS',
+    links: [], comments: [],
+  },
+  {
+    id: 'kt-cro-2', title: 'Construcción pipeline Spark CRONOS',
+    description: 'Implementación del pipeline de procesamiento con Spark, incluyendo transformaciones y validaciones de calidad.',
+    priority: 'Alta', startDate: '2026-03-10', endDate: '2026-04-10', status: 'backlog',
+    assigneeIds: ['u-david'], projectId: 'CRONOS',
+    links: [], comments: [],
+  },
 ];
 
 // ─── Plan de Trabajo — Etapas y trazabilidad ─────────────────────────────────
@@ -369,8 +406,17 @@ export const adminStore = {
     save('plan_configs', all);
   },
 
-  // Kanban tasks
-  getKanbanTasks:  (): KanbanTask[] => load('kanban_tasks', DEFAULT_KANBAN_TASKS),
+  // Kanban tasks — merges new default tasks on every load (migration-safe)
+  getKanbanTasks: (): KanbanTask[] => {
+    const stored = load<KanbanTask[]>('kanban_tasks', DEFAULT_KANBAN_TASKS);
+    const missing = DEFAULT_KANBAN_TASKS.filter(dt => !stored.some(t => t.id === dt.id));
+    if (missing.length > 0) {
+      const merged = [...stored, ...missing];
+      save('kanban_tasks', merged);
+      return merged;
+    }
+    return stored;
+  },
   saveKanbanTasks: (t: KanbanTask[]) => save('kanban_tasks', t),
   // Sync a specific plan-activity assignee to its kanban card
   syncKanbanAssignees: (projectId: string, entregableId: string, actIdx: number, assigneeIds: string[]) => {
