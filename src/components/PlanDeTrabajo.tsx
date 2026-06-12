@@ -1193,6 +1193,7 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
   });
   const [drawer,            setDrawer]            = useState<DrawerState | null>(null);
   const [exportingPptx,     setExportingPptx]     = useState(false);
+  const [exportError,       setExportError]       = useState<string>('');
 
   const plan = WORK_PLANS.find(p => p.projectId === selected);
 
@@ -1277,31 +1278,60 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
   async function handleExportPptx() {
     if (!plan) return;
     setExportingPptx(true);
+    setExportError('');
+    // screenshots indexed by entregable index (sparse — empty string = use manual slide)
+    const numEntregables = plan.entregables.length;
+    const screenshots: string[] = new Array(numEntregables).fill('');
     try {
-      // Capturar cada sección del Gantt como imagen con html2canvas
       const { default: html2canvas } = await import('html2canvas');
       const sectionEls = Array.from(document.querySelectorAll<HTMLElement>('[data-gantt-section]'));
-      const screenshots: string[] = [];
+
       for (const el of sectionEls) {
-        // Expandir overflow para capturar la tabla completa
-        const prevOverflow = el.style.overflowX;
-        el.style.overflowX = 'visible';
-        const innerTable = el.querySelector<HTMLElement>('[data-gantt-table]');
-        if (innerTable) { innerTable.style.overflow = 'visible'; }
-        const canvas = await html2canvas(el, {
-          scale: 2,
-          backgroundColor: '#ffffff',
-          useCORS: true,
-          logging: false,
-          width: el.scrollWidth,
-          height: el.scrollHeight,
-          windowWidth: Math.max(document.documentElement.scrollWidth, el.scrollWidth + 200),
-        });
-        el.style.overflowX = prevOverflow;
-        if (innerTable) { innerTable.style.overflow = ''; }
-        screenshots.push(canvas.toDataURL('image/png'));
+        // The attribute value is the entregable index
+        const sIdx = parseInt(el.getAttribute('data-gantt-section') ?? '-1', 10);
+        if (sIdx < 0 || sIdx >= numEntregables) continue;
+        try {
+          // Temporarily expand overflow so the full Gantt is visible
+          const saved: { el: HTMLElement; prop: string; val: string }[] = [];
+          const expand = (e: HTMLElement, prop: string) => {
+            saved.push({ el: e, prop, val: (e.style as Record<string,string>)[prop] ?? '' });
+            (e.style as Record<string,string>)[prop] = 'visible';
+          };
+          expand(el, 'overflow');
+          expand(el, 'overflowX');
+          const innerTable = el.querySelector<HTMLElement>('[data-gantt-table]');
+          if (innerTable) { expand(innerTable, 'overflow'); expand(innerTable, 'overflowX'); }
+          // Reflow
+          await new Promise<void>(r => setTimeout(r, 80));
+
+          const canvas = await html2canvas(el, {
+            scale: 1.5,
+            backgroundColor: '#ffffff',
+            useCORS: true,
+            allowTaint: true,
+            logging: false,
+            width: el.scrollWidth,
+            height: el.scrollHeight,
+            windowWidth: el.scrollWidth + 100,
+          });
+
+          // Restore
+          for (const { el: e, prop, val } of saved) { (e.style as Record<string,string>)[prop] = val; }
+
+          if (canvas.width > 0 && canvas.height > 0) {
+            screenshots[sIdx] = canvas.toDataURL('image/png');
+          }
+        } catch (screenshotErr) {
+          console.warn(`html2canvas failed for section ${sIdx}:`, screenshotErr);
+          // screenshots[sIdx] stays '' → exportPlanPPTX uses manual table for this section
+        }
       }
+
       await exportPlanPPTX(plan, (eid,ai,a) => getActivityPct(plan.projectId,eid,ai,a), screenshots);
+    } catch (err) {
+      console.error('PPTX export error:', err);
+      const msg = (err instanceof Error) ? err.message : String(err);
+      setExportError(`Error al generar PPTX: ${msg}`);
     } finally {
       setExportingPptx(false);
     }
@@ -1356,10 +1386,16 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
       <div style={{ flex:1, minWidth:0 }}>
         {plan ? (
           <>
-            <div style={{ display:'flex', justifyContent:'flex-end', marginBottom:10 }}>
-              <button onClick={handleExportPptx} disabled={exportingPptx} style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 16px', fontSize:12, background:exportingPptx?'#64748b':'#111', color:'#fff', border:'none', borderRadius:8, cursor:exportingPptx?'wait':'pointer', fontWeight:500 }}>
-                <FileDown size={14}/> {exportingPptx?'Generando...':'Exportar PPTX'}
+            <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:6, marginBottom:10 }}>
+              <button onClick={handleExportPptx} disabled={exportingPptx} style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 16px', fontSize:12, background:exportingPptx?'#64748b':'#111', color:'#fff', border:'none', borderRadius:8, cursor:exportingPptx?'not-allowed':'pointer', fontWeight:500 }}>
+                <FileDown size={14}/> {exportingPptx?'Generando…':'Exportar PPTX'}
               </button>
+              {exportError && (
+                <div style={{ display:'flex', alignItems:'center', gap:6, padding:'6px 10px', background:'#fef2f2', border:'0.5px solid #fecaca', borderRadius:7, maxWidth:380 }}>
+                  <span style={{ fontSize:10, color:'#dc2626' }}>{exportError}</span>
+                  <button onClick={()=>setExportError('')} style={{ border:'none', background:'none', cursor:'pointer', color:'#dc2626', padding:0, display:'flex', flexShrink:0 }}>✕</button>
+                </div>
+              )}
             </div>
             <PlanDetail
               plan={plan}
