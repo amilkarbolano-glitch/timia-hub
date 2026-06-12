@@ -17,6 +17,7 @@ import AdminPanel from './components/AdminPanel';
 import CircuitosBBVA from './components/CircuitosBBVA';
 import Bitacora from './components/Bitacora';
 import Estimaciones from './components/Estimaciones';
+import PlanDeTrabajo from './components/PlanDeTrabajo';
 import { INITIAL_TEMPLATES } from './lib/templates';
 import { ProjectTemplate } from './types';
 
@@ -122,6 +123,11 @@ function AppInner() {
       case 'analytics':
         // PM tiene su propio dashboard ejecutivo
         return role === 'pm' ? <PMDashboard onViewChange={setCurrentView} /> : <Analytics />;
+
+      case 'plan-trabajo':
+        return canAccess(role, 'view_plan_trabajo')
+          ? <div style={{ padding: '28px 36px' }}><PlanDeTrabajo onGoEstimaciones={() => setCurrentView('estimaciones')} /></div>
+          : <AccessDenied onBack={goHome}/>;
 
       case 'audit':
         return <AuditLog />;

@@ -381,8 +381,8 @@ function ActivityDrawer({ projectId, entregableId, actIdx, act, effectivePct, et
 
 // ─── EntregableSection ────────────────────────────────────────────────────────
 
-function EntregableSection({ block, projectId, getActivityPct, setActivityPct, onActivityClick, onGoEstimaciones }: {
-  block: PlanEntregable; projectId: string;
+function EntregableSection({ block, projectId, sectionIdx, getActivityPct, setActivityPct, onActivityClick, onGoEstimaciones }: {
+  block: PlanEntregable; projectId: string; sectionIdx: number;
   getActivityPct: (i: number) => number;
   setActivityPct: (i: number, pct: number) => void;
   onActivityClick: (i: number, act: PlanActivity) => void;
@@ -397,7 +397,7 @@ function EntregableSection({ block, projectId, getActivityPct, setActivityPct, o
   const toggle = (i: number) => setExpanded(prev => { const n = new Set(prev); n.has(i) ? n.delete(i) : n.add(i); return n; });
 
   return (
-    <div style={{ marginBottom: 24 }}>
+    <div data-gantt-section={sectionIdx} style={{ marginBottom: 24 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
         <h4 style={{ margin: 0, fontSize: 13, fontWeight: 700, color: '#9f1239' }}>{block.name}</h4>
         <div style={{ display: 'flex', gap: 6, flexShrink: 0, alignItems: 'center' }}>
@@ -413,7 +413,7 @@ function EntregableSection({ block, projectId, getActivityPct, setActivityPct, o
         </div>
       </div>
       {block.activities.length > 0 ? (
-        <div style={{ overflowX: 'auto', borderRadius: 8, border: '0.5px solid #e2e8f0' }}>
+        <div data-gantt-table style={{ overflowX: 'auto', borderRadius: 8, border: '0.5px solid #e2e8f0' }}>
           <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 288 + TOTAL_WEEKS * CELL_W }}>
             <thead>
               <tr style={{ background: '#881337' }}>
@@ -557,8 +557,8 @@ function PlanDetail({ plan, getActivityPct, setActivityPct, onActivityClick, onG
         ))}
       </div>
 
-      {plan.entregables.map(e => (
-        <EntregableSection key={e.id} block={e} projectId={plan.projectId}
+      {plan.entregables.map((e, ei) => (
+        <EntregableSection key={e.id} block={e} projectId={plan.projectId} sectionIdx={ei}
           getActivityPct={i => getActivityPct(e.id,i,e.activities[i])}
           setActivityPct={(i,pct) => setActivityPct(e.id,i,pct)}
           onActivityClick={(i,a) => onActivityClick(e.id,i,a)}
@@ -884,7 +884,7 @@ const WORK_PLANS: WorkPlan[] = [
 
 // ─── PPTX Export ──────────────────────────────────────────────────────────────
 
-async function exportPlanPPTX(plan: WorkPlan, getActivityPct: (eid: string, ai: number, a: PlanActivity) => number) {
+async function exportPlanPPTX(plan: WorkPlan, getActivityPct: (eid: string, ai: number, a: PlanActivity) => number, screenshots: string[] = []) {
   const pptxgen = (await import('pptxgenjs')).default;
   const pptx = new pptxgen();
   pptx.layout = 'LAYOUT_WIDE';
@@ -968,6 +968,29 @@ async function exportPlanPPTX(plan: WorkPlan, getActivityPct: (eid: string, ai: 
       ? parseFloat((ent.activities.reduce((s,a,i)=>s+getActivityPct(ent.id,i,a),0)/ent.activities.length).toFixed(1))
       : ent.pctReal;
     const eDif = parseFloat((ePct-ent.pctExp).toFixed(1));
+
+    // ── Si hay screenshot de DOM, usar slide de imagen (más fiel a la app) ──
+    if (screenshots[ei]) {
+      const sl=pptx.addSlide(); sl.background={color:WHITE};
+      const roman=['I','II','III','IV','V'][ei]??(ei+1).toString();
+      sl.addText(`${roman}. ${ent.name}`,{x:LM,y:0.07,w:7,fontSize:13,bold:true,color:DARK,align:'left'});
+      // KPI badges
+      const badges=[
+        {label:'Avance real',val:`${ePct}%`,bg:DARK,vc:WHITE},
+        {label:'Esperado',   val:`${ent.pctExp}%`,bg:DARK,vc:WHITE},
+        {label:'Diferencia', val:`${eDif>=0?'+':''}${eDif}%`,bg:DARK,vc:eDif>=0?GREEN_L:ERR},
+      ];
+      badges.forEach((b,bi)=>{
+        const bx=8.0+bi*0.67; const bw=0.63;
+        sl.addShape('rect'as any,{x:bx,y:0.05,w:bw,h:0.58,fill:{color:b.bg},line:{color:BORDER_D,width:0.3}});
+        sl.addText(b.label,{x:bx,y:0.07,w:bw,fontSize:5,color:GRAY,align:'center'});
+        sl.addText(b.val,  {x:bx,y:0.22,w:bw,fontSize:13,bold:true,color:b.vc,align:'center'});
+      });
+      // Imagen del Gantt (DOM screenshot)
+      sl.addImage({data:screenshots[ei],x:LM,y:0.72,w:TW,h:4.72,sizing:{type:'contain',w:TW,h:4.72}});
+      sl.addText(`Plan de Trabajo · ${plan.projectId} · Timia Hub`,{x:7,y:5.38,w:2.8,fontSize:5.5,color:MUT,align:'right'});
+      return; // salta la generación manual para este entregable
+    }
 
     for(let page=0; page*PAGE<Math.max(1,ent.activities.length); page++){
       const acts = ent.activities.slice(page*PAGE,(page+1)*PAGE);
@@ -1149,14 +1172,25 @@ interface DrawerState { projectId: string; entregableId: string; actIdx: number;
 
 export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?: () => void }) {
   const { user } = useAuth();
+  const role = user?.role ?? 'developer';
   const canMark = user ? (['pm','tech_lead','tech_ref'] as string[]).includes(user.role) : false;
+
+  // Filtrar proyectos según asignaciones del usuario (PM ve todos)
+  const visiblePlans = role === 'pm'
+    ? WORK_PLANS
+    : WORK_PLANS.filter(p => (user?.projectIds ?? []).includes(p.projectId));
 
   const [etapaStates,       setEtapaStates]       = useState<EtapaStates>(()         => adminStore.getEtapaStates());
   const [historial,         setHistorial]         = useState<PlanHistorialEntry[]>(() => adminStore.getHistorial());
   const [activityAssignees, setActivityAssignees] = useState<ActivityAssignees>(()   => adminStore.getActivityAssignees());
   const [pctOverrides,      setPctOverrides]      = useState<Record<string,number>>(()=> adminStore.getPlanPcts());
   const [activityJiras,     setActivityJiras]     = useState<Record<string,string>>(()=> adminStore.getActivityJiras());
-  const [selected,          setSelected]          = useState<string>(WORK_PLANS[0].projectId);
+  const [selected,          setSelected]          = useState<string>(() => {
+    // Para no-PM, arrancar en el primer proyecto asignado
+    if (!user || user.role === 'pm') return WORK_PLANS[0].projectId;
+    const firstAssigned = WORK_PLANS.find(p => (user.projectIds ?? []).includes(p.projectId));
+    return firstAssigned?.projectId ?? WORK_PLANS[0].projectId;
+  });
   const [drawer,            setDrawer]            = useState<DrawerState | null>(null);
   const [exportingPptx,     setExportingPptx]     = useState(false);
 
@@ -1233,9 +1267,36 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
   }
 
   async function handleExportPptx() {
-    if (!plan) return; setExportingPptx(true);
-    try { await exportPlanPPTX(plan, (eid,ai,a) => getActivityPct(plan.projectId,eid,ai,a)); }
-    finally { setExportingPptx(false); }
+    if (!plan) return;
+    setExportingPptx(true);
+    try {
+      // Capturar cada sección del Gantt como imagen con html2canvas
+      const { default: html2canvas } = await import('html2canvas');
+      const sectionEls = Array.from(document.querySelectorAll<HTMLElement>('[data-gantt-section]'));
+      const screenshots: string[] = [];
+      for (const el of sectionEls) {
+        // Expandir overflow para capturar la tabla completa
+        const prevOverflow = el.style.overflowX;
+        el.style.overflowX = 'visible';
+        const innerTable = el.querySelector<HTMLElement>('[data-gantt-table]');
+        if (innerTable) { innerTable.style.overflow = 'visible'; }
+        const canvas = await html2canvas(el, {
+          scale: 2,
+          backgroundColor: '#ffffff',
+          useCORS: true,
+          logging: false,
+          width: el.scrollWidth,
+          height: el.scrollHeight,
+          windowWidth: Math.max(document.documentElement.scrollWidth, el.scrollWidth + 200),
+        });
+        el.style.overflowX = prevOverflow;
+        if (innerTable) { innerTable.style.overflow = ''; }
+        screenshots.push(canvas.toDataURL('image/png'));
+      }
+      await exportPlanPPTX(plan, (eid,ai,a) => getActivityPct(plan.projectId,eid,ai,a), screenshots);
+    } finally {
+      setExportingPptx(false);
+    }
   }
 
   function handleJiraSave(jiraId: string) {
@@ -1259,7 +1320,7 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
       <div style={{ width: 128, flexShrink: 0 }}>
         <p style={{ margin:'0 0 8px', fontSize:9, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'.06em', fontWeight:600 }}>Proyectos</p>
         <div style={{ display:'flex', flexDirection:'column', gap:3 }}>
-          {WORK_PLANS.map(p => {
+          {visiblePlans.map(p => {
             const proj=PROJECTS.find(pr=>pr.id===p.projectId), color=proj?.color??'#64748b', isActive=p.projectId===selected;
             const overall=Math.round(p.entregables.map(e=>e.activities.length?e.activities.reduce((s,a,i)=>s+getActivityPct(p.projectId,e.id,i,a),0)/e.activities.length:e.pctReal).reduce((s,v)=>s+v,0)/p.entregables.length);
             return (

@@ -70,9 +70,9 @@ export function canAccess(role: UserRole, permission: string): boolean {
 // Vista inicial según rol
 export const ROLE_LANDING: Record<UserRole, string> = {
   pm:           'analytics',
-  tech_lead:    'dashboard',
-  project_lead: 'dashboard',
-  tech_ref:     'dashboard',
+  tech_lead:    'plan-trabajo',
+  project_lead: 'plan-trabajo',
+  tech_ref:     'plan-trabajo',
   developer:    'dashboard',
 };
 
