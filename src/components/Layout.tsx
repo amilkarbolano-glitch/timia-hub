@@ -107,7 +107,7 @@ export default function Layout({ children, currentView, onViewChange, userRole }
               >
                 Bitácora
               </button>
-              {userRole === 'pm' && (
+              {canAccess(userRole as UserRole, 'view_estimaciones') && (
                 <button
                   onClick={() => onViewChange('estimaciones')}
                   className={`text-sm font-medium transition-colors flex items-center gap-1 ${currentView === 'estimaciones' ? 'text-primary' : 'text-slate-600 hover:text-primary'}`}

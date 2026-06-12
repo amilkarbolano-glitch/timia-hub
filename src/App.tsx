@@ -108,7 +108,7 @@ function AppInner() {
         return <BankStatus />;
 
       case 'estimaciones':
-        return role === 'pm' ? <Estimaciones onViewChange={setCurrentView}/> : <AccessDenied onBack={goHome}/>;
+        return canAccess(role, 'view_estimaciones') ? <Estimaciones onViewChange={setCurrentView}/> : <AccessDenied onBack={goHome}/>;
 
       case 'admin':
         return role === 'pm' ? <AdminPanel /> : <AccessDenied onBack={goHome}/>;
@@ -121,7 +121,7 @@ function AppInner() {
 
       case 'analytics':
         // PM tiene su propio dashboard ejecutivo
-        return role === 'pm' ? <PMDashboard /> : <Analytics />;
+        return role === 'pm' ? <PMDashboard onViewChange={setCurrentView} /> : <Analytics />;
 
       case 'audit':
         return <AuditLog />;
