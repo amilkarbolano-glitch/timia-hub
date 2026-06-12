@@ -1,9 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useAuth, canAccess, UserRole } from '../contexts/AuthContext';
+import UserProfile from './UserProfile';
 import {
-  LayoutDashboard,
   Layers,
-  Users,
   Settings,
   Search,
   Bell,
@@ -13,11 +12,9 @@ import {
   Cpu,
   Archive,
   Shield,
-  History,
   BarChart3,
-  Plus,
   Building2,
-  BookOpen,
+  ChevronDown,
 } from 'lucide-react';
 
 export type View = 'setup-project' | 'setup-team' | 'setup-tasks' | 'dashboard' | 'standards' | 'analytics' | 'audit' | 'bank-status' | 'notifications' | 'roles-permissions' | 'project-templates' | 'admin' | 'circuitos-bbva' | 'bitacora' | 'estimaciones';
@@ -31,7 +28,23 @@ interface LayoutProps {
 
 export default function Layout({ children, currentView, onViewChange, userRole }: LayoutProps) {
   const { user, logout } = useAuth();
-  const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showUserMenu,   setShowUserMenu]   = useState(false);
+  const [showHerramientas, setShowHerramientas] = useState(false);
+  const [showProfile,    setShowProfile]    = useState(false);
+  const herramRef = useRef<HTMLDivElement>(null);
+
+  // Close Herramientas dropdown on outside click
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (herramRef.current && !herramRef.current.contains(e.target as Node)) setShowHerramientas(false);
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
+
+  const herramientasViews: View[] = ['standards','roles-permissions','audit','project-templates'];
+  const herramientasActive = herramientasViews.includes(currentView);
+
   return (
     <div className="flex flex-col min-h-screen bg-slate-50">
       {/* Header */}
@@ -47,80 +60,88 @@ export default function Layout({ children, currentView, onViewChange, userRole }
               <h1 className="text-lg font-bold tracking-tight text-slate-900">Timia Hub</h1>
             </div>
             
-            <nav className="hidden md:flex items-center gap-6">
-              {/* PM no ve Tablero de tareas — ve Analytics directamente */}
+            <nav className="hidden md:flex items-center gap-5">
+              {/* Tablero — solo roles no-PM */}
               {userRole !== 'pm' && (
-                <button
-                  onClick={() => onViewChange('dashboard')}
-                  className={`text-sm font-medium transition-colors ${currentView === 'dashboard' ? 'text-primary' : 'text-slate-600 hover:text-primary'}`}
-                >
+                <button onClick={() => onViewChange('dashboard')}
+                  className={`text-sm font-medium transition-colors ${currentView==='dashboard'?'text-primary':'text-slate-600 hover:text-primary'}`}>
                   Tablero
                 </button>
               )}
-              <button
-                onClick={() => onViewChange('bank-status')}
-                className={`text-sm font-medium transition-colors ${currentView === 'bank-status' ? 'text-primary' : 'text-slate-600 hover:text-primary'}`}
-              >
-                {userRole === 'pm' ? 'Seguimiento' : 'Status Semanal'}
-              </button>
-              {canAccess(userRole as UserRole, 'view_analytics') && (
-                <button
-                  onClick={() => onViewChange('analytics')}
-                  className={`text-sm font-medium transition-colors ${currentView === 'analytics' ? 'text-primary' : 'text-slate-600 hover:text-primary'}`}
-                >
+
+              {/* Analytics (PM ve su dashboard ejecutivo) */}
+              {canAccess(userRole as UserRole,'view_analytics') && (
+                <button onClick={() => onViewChange('analytics')}
+                  className={`text-sm font-medium transition-colors ${currentView==='analytics'?'text-primary':'text-slate-600 hover:text-primary'}`}>
                   Analytics
                 </button>
               )}
-              {canAccess(userRole as UserRole, 'view_standards') && (
-                <button
-                  onClick={() => onViewChange('standards')}
-                  className={`text-sm font-medium transition-colors ${currentView === 'standards' ? 'text-primary' : 'text-slate-600 hover:text-primary'}`}
-                >
-                  Estándares
-                </button>
-              )}
-              {canAccess(userRole as UserRole, 'u_roles') && (
-                <button
-                  onClick={() => onViewChange('roles-permissions')}
-                  className={`text-sm font-medium transition-colors ${currentView === 'roles-permissions' ? 'text-primary' : 'text-slate-600 hover:text-primary'}`}
-                >
-                  Roles
-                </button>
-              )}
-              {canAccess(userRole as UserRole, 'view_audit') && (
-                <button
-                  onClick={() => onViewChange('audit')}
-                  className={`text-sm font-medium transition-colors ${currentView === 'audit' ? 'text-primary' : 'text-slate-600 hover:text-primary'}`}
-                >
-                  Auditoría
-                </button>
-              )}
-              <button
-                onClick={() => onViewChange('circuitos-bbva')}
-                className={`text-sm font-medium transition-colors ${currentView === 'circuitos-bbva' ? 'text-primary' : 'text-slate-600 hover:text-primary'}`}
-              >
+
+              {/* Circuitos BBVA */}
+              <button onClick={() => onViewChange('circuitos-bbva')}
+                className={`text-sm font-medium transition-colors ${currentView==='circuitos-bbva'?'text-primary':'text-slate-600 hover:text-primary'}`}>
                 Circuitos BBVA
               </button>
-              <button
-                onClick={() => onViewChange('bitacora')}
-                className={`text-sm font-medium transition-colors ${currentView === 'bitacora' ? 'text-primary' : 'text-slate-600 hover:text-primary'}`}
-              >
+
+              {/* Bitácora */}
+              <button onClick={() => onViewChange('bitacora')}
+                className={`text-sm font-medium transition-colors ${currentView==='bitacora'?'text-primary':'text-slate-600 hover:text-primary'}`}>
                 Bitácora
               </button>
-              {canAccess(userRole as UserRole, 'view_estimaciones') && (
-                <button
-                  onClick={() => onViewChange('estimaciones')}
-                  className={`text-sm font-medium transition-colors flex items-center gap-1 ${currentView === 'estimaciones' ? 'text-primary' : 'text-slate-600 hover:text-primary'}`}
-                >
-                  <BarChart3 size={14}/> Estimaciones
+
+              {/* Estimaciones */}
+              {canAccess(userRole as UserRole,'view_estimaciones') && (
+                <button onClick={() => onViewChange('estimaciones')}
+                  className={`text-sm font-medium transition-colors flex items-center gap-1 ${currentView==='estimaciones'?'text-primary':'text-slate-600 hover:text-primary'}`}>
+                  <BarChart3 size={13}/> Estimaciones
                 </button>
               )}
+
+              {/* Herramientas dropdown — engloba Estándares, Roles, Auditoría */}
+              {(canAccess(userRole as UserRole,'view_standards')||canAccess(userRole as UserRole,'u_roles')||canAccess(userRole as UserRole,'view_audit')) && (
+                <div ref={herramRef} className="relative">
+                  <button
+                    onClick={() => setShowHerramientas(v=>!v)}
+                    className={`text-sm font-medium transition-colors flex items-center gap-1 ${herramientasActive?'text-primary':'text-slate-600 hover:text-primary'}`}
+                  >
+                    Herramientas <ChevronDown size={12} style={{transition:'transform .15s',transform:showHerramientas?'rotate(180deg)':'rotate(0deg)'}}/>
+                  </button>
+                  {showHerramientas && (
+                    <div className="absolute top-full left-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-50 overflow-hidden" style={{minWidth:170}}>
+                      {canAccess(userRole as UserRole,'view_standards') && (
+                        <button onClick={()=>{setShowHerramientas(false);onViewChange('standards');}}
+                          className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm text-left transition-colors ${currentView==='standards'?'bg-primary/10 text-primary font-medium':'text-slate-600 hover:bg-slate-50'}`}>
+                          <Layers size={13}/> Estándares
+                        </button>
+                      )}
+                      {canAccess(userRole as UserRole,'u_roles') && (
+                        <button onClick={()=>{setShowHerramientas(false);onViewChange('roles-permissions');}}
+                          className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm text-left transition-colors ${currentView==='roles-permissions'?'bg-primary/10 text-primary font-medium':'text-slate-600 hover:bg-slate-50'}`}>
+                          <Shield size={13}/> Roles y Permisos
+                        </button>
+                      )}
+                      {canAccess(userRole as UserRole,'view_audit') && (
+                        <button onClick={()=>{setShowHerramientas(false);onViewChange('audit');}}
+                          className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm text-left transition-colors ${currentView==='audit'?'bg-primary/10 text-primary font-medium':'text-slate-600 hover:bg-slate-50'}`}>
+                          <Shield size={13}/> Auditoría
+                        </button>
+                      )}
+                      {canAccess(userRole as UserRole,'create_projects') && (
+                        <button onClick={()=>{setShowHerramientas(false);onViewChange('project-templates');}}
+                          className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm text-left transition-colors ${currentView==='project-templates'?'bg-primary/10 text-primary font-medium':'text-slate-600 hover:bg-slate-50'}`}>
+                          <GitBranch size={13}/> Plantillas
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Admin — solo PM */}
               {userRole === 'pm' && (
-                <button
-                  onClick={() => onViewChange('admin')}
-                  className={`text-sm font-medium transition-colors flex items-center gap-1 ${currentView === 'admin' ? 'text-primary' : 'text-slate-600 hover:text-primary'}`}
-                >
-                  <Building2 size={14}/> Admin
+                <button onClick={() => onViewChange('admin')}
+                  className={`text-sm font-medium transition-colors flex items-center gap-1 ${currentView==='admin'?'text-primary':'text-slate-600 hover:text-primary'}`}>
+                  <Building2 size={13}/> Admin
                 </button>
               )}
             </nav>
@@ -177,6 +198,13 @@ export default function Layout({ children, currentView, onViewChange, userRole }
                     <p className="text-xs text-slate-400 truncate">{user?.email}</p>
                   </div>
                   <button
+                    onClick={() => { setShowUserMenu(false); setShowProfile(true); }}
+                    className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-slate-600 hover:bg-slate-50 transition-colors"
+                  >
+                    <Settings size={14} /> Ver perfil
+                  </button>
+                  <div style={{height:1,background:'#f1f5f9',margin:'2px 0'}}/>
+                  <button
                     onClick={() => { setShowUserMenu(false); logout(); }}
                     className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors"
                   >
@@ -191,8 +219,11 @@ export default function Layout({ children, currentView, onViewChange, userRole }
       </header>
 
       <div className="flex flex-1">
-        {/* Sidebar for specific views */}
-        {(currentView === 'standards' || currentView === 'audit' || currentView === 'notifications' || currentView === 'roles-permissions' || currentView === 'project-templates') && (
+        {/* UserProfile modal */}
+        {showProfile && <UserProfile onClose={() => setShowProfile(false)} />}
+
+        {/* Sidebar — solo para Estándares (las demás vistas son full-width) */}
+        {currentView === 'standards' && (
           <aside className="hidden lg:flex flex-col w-64 p-4 border-r border-slate-200 bg-white">
             <div className="mb-6 px-2">
               <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wider">Consola Admin</h2>

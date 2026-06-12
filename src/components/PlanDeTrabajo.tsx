@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   AlertTriangle, CheckCircle, Clock, ChevronRight, ChevronDown,
-  FileDown, X, Users, Check, LayoutList, Search,
+  FileDown, X, Users, Check, LayoutList, Search, ExternalLink,
 } from 'lucide-react';
 import { PROJECTS, useAuth } from '../contexts/AuthContext';
 import {
@@ -122,15 +122,19 @@ interface ActivityDrawerProps {
   act: PlanActivity; effectivePct: number;
   etapaStates: EtapaStates; historial: PlanHistorialEntry[];
   assigneeIds: string[]; allUsers: AdminUser[]; canMark: boolean;
+  jiraId?: string;
   onEtapaToggle: (etapaId: string) => void;
   onAssigneeAdd: (userId: string) => void;
   onAssigneeRemove: (userId: string) => void;
+  onJiraSave: (id: string) => void;
   onClose: () => void;
 }
 
-function ActivityDrawer({ projectId, entregableId, actIdx, act, effectivePct, etapaStates, historial, assigneeIds, allUsers, canMark, onEtapaToggle, onAssigneeAdd, onAssigneeRemove, onClose }: ActivityDrawerProps) {
+function ActivityDrawer({ projectId, entregableId, actIdx, act, effectivePct, etapaStates, historial, assigneeIds, allUsers, canMark, jiraId, onEtapaToggle, onAssigneeAdd, onAssigneeRemove, onJiraSave, onClose }: ActivityDrawerProps) {
   const [search, setSearch]         = useState('');
   const [searchFocused, setFocused] = useState(false);
+  const [editJira, setEditJira]     = useState(false);
+  const [jiraInput, setJiraInput]   = useState(jiraId ?? '');
   const searchRef                   = useRef<HTMLInputElement>(null);
   const dropdownRef                 = useRef<HTMLDivElement>(null);
 
@@ -188,6 +192,32 @@ function ActivityDrawer({ projectId, entregableId, actIdx, act, effectivePct, et
               <div style={{ width: `${effectivePct}%`, height: '100%', borderRadius: 4, background: effectivePct >= 100 ? '#15803d' : '#0d9488', transition: 'width .35s ease' }}/>
             </div>
           </div>
+        </div>
+
+        {/* Jira ticket */}
+        <div style={{ padding:'7px 18px', borderBottom:'1px solid #f1f5f9', flexShrink:0, display:'flex', alignItems:'center', gap:8, minHeight:32 }}>
+          <ExternalLink size={11} color="#94a3b8" style={{flexShrink:0}}/>
+          <span style={{fontSize:10,color:'#94a3b8',flexShrink:0,fontWeight:600}}>Ticket Jira:</span>
+          {editJira ? (
+            <input
+              autoFocus
+              value={jiraInput}
+              onChange={e=>setJiraInput(e.target.value)}
+              onKeyDown={e=>{ if(e.key==='Enter'){onJiraSave(jiraInput.trim());setEditJira(false);} if(e.key==='Escape')setEditJira(false); }}
+              placeholder="THUB-123"
+              style={{flex:1,fontSize:11,padding:'2px 7px',border:'1.5px solid #2563eb',borderRadius:5,outline:'none'}}
+            />
+          ) : jiraId ? (
+            <a href={`https://jira.globaldevtools.bbva.com/browse/${jiraId}`} target="_blank" rel="noreferrer"
+               style={{fontSize:11,color:'#2563eb',fontWeight:600,textDecoration:'none',flex:1}}>
+              {jiraId}
+            </a>
+          ) : (
+            <button onClick={()=>{setEditJira(true);setJiraInput('');}} style={{fontSize:10,color:'#94a3b8',background:'none',border:'none',cursor:'pointer',padding:0}}>
+              + Vincular ticket
+            </button>
+          )}
+          {jiraId && !editJira && <button onClick={()=>{setEditJira(true);setJiraInput(jiraId??'');}} style={{fontSize:9,color:'#94a3b8',background:'none',border:'none',cursor:'pointer',padding:'1px 5px',borderRadius:4,marginLeft:'auto'}}>editar</button>}
         </div>
 
         {/* BBVA banner */}
@@ -856,44 +886,116 @@ const WORK_PLANS: WorkPlan[] = [
 
 async function exportPlanPPTX(plan: WorkPlan, getActivityPct: (eid: string, ai: number, a: PlanActivity) => number) {
   const pptxgen = (await import('pptxgenjs')).default;
-  const pptx = new pptxgen(); pptx.layout = 'LAYOUT_WIDE'; pptx.title = `Plan de Trabajo · ${plan.projectId}`;
-  const BG='0F172A', RED='DC2626', WHITE='FFFFFF', GRAY='9CA3AF', LIGHT='F1F5F9';
-  const overallReal = parseFloat((plan.entregables.map(e => e.activities.length ? e.activities.reduce((s,a,i)=>s+getActivityPct(e.id,i,a),0)/e.activities.length : e.pctReal).reduce((s,v)=>s+v,0)/plan.entregables.length).toFixed(1));
-  const overallExp  = parseFloat((plan.entregables.reduce((s,e)=>s+e.pctExp,0)/plan.entregables.length).toFixed(1));
-  const dif = parseFloat((overallReal-overallExp).toFixed(1));
+  const pptx = new pptxgen();
+  pptx.layout = 'LAYOUT_WIDE';
+  pptx.title = `Plan de Trabajo · ${plan.projectId}`;
+
+  const BG='0F172A', CARD='1E293B', BORDER='334155', WHITE='FFFFFF',
+        LIGHT='F1F5F9', RED='DC2626', TEAL='0D9488', GREEN='22C55E',
+        ERR='EF4444', WARN='EAB308', GRAY='9CA3AF', MUT='64748B',
+        VIOLET='7C3AED', BBVA='1D4ED8';
+  const ENT_COLORS = [RED, TEAL, VIOLET, '0891B2', 'BE185D'];
+
   const today = new Date().toLocaleDateString('es-CO',{day:'numeric',month:'long',year:'numeric'});
+  const overallReal = parseFloat((
+    plan.entregables.map(e=>e.activities.length?e.activities.reduce((s,a,i)=>s+getActivityPct(e.id,i,a),0)/e.activities.length:e.pctReal)
+      .reduce((s,v)=>s+v,0)/Math.max(1,plan.entregables.length)
+  ).toFixed(1));
+  const overallExp = parseFloat((plan.entregables.reduce((s,e)=>s+e.pctExp,0)/Math.max(1,plan.entregables.length)).toFixed(1));
+  const dif = parseFloat((overallReal-overallExp).toFixed(1));
+
+  // ── Slide 1: Portada ───────────────────────────────────────────────────────
   const s1=pptx.addSlide(); s1.background={color:BG};
-  s1.addText('TIMIA',{x:0.4,y:0.3,w:2,fontSize:11,bold:true,color:RED,align:'left'});
-  s1.addText('Plan de Trabajo',{x:0.4,y:1.2,w:8,fontSize:28,bold:false,color:GRAY,align:'left'});
-  s1.addText(`Proyecto ${plan.projectId}`,{x:0.4,y:1.8,w:8,fontSize:48,bold:true,color:WHITE,align:'left'});
-  s1.addText(today,{x:0.4,y:2.9,w:8,fontSize:14,color:GRAY,align:'left'});
-  [{label:'AVANCE REAL',val:`${overallReal}%`},{label:'AVANCE ESPERADO',val:`${overallExp}%`},{label:'DIFERENCIA',val:`${dif>=0?'+':''}${dif}%`}].forEach((c,ci)=>{
-    const x=0.4+ci*2.8;
-    s1.addShape((pptxgen as any).ShapeType?.rect??'rect',{x,y:3.5,w:2.6,h:1.1,fill:{color:'1E293B'},line:{color:'334155',width:0.5}});
-    s1.addText(c.label,{x,y:3.58,w:2.6,fontSize:7,color:GRAY,align:'center'});
-    s1.addText(c.val,{x,y:3.88,w:2.6,fontSize:22,bold:true,color:ci===2?(dif>=0?'22C55E':'EF4444'):WHITE,align:'center'});
+  s1.addShape('rect'as any,{x:0,y:0,w:0.07,h:5.63,fill:{color:RED}});
+  s1.addText('TIMIA',{x:0.4,y:0.28,w:3,fontSize:12,bold:true,color:RED,align:'left'});
+  s1.addText('Plan de Trabajo',{x:0.4,y:1.05,w:9,fontSize:22,bold:false,color:GRAY,align:'left'});
+  s1.addText(`Proyecto ${plan.projectId}`,{x:0.4,y:1.55,w:9,fontSize:50,bold:true,color:WHITE,align:'left'});
+  s1.addText(today,{x:0.4,y:2.85,w:9,fontSize:12,color:GRAY,align:'left'});
+  // KPI cards
+  [{label:'AVANCE REAL',val:`${overallReal}%`,col:WHITE},{label:'AVANCE ESPERADO',val:`${overallExp}%`,col:WHITE},{label:'DIFERENCIA',val:`${dif>=0?'+':''}${dif}%`,col:dif>=0?GREEN:ERR}].forEach((c,ci)=>{
+    const x=0.4+ci*3.1;
+    s1.addShape('rect'as any,{x,y:3.4,w:2.9,h:1.1,fill:{color:CARD},line:{color:BORDER,width:0.5}});
+    s1.addText(c.label,{x,y:3.48,w:2.9,fontSize:7,color:GRAY,align:'center'});
+    s1.addText(c.val,  {x,y:3.75,w:2.9,fontSize:26,bold:true,color:c.col,align:'center'});
   });
-  s1.addText(`Resp. Timia: ${plan.respTimia}`,{x:0.4,y:4.8,w:9,fontSize:10,color:GRAY,align:'left'});
-  const s2=pptx.addSlide(); s2.background={color:BG};
-  s2.addText('Avance por entregable',{x:0.4,y:0.3,w:9,fontSize:20,bold:true,color:WHITE});
-  plan.entregables.forEach((e,ei)=>{
-    const ePct=e.activities.length?parseFloat((e.activities.reduce((s,a,i)=>s+getActivityPct(e.id,i,a),0)/e.activities.length).toFixed(1)):e.pctReal;
-    const eDif=parseFloat((ePct-e.pctExp).toFixed(1));
-    const yBase=0.9+ei*1.2;
-    s2.addText(e.name,{x:0.4,y:yBase,w:5,fontSize:11,bold:true,color:'FDA4AF'});
-    s2.addText(`${ePct}%`,{x:5.6,y:yBase,w:1.2,fontSize:11,bold:true,color:WHITE,align:'right'});
-    s2.addText(`esp. ${e.pctExp}%`,{x:7,y:yBase,w:1.3,fontSize:9,color:GRAY,align:'left'});
-    s2.addText(`${eDif>=0?'+':''}${eDif}%`,{x:8.4,y:yBase,w:1.2,fontSize:11,bold:true,color:eDif>=0?'22C55E':'EF4444',align:'right'});
-    s2.addShape('rect'as any,{x:0.4,y:yBase+0.35,w:9.2,h:0.15,fill:{color:'1E293B'}});
-    if(ePct>0) s2.addShape('rect'as any,{x:0.4,y:yBase+0.35,w:Math.max(0.05,9.2*(ePct/100)),h:0.15,fill:{color:RED}});
+  s1.addText(`Resp. Timia: ${plan.respTimia}   ·   Resp. BBVA: ${plan.respBBVA}`,{x:0.4,y:4.82,w:9.2,fontSize:9,color:MUT,align:'left'});
+
+  // ── Slides 2+: Un slide por entregable ────────────────────────────────────
+  const PAGE_SIZE=10;
+  plan.entregables.forEach((ent,ei)=>{
+    const ACC=ENT_COLORS[ei]??TEAL;
+    const ePct=ent.activities.length
+      ?parseFloat((ent.activities.reduce((s,a,i)=>s+getActivityPct(ent.id,i,a),0)/ent.activities.length).toFixed(1))
+      :ent.pctReal;
+    const eDif=parseFloat((ePct-ent.pctExp).toFixed(1));
+    const pages:PlanActivity[][]=[];
+    for(let i=0;i<Math.max(1,ent.activities.length);i+=PAGE_SIZE) pages.push(ent.activities.slice(i,i+PAGE_SIZE));
+
+    pages.forEach((acts,pi)=>{
+      const sl=pptx.addSlide(); sl.background={color:BG};
+      sl.addShape('rect'as any,{x:0,y:0,w:0.07,h:5.63,fill:{color:ACC}});
+
+      // Header
+      const roman=['I','II','III','IV','V'][ei]??(ei+1).toString();
+      sl.addText(`${roman}. ${ent.name}`,{x:0.4,y:0.2,w:pages.length>1?7.3:9,fontSize:17,bold:true,color:WHITE,align:'left'});
+      if(pages.length>1) sl.addText(`(${pi+1}/${pages.length})`,{x:7.7,y:0.24,w:2,fontSize:10,color:MUT,align:'right'});
+
+      // Subline %
+      sl.addText(`${ePct}%`,{x:0.4,y:0.63,w:1.4,fontSize:13,bold:true,color:ePct>=ent.pctExp?GREEN:ERR,align:'left'});
+      sl.addText(`real  ·  ${ent.pctExp}% esperado`,{x:1.6,y:0.66,w:4,fontSize:10,color:MUT,align:'left'});
+      sl.addText(`${eDif>=0?'+':''}${eDif}%`,{x:9.1,y:0.63,w:0.7,fontSize:13,bold:true,color:eDif>=0?GREEN:ERR,align:'right'});
+
+      // Entregable bar
+      sl.addShape('rect'as any,{x:0.4,y:1.03,w:9.4,h:0.09,fill:{color:CARD},line:{color:BORDER,width:0.2}});
+      if(ePct>0) sl.addShape('rect'as any,{x:0.4,y:1.03,w:Math.max(0.06,9.4*(ePct/100)),h:0.09,fill:{color:ACC}});
+
+      // Column headers
+      const hY=1.24;
+      sl.addText('Actividad',{x:0.45,y:hY,w:4.5,fontSize:6.5,bold:true,color:MUT,align:'left'});
+      sl.addText('Semanas',  {x:5.0,y:hY,w:0.9,fontSize:6.5,bold:true,color:MUT,align:'center'});
+      sl.addText('Progreso', {x:6.0,y:hY,w:2.0,fontSize:6.5,bold:true,color:MUT,align:'center'});
+      sl.addText('Real',     {x:8.05,y:hY,w:0.75,fontSize:6.5,bold:true,color:MUT,align:'right'});
+      sl.addText('Δ',        {x:8.85,y:hY,w:0.75,fontSize:6.5,bold:true,color:MUT,align:'right'});
+      sl.addShape('rect'as any,{x:0.4,y:hY+0.22,w:9.4,h:0.01,fill:{color:BORDER}});
+
+      if(acts.length===0){
+        sl.addText('Sin actividades — genera el plan desde Estimaciones',{x:0.4,y:2.5,w:9.4,fontSize:11,color:MUT,align:'center',italic:true});
+      } else {
+        acts.forEach((act,ai)=>{
+          const gIdx=pi*PAGE_SIZE+ai;
+          const aPct=getActivityPct(ent.id,gIdx,act);
+          const aDif=parseFloat((aPct-act.pctExp).toFixed(1));
+          const yR=1.57+ai*0.35;
+          if(ai%2===0) sl.addShape('rect'as any,{x:0.4,y:yR-0.04,w:9.4,h:0.33,fill:{color:'131E35'},line:{color:'1E2D40',width:0.15}});
+          sl.addText(act.name,{x:0.45,y:yR,w:act.bbva?4.15:4.5,fontSize:8.5,color:aPct>=100?GREEN:WHITE,align:'left',shrinkText:true});
+          if(act.bbva){sl.addShape('rect'as any,{x:4.65,y:yR+0.05,w:0.55,h:0.16,fill:{color:BBVA}});sl.addText('BBVA',{x:4.65,y:yR+0.055,w:0.55,fontSize:5.5,color:WHITE,align:'center',bold:true});}
+          sl.addText(`S${act.startWeek}→S${act.endWeek}`,{x:5.0,y:yR,w:0.9,fontSize:8,color:MUT,align:'center'});
+          sl.addShape('rect'as any,{x:6.0,y:yR+0.08,w:2.0,h:0.09,fill:{color:BORDER}});
+          if(aPct>0) sl.addShape('rect'as any,{x:6.0,y:yR+0.08,w:Math.max(0.02,2.0*(aPct/100)),h:0.09,fill:{color:aPct>=100?GREEN:ACC}});
+          sl.addText(`${aPct}%`,{x:8.05,y:yR,w:0.75,fontSize:8.5,bold:true,color:aPct>=100?GREEN:WHITE,align:'right'});
+          sl.addText(`${aDif>=0?'+':''}${aDif}%`,{x:8.85,y:yR,w:0.75,fontSize:8.5,bold:true,color:aDif>=0?GREEN:ERR,align:'right'});
+        });
+      }
+      // Footer stripe
+      sl.addShape('rect'as any,{x:0,y:5.44,w:10,h:0.19,fill:{color:CARD}});
+      sl.addText(`Plan de Trabajo · ${plan.projectId}  ·  Timia Hub`,{x:0.4,y:5.46,w:9.2,fontSize:7,color:MUT,align:'center'});
+    });
   });
-  const s3=pptx.addSlide(); s3.background={color:BG};
-  s3.addText('Estado y próximas acciones',{x:0.4,y:0.3,w:9,fontSize:20,bold:true,color:WHITE});
-  [{title:'✅ Siguientes pasos',items:plan.pasos,color:'22C55E',x:0.4},{title:'⚠ Alertas',items:plan.alertas.length>0?plan.alertas:['Sin alertas'],color:'EAB308',x:3.5},{title:'🚧 Bloqueantes',items:plan.bloqueantes.length>0?plan.bloqueantes:['Sin bloqueantes'],color:'EF4444',x:6.6}].forEach(sec=>{
-    s3.addText(sec.title,{x:sec.x,y:0.9,w:2.9,fontSize:10,bold:true,color:sec.color});
-    sec.items.forEach((item,ii)=>s3.addText(`• ${item}`,{x:sec.x,y:1.3+ii*0.4,w:2.9,fontSize:9,color:LIGHT,wrap:true}));
+
+  // ── Último slide: Estado y próximas acciones ──────────────────────────────
+  const sL=pptx.addSlide(); sL.background={color:BG};
+  sL.addShape('rect'as any,{x:0,y:0,w:0.07,h:5.63,fill:{color:WARN}});
+  sL.addText('Estado y próximas acciones',{x:0.4,y:0.22,w:9,fontSize:18,bold:true,color:WHITE});
+  [{title:'✅ Siguientes pasos',items:plan.pasos.length?plan.pasos:['Sin pasos registrados'],col:GREEN,x:0.4},
+   {title:'⚠ Alertas',        items:plan.alertas.length?plan.alertas:['Sin alertas'],col:WARN,x:3.5},
+   {title:'🚧 Bloqueantes',    items:plan.bloqueantes.length?plan.bloqueantes:['Sin bloqueantes'],col:ERR,x:6.6}
+  ].forEach(sec=>{
+    sL.addShape('rect'as any,{x:sec.x,y:0.88,w:2.9,h:4.3,fill:{color:CARD},line:{color:BORDER,width:0.5}});
+    sL.addText(sec.title,{x:sec.x+0.1,y:0.98,w:2.7,fontSize:9.5,bold:true,color:sec.col});
+    sec.items.forEach((item,ii)=>sL.addText(`• ${item}`,{x:sec.x+0.1,y:1.5+ii*0.42,w:2.7,fontSize:9,color:LIGHT,wrap:true}));
   });
-  s3.addText('Generado por Timia Hub',{x:0.4,y:5.1,w:9,fontSize:8,color:GRAY,align:'center'});
+  sL.addText('Generado por Timia Hub',{x:0.4,y:5.1,w:9,fontSize:8,color:MUT,align:'center'});
+
   await pptx.writeFile({fileName:`Plan_${plan.projectId}_${new Date().toISOString().slice(0,10)}.pptx`});
 }
 
@@ -909,6 +1011,7 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
   const [historial,         setHistorial]         = useState<PlanHistorialEntry[]>(() => adminStore.getHistorial());
   const [activityAssignees, setActivityAssignees] = useState<ActivityAssignees>(()   => adminStore.getActivityAssignees());
   const [pctOverrides,      setPctOverrides]      = useState<Record<string,number>>(()=> adminStore.getPlanPcts());
+  const [activityJiras,     setActivityJiras]     = useState<Record<string,string>>(()=> adminStore.getActivityJiras());
   const [selected,          setSelected]          = useState<string>(WORK_PLANS[0].projectId);
   const [drawer,            setDrawer]            = useState<DrawerState | null>(null);
   const [exportingPptx,     setExportingPptx]     = useState(false);
@@ -991,6 +1094,14 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
     finally { setExportingPptx(false); }
   }
 
+  function handleJiraSave(jiraId: string) {
+    if (!drawer) return;
+    const k = `${drawer.projectId}__${drawer.entregableId}__${drawer.actIdx}`;
+    const next = { ...activityJiras };
+    if (jiraId) next[k] = jiraId; else delete next[k];
+    setActivityJiras(next); adminStore.saveActivityJiras(next);
+  }
+
   // All active users for the search (not project-filtered — 100+ employees)
   const allUsers: AdminUser[] = adminStore.getUsers().filter(u => u.active);
 
@@ -1057,9 +1168,11 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
           act={drawer.act} effectivePct={drawerEffectivePct}
           etapaStates={etapaStates} historial={historial}
           assigneeIds={drawerAssigneeIds} allUsers={allUsers} canMark={canMark}
+          jiraId={activityJiras[drawerKey]}
           onEtapaToggle={handleEtapaToggle}
           onAssigneeAdd={handleAssigneeAdd}
           onAssigneeRemove={handleAssigneeRemove}
+          onJiraSave={handleJiraSave}
           onClose={() => setDrawer(null)}
         />
       )}

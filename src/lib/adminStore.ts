@@ -270,6 +270,10 @@ export const adminStore = {
   getActivityAssignees:  (): ActivityAssignees       => load('activity_assignees', {}),
   saveActivityAssignees: (a: ActivityAssignees)      => save('activity_assignees', a),
 
+  // Tickets Jira por actividad: key = `${projectId}__${entregableId}__${actIdx}`
+  getActivityJiras:  (): Record<string, string>      => load('activity_jiras', {}),
+  saveActivityJiras: (j: Record<string, string>)     => save('activity_jiras', j),
+
   // Configuración de planes generados desde Estimaciones (keyed by projectId)
   getPlanConfigs:  (): Record<string, PlanConfig>   => load('plan_configs', {}),
   savePlanConfigs: (c: Record<string, PlanConfig>)  => save('plan_configs', c),
