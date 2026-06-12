@@ -16,6 +16,7 @@ import PMDashboard from './components/PMDashboard';
 import AdminPanel from './components/AdminPanel';
 import CircuitosBBVA from './components/CircuitosBBVA';
 import Bitacora from './components/Bitacora';
+import Estimaciones from './components/Estimaciones';
 import { INITIAL_TEMPLATES } from './lib/templates';
 import { ProjectTemplate } from './types';
 
@@ -105,6 +106,9 @@ function AppInner() {
 
       case 'bank-status':
         return <BankStatus />;
+
+      case 'estimaciones':
+        return role === 'pm' ? <Estimaciones onViewChange={setCurrentView}/> : <AccessDenied onBack={goHome}/>;
 
       case 'admin':
         return role === 'pm' ? <AdminPanel /> : <AccessDenied onBack={goHome}/>;

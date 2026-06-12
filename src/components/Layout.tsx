@@ -20,7 +20,7 @@ import {
   BookOpen,
 } from 'lucide-react';
 
-export type View = 'setup-project' | 'setup-team' | 'setup-tasks' | 'dashboard' | 'standards' | 'analytics' | 'audit' | 'bank-status' | 'notifications' | 'roles-permissions' | 'project-templates' | 'admin' | 'circuitos-bbva' | 'bitacora';
+export type View = 'setup-project' | 'setup-team' | 'setup-tasks' | 'dashboard' | 'standards' | 'analytics' | 'audit' | 'bank-status' | 'notifications' | 'roles-permissions' | 'project-templates' | 'admin' | 'circuitos-bbva' | 'bitacora' | 'estimaciones';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -107,6 +107,14 @@ export default function Layout({ children, currentView, onViewChange, userRole }
               >
                 Bitácora
               </button>
+              {userRole === 'pm' && (
+                <button
+                  onClick={() => onViewChange('estimaciones')}
+                  className={`text-sm font-medium transition-colors flex items-center gap-1 ${currentView === 'estimaciones' ? 'text-primary' : 'text-slate-600 hover:text-primary'}`}
+                >
+                  <BarChart3 size={14}/> Estimaciones
+                </button>
+              )}
               {userRole === 'pm' && (
                 <button
                   onClick={() => onViewChange('admin')}
