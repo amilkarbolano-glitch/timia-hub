@@ -6,7 +6,6 @@ import {
   Settings,
   Search,
   Bell,
-  Database,
   GitBranch,
   Cloud,
   Cpu,
@@ -17,6 +16,7 @@ import {
   ChevronDown,
   CalendarRange,
 } from 'lucide-react';
+import { TimiaMark, TimiaWordmark } from './TimiaLogo';
 
 export type View = 'setup-project' | 'setup-team' | 'setup-tasks' | 'dashboard' | 'standards' | 'analytics' | 'audit' | 'bank-status' | 'notifications' | 'roles-permissions' | 'project-templates' | 'admin' | 'circuitos-bbva' | 'bitacora' | 'estimaciones' | 'plan-trabajo';
 
@@ -55,10 +55,8 @@ export default function Layout({ children, currentView, onViewChange, userRole }
               className="flex items-center gap-3 cursor-pointer" 
               onClick={() => onViewChange('setup-project')}
             >
-              <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary/10 text-primary">
-                <Database size={20} />
-              </div>
-              <h1 className="text-lg font-bold tracking-tight text-slate-900">Timia Hub</h1>
+              <TimiaMark size={32} bg="none" />
+              <TimiaWordmark variant="dark" height={22} />
             </div>
             
             <nav className="hidden md:flex items-center gap-5">

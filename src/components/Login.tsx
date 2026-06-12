@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Database, Lock, ChevronRight, ArrowLeft, Check } from 'lucide-react';
+import { Lock, ChevronRight, ArrowLeft, Check } from 'lucide-react';
 import { useAuth, MOCK_ACCOUNTS, AuthUser } from '../contexts/AuthContext';
 import { adminStore } from '../lib/adminStore';
+import { TimiaWordmark, TimiaMark } from './TimiaLogo';
 
 type Step = 'initial' | 'picker' | 'verifying';
 
@@ -28,8 +29,6 @@ export default function Login() {
   const [selected, setSelected] = useState<AuthUser | null>(null);
   const [progress, setProgress] = useState(0);
 
-  // Usar usuarios del adminStore (dinámicos, respeta cambios del AdminPanel)
-  // Fallback a MOCK_ACCOUNTS si adminStore está vacío
   const storeUsers = adminStore.getUsers().filter(u => u.active);
   const accounts: AuthUser[] = (storeUsers.length > 0 ? storeUsers : MOCK_ACCOUNTS) as AuthUser[];
 
@@ -48,10 +47,10 @@ export default function Login() {
         {/* Panel izquierdo — branding */}
         <div className="hidden md:flex flex-col justify-between p-10 w-5/12" style={{ background: '#1a1a2e' }}>
           <div>
-            <div className="flex items-center justify-center w-11 h-11 rounded-xl mb-5" style={{ background: '#DC2626' }}>
-              <Database size={22} color="white" />
+            {/* Logo oficial de timia.ai (variante clara — texto blanco) */}
+            <div className="mb-6">
+              <TimiaWordmark variant="light" height={34} />
             </div>
-            <h1 className="text-xl font-medium text-white mb-1">Timia Hub</h1>
             <p className="text-sm mb-8" style={{ color: '#8892b0' }}>Plataforma de gestión de proyectos de datos</p>
             <div className="space-y-3">
               {features.map((f, i) => (
@@ -69,11 +68,14 @@ export default function Login() {
         <div className="flex flex-col items-center justify-center p-10 flex-1">
           <div className="w-full max-w-xs">
 
-            {/* Logo móvil */}
-            <div className="flex justify-center mb-6">
-              <div className="flex items-center justify-center w-12 h-12 rounded-xl" style={{ background: '#DC2626' }}>
-                <Database size={24} color="white" />
-              </div>
+            {/* Logo móvil — A-mark con fondo oscuro */}
+            <div className="flex justify-center mb-6 md:hidden">
+              <TimiaMark size={48} bg="rounded" />
+            </div>
+
+            {/* Logo móvil visible en pantallas md+ cuando no hay panel izquierdo */}
+            <div className="hidden md:flex justify-center mb-4">
+              {/* espacio invisible para alinear con el panel */}
             </div>
 
             <h2 className="text-lg font-medium text-slate-900 text-center mb-1">Bienvenido</h2>
