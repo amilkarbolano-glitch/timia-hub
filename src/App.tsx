@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { AuthProvider, useAuth, canAccess, ROLE_LANDING, UserRole } from './contexts/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import Layout, { View } from './components/Layout';
@@ -6,7 +6,6 @@ import KanbanBoard from './components/KanbanBoard';
 import ProjectStandards from './components/ProjectStandards';
 import Analytics from './components/Analytics';
 import AuditLog from './components/AuditLog';
-import TaskConfirmation from './components/TaskConfirmation';
 import SetupProject from './components/SetupProject';
 import SetupTeam from './components/SetupTeam';
 import BankStatus from './components/BankStatus';
@@ -53,17 +52,38 @@ function AppInner() {
   const [currentView, setCurrentView] = useState<View>(
     (ROLE_LANDING[role] as View) ?? 'dashboard'
   );
+  const currentViewRef = useRef<View>(currentView);
+  currentViewRef.current = currentView;
+
+  // Navegación con historial del navegador para que el botón "Atrás" funcione dentro de la app
+  const navigate = useCallback((view: View) => {
+    setCurrentView(view);
+    window.history.pushState({ view }, '', window.location.href);
+  }, []);
+
+  // Sincroniza el historial al montar y maneja el botón Atrás del navegador
+  useEffect(() => {
+    window.history.replaceState({ view: currentView }, '', window.location.href);
+    const handlePop = (e: PopStateEvent) => {
+      const v = (e.state?.view as View | undefined) ?? (ROLE_LANDING[role] as View) ?? 'dashboard';
+      setCurrentView(v);
+    };
+    window.addEventListener('popstate', handlePop);
+    return () => window.removeEventListener('popstate', handlePop);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Si el rol cambia (ej: cambio de cuenta), vuelve a la vista correcta
   useEffect(() => {
-    setCurrentView((ROLE_LANDING[role] as View) ?? 'dashboard');
+    navigate((ROLE_LANDING[role] as View) ?? 'dashboard');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [role]);
 
   const [templates, setTemplates] = useState<ProjectTemplate[]>(INITIAL_TEMPLATES);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('ingesta');
 
   // Vista de inicio por defecto para el botón "Volver"
-  const goHome = () => setCurrentView((ROLE_LANDING[role] as View) ?? 'dashboard');
+  const goHome = () => navigate((ROLE_LANDING[role] as View) ?? 'dashboard');
 
   const renderView = () => {
     // ── Guards por vista ──────────────────────────────────────────────────────
@@ -85,22 +105,15 @@ function AppInner() {
       case 'setup-project':
         return (
           <SetupProject
-            onNext={() => setCurrentView('setup-team')}
+            onNext={() => navigate('setup-team')}
             templates={templates}
             selectedTemplateId={selectedTemplateId}
             onSelectTemplate={setSelectedTemplateId}
           />
         );
       case 'setup-team':
-        return <SetupTeam onNext={() => setCurrentView('setup-tasks')} onBack={() => setCurrentView('setup-project')} />;
-      case 'setup-tasks':
-        return (
-          <TaskConfirmation
-            onNext={() => setCurrentView('dashboard')}
-            onBack={() => setCurrentView('setup-team')}
-            initialTasks={templates.find(t => t.id === selectedTemplateId)?.tasks || []}
-          />
-        );
+        // Al lanzar el proyecto, va directo a Estimaciones (no hay paso de tareas)
+        return <SetupTeam onNext={() => navigate('estimaciones')} onBack={() => navigate('setup-project')} />;
 
       case 'dashboard':
         return <KanbanBoard userRole={role} setUserRole={() => {}} />;
@@ -109,7 +122,7 @@ function AppInner() {
         return <BankStatus />;
 
       case 'estimaciones':
-        return canAccess(role, 'view_estimaciones') ? <Estimaciones onViewChange={setCurrentView}/> : <AccessDenied onBack={goHome}/>;
+        return canAccess(role, 'view_estimaciones') ? <Estimaciones onViewChange={navigate}/> : <AccessDenied onBack={goHome}/>;
 
       case 'admin':
         return role === 'pm' ? <AdminPanel /> : <AccessDenied onBack={goHome}/>;
@@ -122,11 +135,11 @@ function AppInner() {
 
       case 'analytics':
         // PM tiene su propio dashboard ejecutivo
-        return role === 'pm' ? <PMDashboard onViewChange={setCurrentView} /> : <Analytics />;
+        return role === 'pm' ? <PMDashboard onViewChange={navigate} /> : <Analytics />;
 
       case 'plan-trabajo':
         return canAccess(role, 'view_plan_trabajo')
-          ? <div style={{ padding: '28px 36px' }}><PlanDeTrabajo onGoEstimaciones={() => setCurrentView('estimaciones')} /></div>
+          ? <div style={{ padding: '28px 36px' }}><PlanDeTrabajo onGoEstimaciones={() => navigate('estimaciones')} /></div>
           : <AccessDenied onBack={goHome}/>;
 
       case 'audit':
@@ -155,7 +168,7 @@ function AppInner() {
   };
 
   return (
-    <Layout currentView={currentView} onViewChange={setCurrentView} userRole={role}>
+    <Layout currentView={currentView} onViewChange={navigate} userRole={role}>
       {renderView()}
     </Layout>
   );

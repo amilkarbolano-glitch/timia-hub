@@ -98,7 +98,7 @@ export default function SetupTeam({ onNext, onBack }: SetupTeamProps) {
           onClick={onNext}
           className="flex items-center gap-2 px-8 h-14 bg-primary text-white rounded-2xl font-bold text-lg shadow-lg shadow-primary/20 hover:opacity-90 transition-all group"
         >
-          Confirmar Tareas
+          Lanzar Proyecto
           <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" />
         </button>
       </div>

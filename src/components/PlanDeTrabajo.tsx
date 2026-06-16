@@ -1012,6 +1012,9 @@ const WORK_PLANS: WorkPlan[] = [
   { projectId:'BCBS239', respBBVA:'TBD · BBVA',              respTimia:'Diego Sánchez',         pasos:[], alertas:[], bloqueantes:[], entregables:[{id:'doc',name:'I. Documentación',pctReal:0,pctExp:0,activities:[]},{id:'comp',name:'II. Componentes ADA',pctReal:0,pctExp:0,activities:[]},{id:'auto',name:'III. Automatización',pctReal:0,pctExp:0,activities:[]}] },
   { projectId:'BRICKELL',respBBVA:'TBD · BBVA',              respTimia:'Diego Sánchez',         pasos:[], alertas:[], bloqueantes:[], entregables:[{id:'doc',name:'I. Documentación',pctReal:0,pctExp:0,activities:[]},{id:'comp',name:'II. Componentes',pctReal:0,pctExp:0,activities:[]},{id:'close',name:'III. Cierre',pctReal:0,pctExp:0,activities:[]}] },
   { projectId:'OPTIM',   respBBVA:'N/A · Credicorp Capital', respTimia:'David Huamán',          pasos:[], alertas:[], bloqueantes:[], entregables:[{id:'doc',name:'I. Documentación',pctReal:0,pctExp:0,activities:[]},{id:'comp',name:'II. Componentes',pctReal:0,pctExp:0,activities:[]}] },
+  { projectId:'PINTO',   respBBVA:'TBD · BBVA',              respTimia:'Juan Arévalo',          pasos:[], alertas:[], bloqueantes:[], entregables:[{id:'doc',name:'I. Documentación',pctReal:0,pctExp:0,activities:[]},{id:'comp',name:'II. Componentes',pctReal:0,pctExp:0,activities:[]},{id:'auto',name:'III. Automatización',pctReal:0,pctExp:0,activities:[]}] },
+  { projectId:'QA',      respBBVA:'TBD · BBVA',              respTimia:'Juan Arévalo',          pasos:[], alertas:[], bloqueantes:[], entregables:[{id:'doc',name:'I. Documentación',pctReal:0,pctExp:0,activities:[]},{id:'comp',name:'II. Componentes QA',pctReal:0,pctExp:0,activities:[]}] },
+  { projectId:'FABRICA', respBBVA:'N/A · Credicorp Capital', respTimia:'David Huamán',          pasos:[], alertas:[], bloqueantes:[], entregables:[{id:'doc',name:'I. Documentación',pctReal:0,pctExp:0,activities:[]},{id:'comp',name:'II. Componentes',pctReal:0,pctExp:0,activities:[]},{id:'ent',name:'III. Entregables',pctReal:0,pctExp:0,activities:[]}] },
 ];
 
 // ─── PPTX Export ──────────────────────────────────────────────────────────────
@@ -1306,13 +1309,22 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
   const canMark = user ? (['pm','tech_lead','tech_ref'] as string[]).includes(user.role) : false;
 
   // ── Planes efectivos: WORK_PLANS estáticos + planes generados desde Estimaciones ──
+  // Si existe un plan generado para un proyecto estático, lo sobreescribe (permite generar NGA, CRONOS, etc.)
   function buildEffectivePlans(): WorkPlan[] {
     const storedConfigs = adminStore.getPlanConfigs();
+    // Mapa de planes generados (projectId → WorkPlan)
+    const generatedMap: Record<string, WorkPlan> = {};
+    Object.values(storedConfigs).forEach(c => {
+      if (c.generatedAt && c.entregables.length > 0) {
+        generatedMap[c.projectId] = planConfigToWorkPlan(c);
+      }
+    });
+    // Prioridad: generated sobre static para el mismo projectId
+    const merged = WORK_PLANS.map(p => generatedMap[p.projectId] ?? p);
+    // Agregar planes generados para proyectos sin plan estático
     const staticIds = new Set(WORK_PLANS.map(p => p.projectId));
-    const generated = Object.values(storedConfigs)
-      .filter(c => c.generatedAt && c.entregables.length > 0 && !staticIds.has(c.projectId))
-      .map(planConfigToWorkPlan);
-    return [...WORK_PLANS, ...generated];
+    const extra = Object.values(generatedMap).filter(g => !staticIds.has(g.projectId));
+    return [...merged, ...extra];
   }
 
   const [effectivePlans, setEffectivePlans] = useState<WorkPlan[]>(buildEffectivePlans);
@@ -1882,12 +1894,6 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
               <div style={{ display:'flex', gap:8 }}>
                 <button onClick={handlePrint} style={{ display:'flex', alignItems:'center', gap:5, padding:'8px 14px', fontSize:12, background:'#0d9488', color:'#fff', border:'none', borderRadius:8, cursor:'pointer', fontWeight:500 }}>
                   <Printer size={13}/> Imprimir / PDF
-                </button>
-                <button onClick={handleExportPdf} disabled={exportingPdf || exportingPptx} style={{ display:'flex', alignItems:'center', gap:5, padding:'8px 14px', fontSize:12, background:exportingPdf?'#64748b':'#dc2626', color:'#fff', border:'none', borderRadius:8, cursor:(exportingPdf||exportingPptx)?'not-allowed':'pointer', fontWeight:500 }}>
-                  <FileDown size={13}/> {exportingPdf?'Generando PDF…':'Exportar PDF'}
-                </button>
-                <button onClick={handleExportPptx} disabled={exportingPptx || exportingPdf} style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 16px', fontSize:12, background:(exportingPptx||exportingPdf)?'#64748b':'#111', color:'#fff', border:'none', borderRadius:8, cursor:(exportingPptx||exportingPdf)?'not-allowed':'pointer', fontWeight:500 }}>
-                  <FileDown size={14}/> {exportingPptx?'Generando…':'Exportar PPTX'}
                 </button>
               </div>
               {exportError && (

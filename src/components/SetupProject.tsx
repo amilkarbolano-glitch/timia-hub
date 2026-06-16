@@ -1,6 +1,12 @@
-import React from 'react';
-import { Rocket, ArrowRight, Database, Cloud, Cpu, ShieldCheck, Layout as LayoutIcon } from 'lucide-react';
+import React, { useState } from 'react';
+import { Rocket, ArrowRight, Database, Cloud, Cpu, Layout as LayoutIcon, Building2 } from 'lucide-react';
 import { ProjectTemplate } from '../types';
+
+const BANCOS = [
+  { id: 'bbva-co',   label: 'BBVA CO',    color: '#004481' },
+  { id: 'bbva-ar',   label: 'BBVA AR',    color: '#00437d' },
+  { id: 'credicorp', label: 'Credicorp',  color: '#e8242d' },
+];
 
 interface SetupProjectProps {
   onNext: () => void;
@@ -10,6 +16,8 @@ interface SetupProjectProps {
 }
 
 export default function SetupProject({ onNext, templates, selectedTemplateId, onSelectTemplate }: SetupProjectProps) {
+  const [banco, setBanco] = useState('bbva-co');
+
   const getIcon = (iconName: string) => {
     switch (iconName) {
       case 'Cloud': return <Cloud size={20} />;
@@ -25,39 +33,53 @@ export default function SetupProject({ onNext, templates, selectedTemplateId, on
         <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary/10 text-primary mb-4">
           <Rocket size={32} />
         </div>
-        <h1 className="text-4xl font-black text-slate-900 tracking-tight">Configuración del Proyecto</h1>
-        <p className="text-slate-500 text-lg">Comencemos definiendo los parámetros básicos de tu nuevo Data Hub.</p>
+        <h1 className="text-4xl font-black text-slate-900 tracking-tight">Nuevo Proyecto</h1>
+        <p className="text-slate-500 text-lg">Define los parámetros básicos del nuevo proyecto de datos.</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         <div className="space-y-6">
+
+          {/* Banco / Organización */}
+          <div className="space-y-2">
+            <label className="text-sm font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
+              <Building2 size={14} className="text-slate-400" />
+              Banco / Organización
+            </label>
+            <div className="flex gap-3">
+              {BANCOS.map((b) => (
+                <button
+                  key={b.id}
+                  onClick={() => setBanco(b.id)}
+                  className="flex-1 py-2.5 rounded-xl border-2 text-sm font-bold transition-all"
+                  style={{
+                    borderColor: banco === b.id ? b.color : '#e2e8f0',
+                    background:  banco === b.id ? b.color + '12' : '#fff',
+                    color:       banco === b.id ? b.color : '#64748b',
+                  }}
+                >
+                  {b.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div className="space-y-2">
             <label className="text-sm font-bold text-slate-700 uppercase tracking-wider">Nombre del Proyecto</label>
-            <input 
-              type="text" 
-              placeholder="Campaña de pre aprobados FICO" 
+            <input
+              type="text"
+              placeholder="Ej: Campaña pre-aprobados FICO"
               className="w-full h-12 px-4 rounded-xl border border-slate-200 focus:ring-2 focus:ring-primary/20 outline-none transition-all"
-            />
-          </div>
-          
-          <div className="space-y-2">
-            <label className="text-sm font-bold text-slate-700 uppercase tracking-wider">Descripción</label>
-            <textarea 
-              rows={4}
-              placeholder="Describe el objetivo principal..." 
-              className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-primary/20 outline-none transition-all resize-none"
             />
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-bold text-slate-700 uppercase tracking-wider">Prioridad del Negocio</label>
-            <div className="flex gap-3">
-              {['Baja', 'Media', 'Alta', 'Crítica'].map((p) => (
-                <button key={p} className="flex-1 py-2 rounded-lg border border-slate-200 text-sm font-bold hover:border-primary hover:text-primary transition-all">
-                  {p}
-                </button>
-              ))}
-            </div>
+            <label className="text-sm font-bold text-slate-700 uppercase tracking-wider">Descripción</label>
+            <textarea
+              rows={4}
+              placeholder="Describe el objetivo principal..."
+              className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-primary/20 outline-none transition-all resize-none"
+            />
           </div>
         </div>
 
@@ -65,11 +87,11 @@ export default function SetupProject({ onNext, templates, selectedTemplateId, on
           <label className="text-sm font-bold text-slate-700 uppercase tracking-wider">Tipo de Pipeline / Plantilla</label>
           <div className="grid gap-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
             {templates.map((template) => (
-              <TypeOption 
+              <TypeOption
                 key={template.id}
-                icon={getIcon(template.icon)} 
-                title={template.name} 
-                description={template.description} 
+                icon={getIcon(template.icon)}
+                title={template.name}
+                description={template.description}
                 selected={selectedTemplateId === template.id}
                 onClick={() => onSelectTemplate(template.id)}
               />
@@ -79,11 +101,11 @@ export default function SetupProject({ onNext, templates, selectedTemplateId, on
       </div>
 
       <div className="mt-12 flex justify-end">
-        <button 
+        <button
           onClick={onNext}
           className="flex items-center gap-2 px-8 h-14 bg-primary text-white rounded-2xl font-bold text-lg shadow-lg shadow-primary/20 hover:opacity-90 transition-all group"
         >
-          Siguiente Paso
+          Siguiente — Equipo
           <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" />
         </button>
       </div>
@@ -93,7 +115,7 @@ export default function SetupProject({ onNext, templates, selectedTemplateId, on
 
 function TypeOption({ icon, title, description, selected, onClick }: any) {
   return (
-    <div 
+    <div
       onClick={onClick}
       className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${
         selected ? 'border-primary bg-primary/5' : 'border-slate-100 hover:border-slate-200'
