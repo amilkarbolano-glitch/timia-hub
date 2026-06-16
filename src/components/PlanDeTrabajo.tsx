@@ -1714,13 +1714,64 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
     }
     style.textContent = `
       @media print {
-        @page { size: A3 landscape; margin: 10mm; }
-        body { background: #fff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-        header, nav, aside, [data-print-hide] { display: none !important; }
-        #timia-plan-print { display: block !important; }
-        [data-gantt-section] { break-inside: avoid; page-break-inside: avoid; margin-bottom: 16px; }
-        [data-gantt-table] { overflow: visible !important; }
-        table { table-layout: fixed; }
+        @page { size: A3 landscape; margin: 8mm 10mm; }
+
+        /* Colores exactos */
+        * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+        body { background: #fff !important; margin: 0 !important; padding: 0 !important; }
+
+        /* Ocultar header de la app, nav, sidebar de proyectos, botones de export */
+        header,
+        nav,
+        aside,
+        [data-print-hide] { display: none !important; visibility: hidden !important; }
+
+        /* El contenedor principal ocupa toda la página */
+        main, .flex-1 { overflow: visible !important; }
+
+        /* El wrapper flex del Plan de Trabajo — solo mostrar la zona de detalle */
+        #timia-plan-root { display: block !important; }
+        #timia-plan-sidebar { display: none !important; }
+
+        /* La zona de contenido ocupa el 100% del ancho */
+        #timia-plan-print {
+          flex: none !important;
+          width: 100% !important;
+          min-width: 0 !important;
+          display: block !important;
+        }
+
+        /* Cada sección Gantt en su propia página, NO cortar a la mitad */
+        [data-gantt-section] {
+          page-break-inside: avoid !important;
+          break-inside: avoid !important;
+          page-break-before: auto !important;
+          margin-bottom: 20px !important;
+        }
+        /* Primera sección continúa en la misma página que el header */
+        [data-gantt-section]:first-of-type { page-break-before: avoid !important; }
+        /* Secciones 2+ comienzan en página nueva */
+        [data-gantt-section] + [data-gantt-section] { page-break-before: always !important; }
+
+        /* Tablas Gantt — full width, sin scroll */
+        [data-gantt-table] {
+          overflow: visible !important;
+          overflow-x: visible !important;
+          width: 100% !important;
+        }
+        [data-gantt-table] table {
+          width: 100% !important;
+          min-width: unset !important;
+          table-layout: auto !important;
+        }
+
+        /* Agrandar fuentes ligeramente para mejor lectura */
+        [data-gantt-section] td,
+        [data-gantt-section] th { font-size: 10pt !important; }
+        [data-gantt-section] h4 { font-size: 13pt !important; }
+
+        /* No mostrar ActionDrawer ni modales */
+        [role="dialog"], [data-radix-dialog-overlay] { display: none !important; }
       }
     `;
     window.print();
@@ -1743,9 +1794,9 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
   const drawerEffectivePct = drawer ? getActivityPct(drawer.projectId, drawer.entregableId, drawer.actIdx, drawer.act) : 0;
 
   return (
-    <div style={{ display: 'flex', gap: 14 }}>
-      {/* Sidebar */}
-      <div style={{ width: 128, flexShrink: 0 }}>
+    <div id="timia-plan-root" style={{ display: 'flex', gap: 14 }}>
+      {/* Sidebar — hidden on print */}
+      <div id="timia-plan-sidebar" data-print-hide style={{ width: 128, flexShrink: 0 }}>
         <p style={{ margin:'0 0 8px', fontSize:9, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'.06em', fontWeight:600 }}>Proyectos</p>
         <div style={{ display:'flex', flexDirection:'column', gap:3 }}>
           {visiblePlans.map(p => {
@@ -1776,9 +1827,10 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
       <div id="timia-plan-print" style={{ flex:1, minWidth:0 }}>
         {plan ? (
           <>
-            <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:6, marginBottom:10 }}>
+            {/* Botones de exportar — se ocultan en print */}
+            <div data-print-hide style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:6, marginBottom:10 }}>
               <div style={{ display:'flex', gap:8 }}>
-                <button onClick={handlePrint} data-print-hide style={{ display:'flex', alignItems:'center', gap:5, padding:'8px 14px', fontSize:12, background:'#0d9488', color:'#fff', border:'none', borderRadius:8, cursor:'pointer', fontWeight:500 }}>
+                <button onClick={handlePrint} style={{ display:'flex', alignItems:'center', gap:5, padding:'8px 14px', fontSize:12, background:'#0d9488', color:'#fff', border:'none', borderRadius:8, cursor:'pointer', fontWeight:500 }}>
                   <Printer size={13}/> Imprimir / PDF
                 </button>
                 <button onClick={handleExportPdf} disabled={exportingPdf || exportingPptx} style={{ display:'flex', alignItems:'center', gap:5, padding:'8px 14px', fontSize:12, background:exportingPdf?'#64748b':'#dc2626', color:'#fff', border:'none', borderRadius:8, cursor:(exportingPdf||exportingPptx)?'not-allowed':'pointer', fontWeight:500 }}>
