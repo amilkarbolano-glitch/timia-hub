@@ -456,7 +456,8 @@ export default function Estimaciones({ onViewChange }: EstimacionesProps) {
     setConfigs(updated);
     adminStore.savePlanConfigs(updated);
     setDirty(false);
-    // Navega directamente al Plan de Trabajo con el plan generado
+    // Marca el proyecto para que PlanDeTrabajo lo auto-seleccione al montar
+    localStorage.setItem('timia_last_plan_project', selectedProjectId);
     onViewChange('plan-trabajo');
   }
 
