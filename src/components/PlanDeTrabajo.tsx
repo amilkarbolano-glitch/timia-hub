@@ -8,7 +8,7 @@ import { PROJECTS, useAuth } from '../contexts/AuthContext';
 import {
   adminStore,
   type PlanEtapa, type EtapaStates, type PlanHistorialEntry,
-  type ActivityAssignees, type AdminUser,
+  type ActivityAssignees, type AdminUser, type PlanConfig,
 } from '../lib/adminStore';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -673,6 +673,34 @@ function PlanDetail({ plan, getActivityPct, setActivityPct, onActivityClick, onG
   );
 }
 
+// ─── planConfigToWorkPlan — convierte un PlanConfig (Estimaciones) → WorkPlan ─
+
+function planConfigToWorkPlan(cfg: PlanConfig): WorkPlan {
+  return {
+    projectId: cfg.projectId,
+    respBBVA:  'Por definir',
+    respTimia: 'Por definir',
+    pasos:      ['Plan generado desde Estimaciones — ajusta los % de avance'],
+    alertas:    [],
+    bloqueantes:[],
+    entregables: cfg.entregables.map(ent => ({
+      id:       ent.id,
+      name:     ent.label,
+      pctReal:  0,
+      pctExp:   0,
+      activities: ent.activities.map(act => ({
+        name:      act.label,
+        pct:       0,
+        pctExp:    0,
+        startWeek: act.startWeek,
+        endWeek:   act.endWeek,
+        bbva:      act.bbva,
+        etapas:    act.etapas,
+      })),
+    })),
+  };
+}
+
 // ─── WORK_PLANS ───────────────────────────────────────────────────────────────
 // Nota: actividades marcadas "BBVA" son tareas que TIMIA INICIA
 // pero que dependen de BBVA para completarse (aprobaciones, accesos, etc.)
@@ -1277,10 +1305,25 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
   const role = user?.role ?? 'developer';
   const canMark = user ? (['pm','tech_lead','tech_ref'] as string[]).includes(user.role) : false;
 
-  // Filtrar proyectos según asignaciones del usuario (PM ve todos)
+  // ── Planes efectivos: WORK_PLANS estáticos + planes generados desde Estimaciones ──
+  function buildEffectivePlans(): WorkPlan[] {
+    const storedConfigs = adminStore.getPlanConfigs();
+    const staticIds = new Set(WORK_PLANS.map(p => p.projectId));
+    const generated = Object.values(storedConfigs)
+      .filter(c => c.generatedAt && c.entregables.length > 0 && !staticIds.has(c.projectId))
+      .map(planConfigToWorkPlan);
+    return [...WORK_PLANS, ...generated];
+  }
+
+  const [effectivePlans, setEffectivePlans] = useState<WorkPlan[]>(buildEffectivePlans);
+
+  // Refrescar en cada mount (puede venir de Estimaciones con nuevo plan)
+  useEffect(() => { setEffectivePlans(buildEffectivePlans()); }, []);
+
+  // Filtrar según rol del usuario
   const visiblePlans = role === 'pm'
-    ? WORK_PLANS
-    : WORK_PLANS.filter(p => (user?.projectIds ?? []).includes(p.projectId));
+    ? effectivePlans
+    : effectivePlans.filter(p => (user?.projectIds ?? []).includes(p.projectId));
 
   const [etapaStates,       setEtapaStates]       = useState<EtapaStates>(()         => adminStore.getEtapaStates());
   const [historial,         setHistorial]         = useState<PlanHistorialEntry[]>(() => adminStore.getHistorial());
@@ -1288,6 +1331,12 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
   const [pctOverrides,      setPctOverrides]      = useState<Record<string,number>>(()=> adminStore.getPlanPcts());
   const [activityJiras,     setActivityJiras]     = useState<Record<string,string>>(()=> adminStore.getActivityJiras());
   const [selected,          setSelected]          = useState<string>(() => {
+    // Si vienen de Estimaciones con un proyecto recién generado, auto-seleccionarlo
+    const lastGen = localStorage.getItem('timia_last_plan_project');
+    if (lastGen) {
+      localStorage.removeItem('timia_last_plan_project');
+      return lastGen;
+    }
     // Para no-PM, arrancar en el primer proyecto asignado
     if (!user || user.role === 'pm') return WORK_PLANS[0].projectId;
     const firstAssigned = WORK_PLANS.find(p => (user.projectIds ?? []).includes(p.projectId));
@@ -1298,7 +1347,8 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
   const [exportingPdf,      setExportingPdf]      = useState(false);
   const [exportError,       setExportError]       = useState<string>('');
 
-  const plan = WORK_PLANS.find(p => p.projectId === selected);
+  // El plan activo: buscar primero en effectivePlans
+  const plan = effectivePlans.find(p => p.projectId === selected);
 
   // ── Effective pct: fallback to act.pct if no etapa states set yet ──────────
   function getActivityPct(projectId: string, entregableId: string, actIdx: number, act: PlanActivity): number {
