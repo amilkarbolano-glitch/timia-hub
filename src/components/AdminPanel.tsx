@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   Folders, Users, Clock, Calendar, Building2, Plus, Trash2,
-  Edit2, Save, X, CheckCircle, AlertTriangle,
+  Edit2, Save, X, CheckCircle, AlertTriangle, Info,
 } from 'lucide-react';
 import {
   adminStore, AdminProject, AdminUser, AnsConfig,
@@ -271,6 +271,19 @@ function TabEquipo() {
 
   return (
     <div>
+      {/* Helper: asignación Referente Técnico (item 4) */}
+      <div style={{ background:'#f0fdf4', border:'0.5px solid #bbf7d0', borderRadius:10, padding:'12px 16px', marginBottom:14, display:'flex', gap:10, alignItems:'flex-start' }}>
+        <Info size={14} color="#15803d" style={{ marginTop:2, flexShrink:0 }}/>
+        <div style={{ flex:1 }}>
+          <p style={{ margin:'0 0 5px', fontSize:12, fontWeight:600, color:'#15803d' }}>¿Cómo asignar el rol de Referente Técnico?</p>
+          <ol style={{ margin:0, paddingLeft:14, fontSize:11, color:'#166534', lineHeight:1.8 }}>
+            <li>Haz clic en el ícono de <strong>editar</strong> (lápiz) junto al usuario.</li>
+            <li>Cambia su <strong>Rol</strong> a <em>Referente Técnico</em>.</li>
+            <li>Activa los <strong>proyectos</strong> a los que debe acceder en "Proyectos asignados".</li>
+            <li>Haz clic en <strong>Guardar</strong>. El usuario verá su tablero y Plan de Trabajo automáticamente.</li>
+          </ol>
+        </div>
+      </div>
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
         <button onClick={() => setShowNew(true)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', fontSize: 12, background: '#dc2626', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 500 }}>
           <Plus size={14}/> Nuevo usuario

@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   AlertTriangle, CheckCircle, Clock, ChevronRight, ChevronDown,
   FileDown, X, Users, Check, LayoutList, Search, ExternalLink,
+  Plus, Trash2, Printer,
 } from 'lucide-react';
 import { PROJECTS, useAuth } from '../contexts/AuthContext';
 import {
@@ -479,7 +480,45 @@ function EntregableSection({ block, projectId, sectionIdx, getActivityPct, setAc
   );
 }
 
+// ─── PlanNotesModal ───────────────────────────────────────────────────────────
+
+interface NoteItem { text: string; type: 'pasos'|'alertas'|'bloqueantes'; idx: number; custom: boolean; }
+
+function PlanNotesModal({ item, onClose, onDelete }: { item: NoteItem; onClose: () => void; onDelete?: () => void }) {
+  const typeLabel = item.type === 'pasos' ? 'Siguiente paso' : item.type === 'alertas' ? 'Alerta' : 'Bloqueante';
+  const typeColor = item.type === 'pasos' ? '#15803d' : item.type === 'alertas' ? '#a16207' : '#dc2626';
+  const typeBg    = item.type === 'pasos' ? '#f0fdf4' : item.type === 'alertas' ? '#fef9c3' : '#fef2f2';
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.35)', zIndex:200, display:'flex', alignItems:'center', justifyContent:'center' }}
+      onClick={e=>{ if(e.target===e.currentTarget) onClose(); }}>
+      <div style={{ background:'#fff', borderRadius:14, padding:'24px 28px', maxWidth:480, width:'92%', boxShadow:'0 20px 60px rgba(0,0,0,0.15)' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:16 }}>
+          <span style={{ fontSize:11, padding:'3px 10px', borderRadius:8, background:typeBg, color:typeColor, fontWeight:600 }}>{typeLabel}</span>
+          <button onClick={onClose} style={{ border:'none', background:'none', cursor:'pointer', color:'#94a3b8', display:'flex' }}><X size={16}/></button>
+        </div>
+        <p style={{ margin:'0 0 20px', fontSize:14, color:'#111', lineHeight:1.7 }}>{item.text}</p>
+        <div style={{ display:'flex', justifyContent:'flex-end', gap:8 }}>
+          {item.custom && onDelete && (
+            <button onClick={()=>{ onDelete(); onClose(); }} style={{ display:'flex', alignItems:'center', gap:5, padding:'7px 14px', fontSize:12, border:'0.5px solid #fecaca', borderRadius:7, background:'#fef2f2', color:'#dc2626', cursor:'pointer' }}>
+              <Trash2 size={12}/> Eliminar
+            </button>
+          )}
+          <button onClick={onClose} style={{ padding:'7px 16px', fontSize:12, background:'#f1f5f9', border:'none', borderRadius:7, cursor:'pointer', color:'#374151' }}>Cerrar</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── PlanDetail ───────────────────────────────────────────────────────────────
+
+function loadNotes(projectId: string) {
+  try { return JSON.parse(localStorage.getItem(`timia_notes_${projectId}`) ?? '{"pasos":[],"alertas":[],"bloqueantes":[]}'); }
+  catch { return { pasos:[] as string[], alertas:[] as string[], bloqueantes:[] as string[] }; }
+}
+function saveNotes(projectId: string, data: { pasos:string[]; alertas:string[]; bloqueantes:string[] }) {
+  localStorage.setItem(`timia_notes_${projectId}`, JSON.stringify(data));
+}
 
 function PlanDetail({ plan, getActivityPct, setActivityPct, onActivityClick, onGoEstimaciones }: {
   plan: WorkPlan;
@@ -489,6 +528,21 @@ function PlanDetail({ plan, getActivityPct, setActivityPct, onActivityClick, onG
   onGoEstimaciones?: () => void;
 }) {
   const color = PROJECTS.find(p => p.id === plan.projectId)?.color ?? '#64748b';
+  // ── Extra notes (persisted) ─────────────────────────────────────────────────
+  const [extraNotes, setExtraNotes] = useState(() => loadNotes(plan.projectId));
+  const [noteModal,  setNoteModal]  = useState<NoteItem | null>(null);
+  const [addingTo,   setAddingTo]   = useState<'pasos'|'alertas'|'bloqueantes'|null>(null);
+  const [addText,    setAddText]    = useState('');
+  function saveExtra(next: typeof extraNotes) { setExtraNotes(next); saveNotes(plan.projectId, next); }
+  function addNote(type: 'pasos'|'alertas'|'bloqueantes') {
+    const t = addText.trim(); if (!t) return;
+    const next = { ...extraNotes, [type]: [...extraNotes[type], t] };
+    saveExtra(next); setAddText(''); setAddingTo(null);
+  }
+  function deleteNote(type: 'pasos'|'alertas'|'bloqueantes', customIdx: number) {
+    const next = { ...extraNotes, [type]: extraNotes[type].filter((_:string,i:number)=>i!==customIdx) };
+    saveExtra(next);
+  }
   const overallReal = parseFloat((plan.entregables.map(e => e.activities.length
     ? e.activities.reduce((s,a,i) => s + getActivityPct(e.id,i,a), 0) / e.activities.length
     : e.pctReal).reduce((s,v)=>s+v,0) / plan.entregables.length).toFixed(1));
@@ -546,21 +600,66 @@ function PlanDetail({ plan, getActivityPct, setActivityPct, onActivityClick, onG
         })}
       </div>
 
+      {/* Pasos / Alertas / Bloqueantes — editables */}
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:8, marginBottom:20 }}>
-        {[
-          { icon:<CheckCircle size={13}/>, title:'Siguientes pasos', items:plan.pasos, bg:'#f0fdf4', tc:'#15803d', em:'Por iniciar', mk:(i:string)=>`• ${i}`, badge:undefined },
-          { icon:<AlertTriangle size={13}/>, title:'Alertas', items:plan.alertas, bg:plan.alertas.length>0?'#fef9c3':'#f8fafc', tc:plan.alertas.length>0?'#a16207':'#94a3b8', em:'Sin alertas', mk:(i:string)=>`⚠ ${i}`, badge:plan.alertas.length||undefined },
-          { icon:<Clock size={13}/>, title:'Bloqueantes', items:plan.bloqueantes, bg:plan.bloqueantes.length>0?'#fef2f2':'#f8fafc', tc:plan.bloqueantes.length>0?'#dc2626':'#94a3b8', em:'Sin bloqueantes', mk:(i:string)=>`⛔ ${i}`, badge:plan.bloqueantes.length||undefined },
-        ].map(s => (
-          <div key={s.title} style={{ background:s.bg, borderRadius:10, padding:'10px 14px' }}>
-            <p style={{ margin:'0 0 8px', fontSize:11, fontWeight:600, color:s.tc, display:'flex', alignItems:'center', gap:5 }}>
-              {s.icon} {s.title}
-              {s.badge && <span style={{ marginLeft:4, background:'rgba(0,0,0,0.08)', borderRadius:10, padding:'0 6px', fontSize:10 }}>{s.badge}</span>}
-            </p>
-            {s.items.length>0 ? s.items.map((item,i)=><p key={i} style={{ margin:'3px 0', fontSize:11, color:'#374151' }}>{s.mk(item)}</p>) : <p style={{ margin:0, fontSize:11, color:'#94a3b8' }}>{s.em}</p>}
-          </div>
-        ))}
+        {([
+          { type:'pasos'      as const, icon:<CheckCircle size={12}/>, title:'Siguientes pasos', static:plan.pasos,       bg:'#f0fdf4', tc:'#15803d', bc:'#bbf7d0', em:'Sin pasos por iniciar', mk:'•'  },
+          { type:'alertas'    as const, icon:<AlertTriangle size={12}/>, title:'Alertas',         static:plan.alertas,     bg:'#fef9c3', tc:'#a16207', bc:'#fde68a', em:'Sin alertas activas',  mk:'⚠'  },
+          { type:'bloqueantes'as const, icon:<Clock size={12}/>,        title:'Bloqueantes',      static:plan.bloqueantes, bg:'#fef2f2', tc:'#dc2626', bc:'#fecaca', em:'Sin bloqueantes',       mk:'⛔' },
+        ] as const).map(s => {
+          const allItems = [...s.static, ...extraNotes[s.type]];
+          const hasItems = allItems.length > 0;
+          return (
+            <div key={s.type} style={{ background:hasItems?s.bg:'#f8fafc', borderRadius:10, padding:'10px 14px', border:`0.5px solid ${hasItems?s.bc:'#e2e8f0'}` }}>
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8 }}>
+                <p style={{ margin:0, fontSize:11, fontWeight:600, color:hasItems?s.tc:'#94a3b8', display:'flex', alignItems:'center', gap:5 }}>
+                  {s.icon} {s.title}
+                  {allItems.length>0 && <span style={{ marginLeft:4, background:'rgba(0,0,0,0.08)', borderRadius:10, padding:'0 6px', fontSize:10 }}>{allItems.length}</span>}
+                </p>
+                <button onClick={()=>{ setAddingTo(s.type); setAddText(''); }}
+                  style={{ border:'none', background:hasItems?s.bc:'#e2e8f0', cursor:'pointer', color:hasItems?s.tc:'#64748b', borderRadius:6, padding:'2px 6px', display:'flex', alignItems:'center', gap:2, fontSize:10 }}>
+                  <Plus size={10}/> Add
+                </button>
+              </div>
+              {/* Inline add form */}
+              {addingTo===s.type && (
+                <div style={{ marginBottom:8 }}>
+                  <textarea value={addText} onChange={e=>setAddText(e.target.value)} rows={2} autoFocus
+                    placeholder={`Nuevo ${s.type==='pasos'?'paso':s.type==='alertas'?'alerta':'bloqueante'}…`}
+                    style={{ width:'100%', padding:'5px 8px', fontSize:11, border:`0.5px solid ${s.bc}`, borderRadius:6, background:'#fff', resize:'vertical', boxSizing:'border-box', outline:'none', lineHeight:1.5 }}
+                    onKeyDown={e=>{ if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();addNote(s.type);} if(e.key==='Escape') setAddingTo(null); }}
+                  />
+                  <div style={{ display:'flex', gap:4, marginTop:4 }}>
+                    <button onClick={()=>addNote(s.type)} style={{ padding:'3px 10px', fontSize:10, background:s.tc, color:'#fff', border:'none', borderRadius:5, cursor:'pointer', fontWeight:500 }}>Guardar</button>
+                    <button onClick={()=>setAddingTo(null)} style={{ padding:'3px 8px', fontSize:10, background:'#f1f5f9', border:'none', borderRadius:5, cursor:'pointer', color:'#374151' }}>Cancelar</button>
+                  </div>
+                </div>
+              )}
+              {/* Items */}
+              {hasItems ? allItems.map((item,i) => {
+                const isCustom = i >= s.static.length;
+                const customIdx = isCustom ? i - s.static.length : -1;
+                return (
+                  <div key={i} onClick={()=>setNoteModal({ text:item, type:s.type, idx:i, custom:isCustom })}
+                    style={{ display:'flex', alignItems:'flex-start', gap:5, margin:'3px 0', padding:'4px 6px', borderRadius:6, cursor:'pointer', background:'rgba(255,255,255,0.6)', transition:'background .1s', lineHeight:1.5 }}
+                    onMouseEnter={e=>(e.currentTarget.style.background='rgba(255,255,255,0.95)')}
+                    onMouseLeave={e=>(e.currentTarget.style.background='rgba(255,255,255,0.6)')}>
+                    <span style={{ fontSize:11, flexShrink:0, marginTop:1 }}>{s.mk}</span>
+                    <span style={{ fontSize:11, color:'#374151', flex:1 }}>{item}</span>
+                    {isCustom && <button onClick={e=>{e.stopPropagation();deleteNote(s.type,customIdx);}} style={{ border:'none', background:'none', cursor:'pointer', color:'#cbd5e1', padding:1, display:'flex', flexShrink:0 }}><Trash2 size={10}/></button>}
+                  </div>
+                );
+              }) : <p style={{ margin:0, fontSize:11, color:'#94a3b8' }}>{s.em}</p>}
+            </div>
+          );
+        })}
       </div>
+      {/* Note detail modal */}
+      {noteModal && (
+        <PlanNotesModal item={noteModal} onClose={()=>setNoteModal(null)}
+          onDelete={noteModal.custom ? ()=>deleteNote(noteModal.type, noteModal.idx - (noteModal.type==='pasos'?plan.pasos:noteModal.type==='alertas'?plan.alertas:plan.bloqueantes).length) : undefined}
+        />
+      )}
 
       {plan.entregables.map((e, ei) => (
         <EntregableSection key={e.id} block={e} projectId={plan.projectId} sectionIdx={ei}
@@ -1604,6 +1703,30 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
     }
   }
 
+  // ── Imprimir como PDF — print CSS ────────────────────────────────────────────
+  function handlePrint() {
+    const styleId = 'timia-print-style';
+    let style = document.getElementById(styleId) as HTMLStyleElement | null;
+    if (!style) {
+      style = document.createElement('style');
+      style.id = styleId;
+      document.head.appendChild(style);
+    }
+    style.textContent = `
+      @media print {
+        @page { size: A3 landscape; margin: 10mm; }
+        body { background: #fff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        header, nav, aside, [data-print-hide] { display: none !important; }
+        #timia-plan-print { display: block !important; }
+        [data-gantt-section] { break-inside: avoid; page-break-inside: avoid; margin-bottom: 16px; }
+        [data-gantt-table] { overflow: visible !important; }
+        table { table-layout: fixed; }
+      }
+    `;
+    window.print();
+    window.addEventListener('afterprint', () => { style?.remove(); }, { once: true });
+  }
+
   function handleJiraSave(jiraId: string) {
     if (!drawer) return;
     const k = `${drawer.projectId}__${drawer.entregableId}__${drawer.actIdx}`;
@@ -1650,11 +1773,14 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
       </div>
 
       {/* Plan detail */}
-      <div style={{ flex:1, minWidth:0 }}>
+      <div id="timia-plan-print" style={{ flex:1, minWidth:0 }}>
         {plan ? (
           <>
             <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:6, marginBottom:10 }}>
               <div style={{ display:'flex', gap:8 }}>
+                <button onClick={handlePrint} data-print-hide style={{ display:'flex', alignItems:'center', gap:5, padding:'8px 14px', fontSize:12, background:'#0d9488', color:'#fff', border:'none', borderRadius:8, cursor:'pointer', fontWeight:500 }}>
+                  <Printer size={13}/> Imprimir / PDF
+                </button>
                 <button onClick={handleExportPdf} disabled={exportingPdf || exportingPptx} style={{ display:'flex', alignItems:'center', gap:5, padding:'8px 14px', fontSize:12, background:exportingPdf?'#64748b':'#dc2626', color:'#fff', border:'none', borderRadius:8, cursor:(exportingPdf||exportingPptx)?'not-allowed':'pointer', fontWeight:500 }}>
                   <FileDown size={13}/> {exportingPdf?'Generando PDF…':'Exportar PDF'}
                 </button>

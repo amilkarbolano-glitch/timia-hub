@@ -53,6 +53,7 @@ export interface TemplateTask {
   title: string;
   description: string;
   points: number;
+  peso?: number;   // peso ponderado (0-100), suma debería totalizar 100 entre tareas
   tag?: string;
 }
 
