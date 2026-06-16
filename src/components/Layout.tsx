@@ -244,24 +244,7 @@ export default function Layout({ children, currentView, onViewChange, userRole }
                 active={currentView === 'standards'} 
                 onClick={() => onViewChange('standards')}
               />
-              <SidebarLink 
-                icon={<Cloud size={18} />} 
-                label="Ingesta de Datos" 
-                active={false} 
-                onClick={() => {}}
-              />
-              <SidebarLink 
-                icon={<Cpu size={18} />} 
-                label="Procesamiento" 
-                active={false} 
-                onClick={() => {}}
-              />
-              <SidebarLink 
-                icon={<Archive size={18} />} 
-                label="Reglas de Archivo" 
-                active={false} 
-                onClick={() => {}}
-              />
+              {/* Ingesta, Procesamiento, Reglas — ocultos temporalmente */}
               <SidebarLink 
                 icon={<GitBranch size={18} />} 
                 label="Plantillas de Proyecto" 

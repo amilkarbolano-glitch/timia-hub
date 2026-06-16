@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Plus, Trash2, FileDown, Search, Link2, Package, BookOpen, X, ExternalLink, Copy, Check } from 'lucide-react';
 import { adminStore, BitacoraEntry } from '../lib/adminStore';
 import { PROJECTS, useAuth } from '../contexts/AuthContext';
@@ -10,17 +10,52 @@ interface LinkEntry {
   category: string; descripcion: string; fecha: string; quien: string;
 }
 
-interface InventarioItem {
-  id: string; projectId: string; tipo: string; nombre: string;
-  schema: string; descripcion: string; estado: string; fecha: string; quien: string;
+// ── Inventario v2: tabla dinámica tipo Excel ──────────────────────────────────
+interface InvRow {
+  id: string;
+  projectId: string;
+  objeto: string;         // nombre de la tabla / artifact
+  descripcion: string;
+  documentacion: string;  // link
+  versionModelo: string;
+  versionObjeto: string;
+  diccionario: string;    // link
+  stages: Record<string, string>;  // stageId → '' | 'Sí' | 'N/A' | valor custom
 }
+interface InvStage { id: string; label: string; }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const TIPOS_CAMBIO  = ['Campo', 'Regla', 'Modelo', 'ETL', 'Otro'] as const;
 const LINK_CATS     = ['Jira', 'Confluence', 'Bitbucket', 'Documentación', 'Otro'];
-const INV_TIPOS     = ['Tabla ADA', 'Tabla Work', 'Tabla Live', 'Modelo', 'Job Control-M', 'Regla Hammurabi', 'Otro'];
-const INV_ESTADOS   = ['En construcción', 'En pruebas', 'Certificada', 'En producción', 'Deprecada'];
+
+// Etapas por defecto del inventario (basado en el tracking real del equipo)
+const DEFAULT_INV_STAGES: InvStage[] = [
+  { id: 'env-msd',     label: 'Envío MSD' },
+  { id: 'apr-msd',     label: 'Aprobación MSD' },
+  { id: 'env-gob',     label: 'Envía a gobierno' },
+  { id: 'sch-work',    label: 'Schemas Work' },
+  { id: 'sol-live',    label: 'Sol. Schemas Live' },
+  { id: 'sch-live',    label: 'Schemas Live' },
+  { id: 'constr',      label: 'Construcción Proc.' },
+  { id: 'test-unit',   label: 'Test Unitarios' },
+  { id: 'test-acept',  label: 'Test Aceptación' },
+  { id: 'muestras',    label: 'Gen. Muestras' },
+  { id: 'prueb-work',  label: 'Pruebas Work' },
+  { id: 'dat-sandbox', label: 'Datos Sandbox' },
+  { id: 'dat-test',    label: 'Datos Test' },
+  { id: 'valid',       label: 'Validación datos' },
+  { id: 'qlt',         label: 'QLT' },
+  { id: 'prueb-qlt',   label: 'Pruebas QLT' },
+  { id: 'sc',          label: 'Smart Cleaner' },
+  { id: 'prueb-sc',    label: 'Pruebas SC' },
+  { id: 'cert-proc',   label: 'Cert. Proc.' },
+  { id: 'cert-qlt',    label: 'Cert. QLT' },
+  { id: 'cert-sc',     label: 'Cert. SC' },
+  { id: 'jobs-proc',   label: 'Jobs Proc.' },
+  { id: 'jobs-qlt',    label: 'Jobs QLT' },
+  { id: 'jobs-sc',     label: 'Jobs SC' },
+];
 
 const TIPO_COLORS: Record<string, { bg: string; text: string }> = {
   Campo:  { bg: '#dbeafe', text: '#1d4ed8' },
@@ -45,10 +80,18 @@ function loadLinks(): LinkEntry[] {
 }
 function saveLinks(d: LinkEntry[]) { localStorage.setItem('timia_links', JSON.stringify(d)); }
 
-function loadInventario(): InventarioItem[] {
-  try { return JSON.parse(localStorage.getItem('timia_inventario') ?? '[]'); } catch { return []; }
+// ── Inventario v2 storage ────────────────────────────────────────────────────
+function loadInvRows(): InvRow[] {
+  try { return JSON.parse(localStorage.getItem('timia_inv_v2') ?? '[]'); } catch { return []; }
 }
-function saveInventario(d: InventarioItem[]) { localStorage.setItem('timia_inventario', JSON.stringify(d)); }
+function saveInvRows(d: InvRow[]) { localStorage.setItem('timia_inv_v2', JSON.stringify(d)); }
+function loadInvStages(): InvStage[] {
+  try {
+    const raw = localStorage.getItem('timia_inv_stages');
+    return raw ? JSON.parse(raw) : DEFAULT_INV_STAGES;
+  } catch { return DEFAULT_INV_STAGES; }
+}
+function saveInvStages(d: InvStage[]) { localStorage.setItem('timia_inv_stages', JSON.stringify(d)); }
 
 // ─── CopyBtn helper ───────────────────────────────────────────────────────────
 
@@ -280,111 +323,335 @@ function TabLinks({ user }: { user: any }) {
 
 // ─── Tab: Inventario ──────────────────────────────────────────────────────────
 
-function TabInventario({ user }: { user: any }) {
-  const [items, setItems]   = useState<InventarioItem[]>(loadInventario);
-  const [showForm, setShow] = useState(false);
-  const [filterProj, setFP] = useState('');
-  const [filterTipo, setFT] = useState('');
-  const [filterEst, setFE]  = useState('');
-  const [search, setSearch] = useState('');
-  const [form, setForm]     = useState({ projectId:'', tipo:'Tabla ADA', nombre:'', schema:'', descripcion:'', estado:'En construcción' });
+const CELL_BG: Record<string, string> = {
+  'Sí':  '#dcfce7',
+  'N/A': '#f1f5f9',
+  '':    '#fff',
+};
+const CELL_COLOR: Record<string, string> = {
+  'Sí':  '#15803d',
+  'N/A': '#94a3b8',
+  '':    '#111',
+};
+const STAGE_CYCLE: Record<string, string> = { '': 'Sí', 'Sí': 'N/A', 'N/A': '' };
 
-  function add() {
-    if (!form.projectId || !form.nombre.trim()) return;
-    const next = [{ id:'i'+Date.now(), fecha:new Date().toISOString().slice(0,10), quien:user?.name??'Sistema', ...form }, ...items];
-    setItems(next); saveInventario(next);
-    setForm({ projectId:'', tipo:'Tabla ADA', nombre:'', schema:'', descripcion:'', estado:'En construcción' }); setShow(false);
-  }
-  function del(id: string) { if(confirm('¿Eliminar?')){ const n=items.filter(i=>i.id!==id); setItems(n); saveInventario(n); } }
-  function updEstado(id: string, estado: string) {
-    const n = items.map(i=>i.id===id?{...i,estado}:i); setItems(n); saveInventario(n);
+function InlineEdit({ value, placeholder, mono, onSave }: { value: string; placeholder?: string; mono?: boolean; onSave: (v:string)=>void; }) {
+  const [editing, setEditing] = useState(false);
+  const [val, setVal]         = useState(value);
+  const inputRef              = React.useRef<HTMLInputElement>(null);
+
+  useEffect(() => { if (editing) inputRef.current?.focus(); }, [editing]);
+  useEffect(() => { setVal(value); }, [value]);
+
+  const commit = () => { onSave(val); setEditing(false); };
+
+  if (editing) {
+    return (
+      <input
+        ref={inputRef}
+        value={val}
+        onChange={e => setVal(e.target.value)}
+        onBlur={commit}
+        onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') { setVal(value); setEditing(false); } }}
+        style={{ width: '100%', padding: '2px 4px', fontSize: 11, fontFamily: mono ? 'monospace' : 'inherit',
+          border: 'none', outline: '2px solid #dc2626', borderRadius: 4, background: '#fff', boxSizing: 'border-box' }}
+      />
+    );
   }
 
-  const filtered = items.filter(i =>
-    (!filterProj||i.projectId===filterProj) && (!filterTipo||i.tipo===filterTipo) &&
-    (!filterEst||i.estado===filterEst) &&
-    (!search||(i.nombre+i.schema+i.descripcion).toLowerCase().includes(search.toLowerCase()))
+  return (
+    <span
+      onClick={() => setEditing(true)}
+      style={{ display: 'block', padding: '3px 4px', fontSize: 11, fontFamily: mono ? 'monospace' : 'inherit',
+        cursor: 'text', minHeight: 22, color: value ? '#111' : '#cbd5e1', borderRadius: 4,
+        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+      title={value || placeholder}
+    >
+      {value || <span style={{ color: '#cbd5e1', fontStyle: 'italic' }}>{placeholder}</span>}
+    </span>
   );
+}
+
+function LinkCell({ value, onSave }: { value: string; onSave: (v:string)=>void; }) {
+  const [editing, setEditing] = useState(false);
+  const [val, setVal]         = useState(value);
+  const inputRef              = React.useRef<HTMLInputElement>(null);
+
+  useEffect(() => { if (editing) inputRef.current?.focus(); }, [editing]);
+  useEffect(() => { setVal(value); }, [value]);
+
+  const commit = () => { onSave(val); setEditing(false); };
+
+  if (editing) {
+    return (
+      <input
+        ref={inputRef}
+        value={val}
+        onChange={e => setVal(e.target.value)}
+        onBlur={commit}
+        onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') { setVal(value); setEditing(false); } }}
+        placeholder="https://..."
+        style={{ width: '100%', padding: '2px 4px', fontSize: 11, border: 'none', outline: '2px solid #dc2626', borderRadius: 4, background: '#fff', boxSizing: 'border-box' }}
+      />
+    );
+  }
+
+  if (value) {
+    return (
+      <span style={{ display:'flex', alignItems:'center', gap:4 }}>
+        <a href={value} target="_blank" rel="noopener noreferrer" onClick={e=>e.stopPropagation()}
+          style={{ color:'#0891b2', fontSize:11, textDecoration:'none' }}>
+          <ExternalLink size={11}/>
+        </a>
+        <span onClick={()=>setEditing(true)} style={{ fontSize:9, color:'#0891b2', cursor:'text', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>ver</span>
+      </span>
+    );
+  }
+
+  return (
+    <span onClick={()=>setEditing(true)} style={{ display:'block', padding:'3px 4px', fontSize:11, color:'#cbd5e1', cursor:'text', fontStyle:'italic', borderRadius:4 }}>
+      link…
+    </span>
+  );
+}
+
+function TabInventario({ user }: { user: any }) {
+  const [rows,    setRows]    = useState<InvRow[]>(loadInvRows);
+  const [stages,  setStages]  = useState<InvStage[]>(loadInvStages);
+  const [filterProj, setFP]   = useState('');
+  const [search,  setSearch]  = useState('');
+  const [addStage, setAddSt]  = useState(false);
+  const [newStLbl, setNewStL] = useState('');
+  const [delMode,  setDelMode]= useState(false);
+
+  function save(next: InvRow[]) { setRows(next); saveInvRows(next); }
+
+  function addRow() {
+    const row: InvRow = {
+      id: 'r'+Date.now(),
+      projectId: filterProj || (PROJECTS[0]?.id ?? ''),
+      objeto: '', descripcion: '', documentacion: '',
+      versionModelo: '', versionObjeto: '', diccionario: '',
+      stages: {},
+    };
+    save([...rows, row]);
+  }
+
+  function delRow(id: string) {
+    if (confirm('¿Eliminar esta fila?')) save(rows.filter(r => r.id !== id));
+  }
+
+  function updateCell(id: string, col: keyof Omit<InvRow,'id'|'projectId'|'stages'>, val: string) {
+    save(rows.map(r => r.id === id ? { ...r, [col]: val } : r));
+  }
+
+  function cycleStage(rowId: string, stageId: string) {
+    const row = rows.find(r => r.id === rowId);
+    if (!row) return;
+    const cur  = row.stages[stageId] ?? '';
+    const next = STAGE_CYCLE[cur] ?? 'Sí';
+    save(rows.map(r => r.id === rowId ? { ...r, stages: { ...r.stages, [stageId]: next } } : r));
+  }
+
+  function setStageVal(rowId: string, stageId: string, val: string) {
+    save(rows.map(r => r.id === rowId ? { ...r, stages: { ...r.stages, [stageId]: val } } : r));
+  }
+
+  function addStageCol() {
+    if (!newStLbl.trim()) return;
+    const next = [...stages, { id: 'st-'+Date.now(), label: newStLbl.trim() }];
+    setStages(next); saveInvStages(next);
+    setNewStL(''); setAddSt(false);
+  }
+
+  function delStageCol(id: string) {
+    if (!confirm('¿Eliminar esta columna de todas las filas?')) return;
+    const next = stages.filter(s => s.id !== id);
+    setStages(next); saveInvStages(next);
+  }
+
+  const visible = rows.filter(r =>
+    (!filterProj || r.projectId === filterProj) &&
+    (!search || (r.objeto + r.descripcion).toLowerCase().includes(search.toLowerCase()))
+  );
+
+  const TH: React.CSSProperties = {
+    padding: '0 6px', fontSize: 9, color: '#94a3b8', fontWeight: 600,
+    textTransform: 'uppercase', letterSpacing: '.04em', whiteSpace: 'nowrap',
+    background: '#f8fafc', position: 'sticky' as const, top: 0, zIndex: 2,
+    borderBottom: '0.5px solid #e2e8f0',
+  };
+  const TD: React.CSSProperties = {
+    padding: '2px 4px', borderBottom: '0.5px solid #f1f5f9', verticalAlign: 'middle',
+  };
 
   return (
     <div>
-      <div style={{ display:'flex', justifyContent:'flex-end', marginBottom:16 }}>
-        <button onClick={()=>setShow(v=>!v)} style={{ display:'flex', alignItems:'center', gap:5, padding:'7px 14px', fontSize:12, background:'#dc2626', color:'#fff', border:'none', borderRadius:7, cursor:'pointer', fontWeight:500 }}>
-          <Plus size={13}/> Nuevo objeto
-        </button>
-      </div>
-
-      {showForm && (
-        <div style={{ background:'#fff', border:'0.5px solid #e2e8f0', borderRadius:12, padding:'18px 20px', marginBottom:18 }}>
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:10, marginBottom:10 }}>
-            <div><label style={lbl()}>Proyecto *</label><select value={form.projectId} onChange={e=>setForm(f=>({...f,projectId:e.target.value}))} style={inp()}><option value="">Seleccionar…</option>{PROJECTS.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
-            <div><label style={lbl()}>Tipo *</label><select value={form.tipo} onChange={e=>setForm(f=>({...f,tipo:e.target.value}))} style={inp()}>{INV_TIPOS.map(t=><option key={t}>{t}</option>)}</select></div>
-            <div><label style={lbl()}>Estado inicial</label><select value={form.estado} onChange={e=>setForm(f=>({...f,estado:e.target.value}))} style={inp()}>{INV_ESTADOS.map(s=><option key={s}>{s}</option>)}</select></div>
-          </div>
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:10 }}>
-            <div><label style={lbl()}>Nombre del objeto *</label><input value={form.nombre} onChange={e=>setForm(f=>({...f,nombre:e.target.value}))} placeholder="t_kfca_crsp_fico_data_co" style={inp()}/></div>
-            <div><label style={lbl()}>Schema / Path</label><input value={form.schema} onChange={e=>setForm(f=>({...f,schema:e.target.value}))} placeholder="ej: schema_fico.t_kfca_…" style={inp()}/></div>
-          </div>
-          <div style={{ marginBottom:12 }}><label style={lbl()}>Descripción</label><input value={form.descripcion} onChange={e=>setForm(f=>({...f,descripcion:e.target.value}))} placeholder="Qué contiene, para qué sirve…" style={inp()}/></div>
-          <div style={{ display:'flex', gap:8, justifyContent:'flex-end' }}>
-            <button onClick={()=>setShow(false)} style={btnSec()}>Cancelar</button>
-            <button onClick={add} style={btnPrimary()}>Guardar</button>
-          </div>
-        </div>
-      )}
-
-      {/* Filtros */}
-      <div style={{ display:'flex', gap:8, marginBottom:14, flexWrap:'wrap', alignItems:'center' }}>
+      {/* Top bar */}
+      <div style={{ display:'flex', gap:8, alignItems:'center', marginBottom:12, flexWrap:'wrap' }}>
         <div style={{ position:'relative', flex:'1 1 180px', maxWidth:240 }}>
           <Search size={12} style={{ position:'absolute', left:9, top:'50%', transform:'translateY(-50%)', color:'#94a3b8', pointerEvents:'none' }}/>
-          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar tabla, schema…" style={{...inp(), paddingLeft:28}}/>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar objeto, descripción…" style={{...inp(), paddingLeft:28}}/>
         </div>
-        <select value={filterProj} onChange={e=>setFP(e.target.value)} style={inp()}>
+        <select value={filterProj} onChange={e=>setFP(e.target.value)} style={{ ...inp(), width:'auto' }}>
           <option value="">Todos los proyectos</option>
           {PROJECTS.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
-        <select value={filterTipo} onChange={e=>setFT(e.target.value)} style={inp()}>
-          <option value="">Todos los tipos</option>
-          {INV_TIPOS.map(t=><option key={t}>{t}</option>)}
-        </select>
-        <select value={filterEst} onChange={e=>setFE(e.target.value)} style={inp()}>
-          <option value="">Todos los estados</option>
-          {INV_ESTADOS.map(s=><option key={s}>{s}</option>)}
-        </select>
-        <span style={{ fontSize:11, color:'#94a3b8', marginLeft:'auto' }}>{filtered.length} objeto{filtered.length!==1?'s':''}</span>
+        <span style={{ fontSize:11, color:'#94a3b8' }}>{visible.length} fila{visible.length!==1?'s':''}</span>
+        <div style={{ marginLeft:'auto', display:'flex', gap:6 }}>
+          <button onClick={()=>setDelMode(v=>!v)}
+            style={{ padding:'6px 11px', fontSize:11, border:`0.5px solid ${delMode?'#dc2626':'#e2e8f0'}`,
+              borderRadius:7, background: delMode?'#fef2f2':'#fff', color: delMode?'#dc2626':'#64748b', cursor:'pointer' }}>
+            {delMode ? 'Listo' : 'Gestionar columnas'}
+          </button>
+          <button onClick={addRow} style={{ display:'flex', alignItems:'center', gap:5, padding:'6px 12px', fontSize:12, background:'#dc2626', color:'#fff', border:'none', borderRadius:7, cursor:'pointer', fontWeight:500 }}>
+            <Plus size={13}/> Agregar objeto
+          </button>
+        </div>
       </div>
 
-      {filtered.length===0 ? (
-        <div style={emptyBox()}>
-          <Package size={24} color="#cbd5e1" style={{ marginBottom:8 }}/>
-          <p style={{ margin:0, fontSize:13, color:'#94a3b8' }}>No hay objetos registrados. Agrega tablas, modelos, jobs, reglas…</p>
-        </div>
-      ) : (
-        <div style={{ background:'#fff', border:'0.5px solid #e2e8f0', borderRadius:12, overflow:'hidden' }}>
-          <div style={{ display:'grid', gridTemplateColumns:'80px 110px 1fr 140px 130px 80px 30px', gap:8, padding:'8px 14px', background:'#f8fafc', borderBottom:'0.5px solid #e2e8f0', fontSize:10, color:'#94a3b8', fontWeight:600, textTransform:'uppercase', letterSpacing:'.04em' }}>
-            <span>Proyecto</span><span>Tipo</span><span>Nombre / Schema</span><span>Descripción</span><span>Estado</span><span>Fecha</span><span/>
+      {/* Spreadsheet table */}
+      <div style={{ overflowX:'auto', border:'0.5px solid #e2e8f0', borderRadius:12, background:'#fff' }}>
+        <table style={{ borderCollapse:'collapse', minWidth:'100%', tableLayout:'auto' }}>
+          <thead>
+            <tr style={{ height: 32 }}>
+              {/* Fixed left */}
+              <th style={{ ...TH, width:28, minWidth:28, position:'sticky', left:0, zIndex:3, textAlign:'center' }}>#</th>
+              <th style={{ ...TH, width:160, minWidth:140, position:'sticky', left:28, zIndex:3, paddingLeft:8 }}>Objeto</th>
+              <th style={{ ...TH, width:200, minWidth:160 }}>Descripción</th>
+              <th style={{ ...TH, width:60, minWidth:56 }}>Doc.</th>
+              <th style={{ ...TH, width:72, minWidth:60 }}>V. Modelo</th>
+              <th style={{ ...TH, width:72, minWidth:60 }}>V. Objeto</th>
+              <th style={{ ...TH, width:56, minWidth:50 }}>Dic.</th>
+              {/* Stage columns — rotated headers */}
+              {stages.map(s => (
+                <th key={s.id} style={{ ...TH, width:52, minWidth:48, padding:'4px 2px' }}>
+                  <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:2 }}>
+                    <span style={{ writingMode:'vertical-rl', textOrientation:'mixed',
+                      transform:'rotate(180deg)', display:'block', maxHeight:88,
+                      overflow:'hidden', whiteSpace:'nowrap', fontSize:8.5, lineHeight:1.2 }}>
+                      {s.label}
+                    </span>
+                    {delMode && (
+                      <button onClick={()=>delStageCol(s.id)}
+                        style={{ border:'none', background:'#fee2e2', color:'#dc2626', borderRadius:3, cursor:'pointer', padding:'1px 3px', fontSize:9, marginTop:2 }}>
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                </th>
+              ))}
+              {/* Add stage column */}
+              <th style={{ ...TH, width:36, minWidth:32 }}>
+                <button onClick={()=>setAddSt(true)}
+                  style={{ border:'none', background:'none', cursor:'pointer', color:'#94a3b8', fontSize:16, lineHeight:1, padding:'0 4px' }}
+                  title="Agregar columna">＋</button>
+              </th>
+              <th style={{ ...TH, width:28 }}/>
+            </tr>
+          </thead>
+          <tbody>
+            {visible.length === 0 ? (
+              <tr>
+                <td colSpan={stages.length + 9} style={{ padding:'40px 0', textAlign:'center' }}>
+                  <Package size={22} color="#cbd5e1" style={{ margin:'0 auto 8px', display:'block' }}/>
+                  <span style={{ fontSize:12, color:'#94a3b8' }}>No hay objetos. Haz clic en <strong>Agregar objeto</strong> para empezar.</span>
+                </td>
+              </tr>
+            ) : visible.map((row, idx) => {
+              const proj = PROJECTS.find(p => p.id === row.projectId);
+              return (
+                <tr key={row.id} style={{ background: idx % 2 === 0 ? '#fff' : '#fafafe' }}>
+                  {/* # */}
+                  <td style={{ ...TD, width:28, textAlign:'center', fontSize:10, color:'#94a3b8',
+                    position:'sticky', left:0, background: idx%2===0?'#fff':'#fafafe', zIndex:1 }}>
+                    <span style={{ display:'block', fontWeight:500, color: proj?.color ?? '#94a3b8', fontSize:9 }}>
+                      {row.projectId || idx+1}
+                    </span>
+                  </td>
+                  {/* Objeto (sticky) */}
+                  <td style={{ ...TD, width:160, position:'sticky', left:28, background: idx%2===0?'#fff':'#fafafe', zIndex:1 }}>
+                    <InlineEdit value={row.objeto} placeholder="t_kfca_…" mono
+                      onSave={v => updateCell(row.id, 'objeto', v)}/>
+                  </td>
+                  {/* Descripción */}
+                  <td style={{ ...TD, maxWidth:200 }}>
+                    <InlineEdit value={row.descripcion} placeholder="Descripción…"
+                      onSave={v => updateCell(row.id, 'descripcion', v)}/>
+                  </td>
+                  {/* Doc link */}
+                  <td style={{ ...TD, width:60 }}>
+                    <LinkCell value={row.documentacion} onSave={v => updateCell(row.id, 'documentacion', v)}/>
+                  </td>
+                  {/* V. Modelo */}
+                  <td style={{ ...TD, width:72 }}>
+                    <InlineEdit value={row.versionModelo} placeholder="3.0.0"
+                      onSave={v => updateCell(row.id, 'versionModelo', v)}/>
+                  </td>
+                  {/* V. Objeto */}
+                  <td style={{ ...TD, width:72 }}>
+                    <InlineEdit value={row.versionObjeto} placeholder="1.0.0"
+                      onSave={v => updateCell(row.id, 'versionObjeto', v)}/>
+                  </td>
+                  {/* Diccionario link */}
+                  <td style={{ ...TD, width:56 }}>
+                    <LinkCell value={row.diccionario} onSave={v => updateCell(row.id, 'diccionario', v)}/>
+                  </td>
+                  {/* Stage cells */}
+                  {stages.map(s => {
+                    const val = row.stages[s.id] ?? '';
+                    const isNum = val !== '' && val !== 'Sí' && val !== 'N/A' && !isNaN(Number(val));
+                    return (
+                      <td key={s.id} style={{ ...TD, width:52, textAlign:'center', padding:0,
+                        background: isNum ? `rgba(220,252,231,${Math.min(1,Number(val))})` : (CELL_BG[val] ?? '#fff'),
+                        cursor:'pointer' }}
+                        onClick={() => cycleStage(row.id, s.id)}
+                        title={`${s.label}: clic para cambiar`}
+                        onContextMenu={e => {
+                          e.preventDefault();
+                          const v = prompt(`Valor para "${s.label}" (Sí / N/A / número 0-1):`, val);
+                          if (v !== null) setStageVal(row.id, s.id, v.trim());
+                        }}>
+                        <span style={{ fontSize: isNum?10:12, fontWeight: 600, color: isNum?'#15803d':(CELL_COLOR[val]??'#111') }}>
+                          {val === 'Sí' ? '✓' : val === 'N/A' ? <span style={{fontSize:8}}>N/A</span> : val || ''}
+                        </span>
+                      </td>
+                    );
+                  })}
+                  {/* Empty add-col placeholder */}
+                  <td style={{ ...TD, width:36 }}/>
+                  {/* Delete row */}
+                  <td style={{ ...TD, width:28 }}>
+                    <button onClick={()=>delRow(row.id)}
+                      style={{ border:'none', background:'none', cursor:'pointer', color:'#cbd5e1', padding:2,
+                        display:'flex', lineHeight:1 }}>
+                      <Trash2 size={12}/>
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      <p style={{ margin:'8px 0 0', fontSize:10, color:'#94a3b8' }}>
+        Clic en una celda de etapa para marcar ✓ / N/A / vacío · Clic derecho para ingresar un valor personalizado (ej: 0.86) · Clic en celda de texto para editar
+      </p>
+
+      {/* Add stage column modal */}
+      {addStage && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(15,23,42,.45)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:200 }}>
+          <div style={{ background:'#fff', borderRadius:14, padding:'24px', width:340, boxShadow:'0 20px 60px rgba(0,0,0,.25)' }}>
+            <p style={{ margin:'0 0 12px', fontWeight:700, fontSize:14, color:'#111' }}>Nueva columna de etapa</p>
+            <input value={newStLbl} onChange={e=>setNewStL(e.target.value)} placeholder="Ej: Aprobación QA"
+              onKeyDown={e=>e.key==='Enter'&&addStageCol()}
+              style={{ ...inp(), marginBottom:14 }} autoFocus/>
+            <div style={{ display:'flex', gap:8, justifyContent:'flex-end' }}>
+              <button onClick={()=>{setAddSt(false);setNewStL('');}} style={btnSec()}>Cancelar</button>
+              <button onClick={addStageCol} style={btnPrimary()}>Agregar</button>
+            </div>
           </div>
-          {filtered.map((it,i)=>{
-            const ec = ESTADO_COLORS[it.estado]??ESTADO_COLORS['En construcción'];
-            const proj = PROJECTS.find(p=>p.id===it.projectId);
-            return (
-              <div key={it.id} style={{ display:'grid', gridTemplateColumns:'80px 110px 1fr 140px 130px 80px 30px', gap:8, alignItems:'center', padding:'10px 14px', borderBottom:i<filtered.length-1?'0.5px solid #f1f5f9':'none', background:i%2===0?'#fff':'#fafafe' }}>
-                <span style={{ fontSize:11, fontWeight:500, color:proj?.color??'#64748b' }}>{it.projectId}</span>
-                <span style={{ fontSize:9, padding:'2px 6px', borderRadius:6, background:'#f1f5f9', color:'#475569', fontWeight:500, display:'inline-block' }}>{it.tipo}</span>
-                <div>
-                  <p style={{ margin:0, fontSize:11, fontWeight:600, color:'#111', fontFamily:'monospace' }}>{it.nombre}</p>
-                  {it.schema && <p style={{ margin:'2px 0 0', fontSize:10, color:'#94a3b8', fontFamily:'monospace' }}>{it.schema}</p>}
-                </div>
-                <span style={{ fontSize:11, color:'#64748b', lineHeight:1.4 }}>{it.descripcion||'—'}</span>
-                <select value={it.estado} onChange={e=>updEstado(it.id,e.target.value)}
-                  style={{ fontSize:10, padding:'3px 6px', borderRadius:7, border:'none', background:ec.bg, color:ec.text, fontWeight:600, cursor:'pointer', appearance:'none', WebkitAppearance:'none' }}>
-                  {INV_ESTADOS.map(s=><option key={s}>{s}</option>)}
-                </select>
-                <span style={{ fontSize:10, color:'#94a3b8' }}>{it.fecha}</span>
-                <button onClick={()=>del(it.id)} style={{ border:'none', background:'none', cursor:'pointer', color:'#94a3b8', padding:2, display:'flex' }}><Trash2 size={12}/></button>
-              </div>
-            );
-          })}
         </div>
       )}
     </div>
