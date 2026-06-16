@@ -456,8 +456,8 @@ export default function Estimaciones({ onViewChange }: EstimacionesProps) {
     setConfigs(updated);
     adminStore.savePlanConfigs(updated);
     setDirty(false);
-    // Navigate to Analytics (PMDashboard) → user clicks "Plan de trabajo" tab
-    onViewChange('analytics');
+    // Navega directamente al Plan de Trabajo con el plan generado
+    onViewChange('plan-trabajo');
   }
 
   function updateEntregable(i: number, ent: typeof currentConfig.entregables[number]) {

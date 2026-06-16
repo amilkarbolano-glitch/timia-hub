@@ -80,7 +80,7 @@ export default function Bitacora() {
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24 }}>
         <div>
-          <h2 style={{ margin: 0, fontSize: 20, fontWeight: 500, color: '#111' }}>Bitácora de cambios</h2>
+          <h2 style={{ margin: 0, fontSize: 20, fontWeight: 500, color: '#111' }}>Alcances y cambios funcionales</h2>
           <p style={{ margin: '3px 0 0', fontSize: 13, color: '#94a3b8' }}>
             Historial de redefiniciones funcionales — campos, reglas, modelos, ETL
           </p>

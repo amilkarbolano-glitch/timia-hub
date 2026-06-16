@@ -68,26 +68,26 @@ export default function Layout({ children, currentView, onViewChange, userRole }
                 </button>
               )}
 
-              {/* Analytics (PM ve su dashboard ejecutivo) */}
+              {/* Dashboard (PM ve su dashboard ejecutivo) */}
               {canAccess(userRole as UserRole,'view_analytics') && (
                 <button onClick={() => onViewChange('analytics')}
                   className={`text-sm font-medium transition-colors ${currentView==='analytics'?'text-primary':'text-slate-600 hover:text-primary'}`}>
-                  Analytics
+                  Dashboard
                 </button>
               )}
 
-              {/* Circuitos BBVA */}
-              {canAccess(userRole as UserRole, 'view_circuitos') && (
+              {/* Circuitos BBVA — OCULTO TEMPORALMENTE (no borrar) */}
+              {/* {canAccess(userRole as UserRole, 'view_circuitos') && (
                 <button onClick={() => onViewChange('circuitos-bbva')}
                   className={`text-sm font-medium transition-colors ${currentView==='circuitos-bbva'?'text-primary':'text-slate-600 hover:text-primary'}`}>
                   Circuitos BBVA
                 </button>
-              )}
+              )} */}
 
-              {/* Bitácora */}
+              {/* Alcances */}
               <button onClick={() => onViewChange('bitacora')}
                 className={`text-sm font-medium transition-colors ${currentView==='bitacora'?'text-primary':'text-slate-600 hover:text-primary'}`}>
-                Bitácora
+                Alcances
               </button>
 
               {/* Estimaciones */}

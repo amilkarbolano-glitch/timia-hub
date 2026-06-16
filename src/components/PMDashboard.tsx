@@ -1,21 +1,23 @@
 import React, { useState } from 'react';
-import { X, Calendar, User, Clock, AlertTriangle, CheckCircle, TrendingUp, Users, Activity, FileText, ShieldAlert, Mail } from 'lucide-react';
+import { X, Calendar, User, Clock, AlertTriangle, TrendingUp, Users, Activity, FileText, Mail, Copy, Check, ExternalLink, ChevronDown } from 'lucide-react';
 import PlanDeTrabajo from './PlanDeTrabajo';
 import { addWorkingDays, workingDaysBetween, formatCODate, ANS_MAX_DAYS, isHoliday, isWorkingDay } from '../utils/colombiaCalendar';
 import { PROJECTS } from '../contexts/AuthContext';
 
 // ─── Datos mock ───────────────────────────────────────────────────────────────
 
+const JIRA_BASE = 'https://jira.globaldevtools.bbva.com/browse/';
+
 const PROJ_DATA = [
-  { id:'FICO',     pct:62, tasks:18, done:11, risk:2,  members:['DH','JG','SR','FA'],   lead:'David Huamán', ref:'Juliana Garzón',  area:'Juan Arévalo', jira:'DECRONOS-1997', lastCommit:'2026-06-03', priority:'Alta',    startDate:'2026-01-15' },
-  { id:'NGA',      pct:91, tasks:12, done:11, risk:0,  members:['JG','CS','CC','JV'],   lead:'Juliana Garzón', ref:null,             area:'Juan Arévalo', jira:'DECRONOS-1400', lastCommit:'2026-06-02', priority:'Media',   startDate:'2026-02-01' },
-  { id:'CRONOS',   pct:80, tasks:22, done:18, risk:1,  members:['EB','JA2','LB','AU'],  lead:'Eric Buitrago', ref:null,             area:'Juan Arévalo', jira:'DECRONOS-1682', lastCommit:'2026-06-03', priority:'Alta',    startDate:'2026-01-10' },
-  { id:'SDM1',     pct:55, tasks:14, done:8,  risk:2,  members:['OB','MM','JM','YB'],   lead:'Omar Bonilla',  ref:null,             area:'Diego Sánchez', jira:'SDM-0412',     lastCommit:'2026-06-01', priority:'Alta',    startDate:'2026-03-01' },
-  { id:'SDM2',     pct:70, tasks:20, done:14, risk:1,  members:['GS','FC','JG2','JM2'], lead:'Gustavo Sandoval', ref:'Daniel Gómez', area:'Diego Sánchez', jira:'SDM-0488',   lastCommit:'2026-06-02', priority:'Media',   startDate:'2026-02-15' },
-  { id:'MURIC',    pct:72, tasks:16, done:12, risk:1,  members:['EH','JJ','CG','CB'],   lead:'Edson Huerta',  ref:'Daniel Gómez',  area:'Diego Sánchez', jira:'MUR-0231',     lastCommit:'2026-06-01', priority:'Media',   startDate:'2026-02-01' },
-  { id:'BCBS239',  pct:48, tasks:25, done:12, risk:3,  members:['MP','DA','YM','SS'],   lead:'Mauricio Pajoy', ref:null,            area:'Diego Sánchez', jira:'BCB-0189',     lastCommit:'2026-05-30', priority:'Crítica', startDate:'2025-11-01' },
-  { id:'BRICKELL', pct:88, tasks:8,  done:7,  risk:0,  members:['EA'],                  lead:'Emanuel Arteaga', ref:null,           area:'Diego Sánchez', jira:'BRK-0044',     lastCommit:'2026-06-03', priority:'Baja',    startDate:'2026-04-01' },
-  { id:'OPTIM',    pct:85, tasks:10, done:9,  risk:0,  members:['BF','PA'],             lead:'Bryan Fuertes', ref:null,             area:'David Huamán',  jira:'OPT-0055',     lastCommit:'2026-06-02', priority:'Media',   startDate:'2026-03-15' },
+  { id:'FICO',     pct:62, tasks:18, done:11, risk:2,  members:['David Huamán','Juliana Garzón','Sergio Rodriguez','Fabrizio Atiquipa'],   lead:'David Huamán',     ref:'Juliana Garzón',  area:'Juan Arévalo',  jira:'DECRONOS-1997', priority:'Alta',    startDate:'2026-01-15', desc:'Gobierno y calidad de datos · plataforma FICO LIVE/WORK' },
+  { id:'NGA',      pct:91, tasks:12, done:11, risk:0,  members:['Juliana Garzón','Carlos Suárez','Camila Castro','Juan Vargas'],            lead:'Juliana Garzón',   ref:null,              area:'Juan Arévalo',  jira:'DECRONOS-1400', priority:'Media',   startDate:'2026-02-01', desc:'Ingesta y transformación de datos NGA · ETL campos' },
+  { id:'CRONOS',   pct:80, tasks:22, done:18, risk:1,  members:['Eric Buitrago','Jorge Acosta','Lina Bernal','Alejandro Uribe'],            lead:'Eric Buitrago',    ref:null,              area:'Juan Arévalo',  jira:'DECRONOS-1682', priority:'Alta',    startDate:'2026-01-10', desc:'Reglas Hammurabi · pipeline Spark · control-m' },
+  { id:'SDM1',     pct:55, tasks:14, done:8,  risk:2,  members:['Omar Bonilla','Mónica Mejía','Javier Moreno','Yurany Benavides'],          lead:'Omar Bonilla',     ref:null,              area:'Diego Sánchez', jira:'SDM-0412',     priority:'Alta',    startDate:'2026-03-01', desc:'Calidad datos SDM · entorno Work certificación' },
+  { id:'SDM2',     pct:70, tasks:20, done:14, risk:1,  members:['Gustavo Sandoval','Felipe Cárdenas','Jorge Gil','Juan Muñoz'],             lead:'Gustavo Sandoval', ref:'Daniel Gómez',   area:'Diego Sánchez', jira:'SDM-0488',     priority:'Media',   startDate:'2026-02-15', desc:'Procesamiento SDM2 · reglas calidad · pruebas entorno' },
+  { id:'MURIC',    pct:72, tasks:16, done:12, risk:1,  members:['Edson Huerta','Juan Jiménez','Camilo García','Carlos Bolaño'],             lead:'Edson Huerta',     ref:'Daniel Gómez',   area:'Diego Sánchez', jira:'MUR-0231',     priority:'Media',   startDate:'2026-02-01', desc:'Mutuos y recursos IC · certificación QA · ANS' },
+  { id:'BCBS239',  pct:48, tasks:25, done:12, risk:3,  members:['Mauricio Pajoy','Diego Arango','Yolanda Méndez','Santiago Soto'],          lead:'Mauricio Pajoy',   ref:null,              area:'Diego Sánchez', jira:'BCB-0189',     priority:'Crítica', startDate:'2025-11-01', desc:'Regulatorio BCBS239 · despliegue Control-M producción' },
+  { id:'BRICKELL', pct:88, tasks:8,  done:7,  risk:0,  members:['Emanuel Arteaga'],                                                         lead:'Emanuel Arteaga',  ref:null,              area:'Diego Sánchez', jira:'BRK-0044',     priority:'Baja',    startDate:'2026-04-01', desc:'Integración Brickell · validación campos iniciales' },
+  { id:'OPTIM',    pct:85, tasks:10, done:9,  risk:0,  members:['Bryan Fuertes','Paula Andrade'],                                           lead:'Bryan Fuertes',    ref:null,              area:'David Huamán',  jira:'OPT-0055',     priority:'Media',   startDate:'2026-03-15', desc:'Optimización fábrica de datos · Credicorp capital' },
 ];
 
 const ANS_TASKS = [
@@ -140,10 +142,20 @@ function ProjectModal({ proj, onClose }: { proj:typeof PROJ_DATA[0]; onClose:()=
           </div>
         </div>
 
-        {/* Jira */}
-        <div style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 12px', background:'#eff6ff', borderRadius:8 }}>
-          <span style={{ fontSize:11, color:'#1d4ed8' }}>Jira:</span>
-          <span style={{ fontSize:11, fontWeight:500, color:'#1d4ed8' }}>{proj.jira}</span>
+        {/* Equipo completo */}
+        <div style={{ marginBottom:14 }}>
+          <p style={{ margin:'0 0 6px', fontSize:10, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'.05em' }}>Equipo del proyecto</p>
+          <div style={{ display:'flex', flexWrap:'wrap', gap:5 }}>
+            {proj.members.map((m,i) => (
+              <span key={i} style={{ fontSize:11, padding:'3px 9px', borderRadius:8, background:'#f8fafc', color:'#374151', border:'0.5px solid #e2e8f0' }}>{m}</span>
+            ))}
+          </div>
+        </div>
+
+        {/* Jira con copy */}
+        <div style={{ display:'flex', alignItems:'center', gap:8, padding:'9px 12px', background:'#eff6ff', borderRadius:8 }}>
+          <span style={{ fontSize:11, color:'#1d4ed8', fontWeight:500 }}>Jira:</span>
+          <CopyJira jira={proj.jira}/>
         </div>
       </div>
     </Modal>
@@ -263,65 +275,200 @@ function AnsModal({ task, onClose }: { task:typeof ANS_TASKS[0]; onClose:()=>voi
 // ─── Vistas ───────────────────────────────────────────────────────────────────
 
 function ViewResumen() {
-  const teams = [
-    { lead:'Juan Arévalo', initials:'JA', color:'#dc2626', projs:'NGA · CRONOS · FICO · PINTO · QA', n:19, pct:78 },
-    { lead:'Diego Sánchez', initials:'DS', color:'#2563eb', projs:'SDM1 · SDM2 · MURIC · BRICKELL · BCBS239', n:25, pct:68 },
-    { lead:'David Huamán', initials:'DH', color:'#0369a1', projs:'Optimización · Fábrica · Credicorp', n:9, pct:85 },
+  const totalPct = Math.round(PROJ_DATA.reduce((a,p)=>a+p.pct,0)/PROJ_DATA.length);
+  const conRiesgo = PROJ_DATA.filter(p=>p.risk>0).length;
+  const criticos  = PROJ_DATA.filter(p=>p.risk>1).length;
+  const totalDone = PROJ_DATA.reduce((a,p)=>a+p.done,0);
+  const totalTasks = PROJ_DATA.reduce((a,p)=>a+p.tasks,0);
+
+  const stats = [
+    { v:'50',         label:'Personas activas',       sub:'↑ 3 incorporaciones este mes',          color:'#dc2626' },
+    { v:String(PROJ_DATA.length), label:'Proyectos activos', sub:`${criticos} con bloqueantes · ${conRiesgo} en alerta`, color:'#111' },
+    { v:`${totalPct}%`, label:'Avance global promedio', sub:`${totalDone} de ${totalTasks} tareas completadas`, color:'#059669' },
+    { v:String(ANS_TASKS.filter(t=>semaforo(t).remaining<0).length + ANS_TASKS.filter(t=>{const s=semaforo(t); return s.remaining>=0&&s.remaining<=1;}).length),
+      label:'Tareas ANS en riesgo', sub:`${ANS_TASKS.filter(t=>semaforo(t).remaining<0).length} vencidas · ${ANS_TASKS.filter(t=>{const s=semaforo(t);return s.remaining>=0&&s.remaining<=1;}).length} por vencer`,
+      color:'#d97706' },
   ];
+
+  const teams = [
+    { lead:'Juan Arévalo', initials:'JA', color:'#dc2626',
+      projs: PROJ_DATA.filter(p=>p.area==='Juan Arévalo'),
+      note: 'NGA · CRONOS · FICO' },
+    { lead:'Diego Sánchez', initials:'DS', color:'#2563eb',
+      projs: PROJ_DATA.filter(p=>p.area==='Diego Sánchez'),
+      note: 'SDM1 · SDM2 · MURIC · BCBS239 · BRICKELL' },
+    { lead:'David Huamán', initials:'DH', color:'#0369a1',
+      projs: PROJ_DATA.filter(p=>p.area==='David Huamán'),
+      note: 'OPTIM · Fábrica · Credicorp' },
+  ];
+
   return (
     <div>
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:8, marginBottom:16 }}>
-        {[['50','Personas activas','#dc2626','↑ 3 este mes'],['13','Proyectos activos','#111','2 con riesgo ANS'],['74%','Avance global','#059669','Estimado: 75%'],['6','Tareas en riesgo','#d97706','De 47 en progreso']].map(([v,l,c,d])=>(
-          <div key={String(l)} style={{ background:'#fff', border:'0.5px solid #e2e8f0', borderRadius:10, padding:'12px 14px' }}>
-            <p style={{ margin:'0 0 2px', fontSize:22, fontWeight:500, color:String(c) }}>{v}</p>
-            <p style={{ margin:0, fontSize:11, color:'#94a3b8' }}>{l}</p>
-            <p style={{ margin:'4px 0 0', fontSize:11, color:'#64748b' }}>{d}</p>
+      {/* KPIs principales */}
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:10, marginBottom:20 }}>
+        {stats.map(s => (
+          <div key={s.label} style={{ background:'#fff', border:'0.5px solid #e2e8f0', borderRadius:12, padding:'14px 16px' }}>
+            <p style={{ margin:'0 0 2px', fontSize:24, fontWeight:500, color:s.color, lineHeight:1 }}>{s.v}</p>
+            <p style={{ margin:'4px 0 2px', fontSize:12, fontWeight:500, color:'#374151' }}>{s.label}</p>
+            <p style={{ margin:0, fontSize:11, color:'#94a3b8' }}>{s.sub}</p>
           </div>
         ))}
       </div>
-      <p style={{ fontSize:11, fontWeight:500, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'.05em', margin:'0 0 8px' }}>Estado por equipo</p>
-      {teams.map(t => (
-        <div key={t.lead} style={{ background:'#fff', border:'0.5px solid #e2e8f0', borderRadius:10, padding:'12px 14px', marginBottom:8, display:'flex', alignItems:'center', gap:12 }}>
-          <Avatar initials={t.initials} color={t.color} size={34}/>
-          <div style={{ flex:1, minWidth:0 }}>
-            <p style={{ margin:'0 0 1px', fontSize:12, fontWeight:500, color:'#111' }}>{t.lead}</p>
-            <p style={{ margin:0, fontSize:11, color:'#94a3b8' }}>{t.projs} · {t.n} personas</p>
-          </div>
-          <div style={{ textAlign:'right', flexShrink:0 }}>
-            <p style={{ margin:'0 0 4px', fontSize:13, fontWeight:500, color: t.pct>=80?'#059669':t.pct>=65?'#d97706':'#dc2626' }}>{t.pct}%</p>
-            <div style={{ width:80, height:4, background:'#f1f5f9', borderRadius:4, overflow:'hidden' }}>
-              <div style={{ width:`${t.pct}%`, height:'100%', background:t.pct>=80?'#059669':t.pct>=65?'#d97706':'#dc2626' }}/>
+
+      {/* Avance por equipo */}
+      <p style={{ fontSize:11, fontWeight:500, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'.05em', margin:'0 0 10px' }}>Avance por área técnica</p>
+      {teams.map(t => {
+        const pct = t.projs.length > 0 ? Math.round(t.projs.reduce((a,p)=>a+p.pct,0)/t.projs.length) : 0;
+        const personas = t.projs.reduce((a,p)=>a+p.members.length,0);
+        return (
+          <div key={t.lead} style={{ background:'#fff', border:'0.5px solid #e2e8f0', borderRadius:12, padding:'14px 16px', marginBottom:8 }}>
+            <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+              <Avatar initials={t.initials} color={t.color} size={36}/>
+              <div style={{ flex:1, minWidth:0 }}>
+                <p style={{ margin:'0 0 2px', fontSize:13, fontWeight:500, color:'#111' }}>{t.lead}</p>
+                <p style={{ margin:'0 0 6px', fontSize:11, color:'#94a3b8' }}>{t.note} · {personas} personas · {t.projs.length} proyectos</p>
+                <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+                  {t.projs.map(p => (
+                    <span key={p.id} style={{ fontSize:10, padding:'2px 7px', borderRadius:6, background:p.risk>1?'#fef2f2':p.risk>0?'#fef9c3':'#f0fdf4', color:p.risk>1?'#991b1b':p.risk>0?'#a16207':'#15803d', fontWeight:500 }}>
+                      {p.id} {p.pct}%
+                    </span>
+                  ))}
+                </div>
+              </div>
+              <div style={{ textAlign:'right', flexShrink:0, minWidth:90 }}>
+                <p style={{ margin:'0 0 5px', fontSize:15, fontWeight:500, color:pct>=80?'#059669':pct>=65?'#d97706':'#dc2626' }}>{pct}% prom.</p>
+                <div style={{ width:90, height:5, background:'#f1f5f9', borderRadius:5, overflow:'hidden' }}>
+                  <div style={{ width:`${pct}%`, height:'100%', background:pct>=80?'#059669':pct>=65?'#d97706':'#dc2626', borderRadius:5 }}/>
+                </div>
+                <p style={{ margin:'4px 0 0', fontSize:10, color:'#94a3b8' }}>% tareas completadas</p>
+              </div>
             </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
 
+function CopyJira({ jira }: { jira: string }) {
+  const [copied, setCopied] = useState(false);
+  const url = JIRA_BASE + jira;
+  function doCopy(e: React.MouseEvent) {
+    e.stopPropagation();
+    navigator.clipboard?.writeText(url).catch(()=>{});
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+  return (
+    <div style={{ display:'flex', alignItems:'center', gap:5 }} onClick={e=>e.stopPropagation()}>
+      <a href={url} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()}
+        style={{ fontSize:11, color:'#1d4ed8', textDecoration:'none', display:'flex', alignItems:'center', gap:3 }}>
+        {jira} <ExternalLink size={10}/>
+      </a>
+      <button onClick={doCopy} title="Copiar URL Jira"
+        style={{ border:'none', background:'none', cursor:'pointer', color:copied?'#059669':'#94a3b8', padding:2, display:'flex' }}>
+        {copied ? <Check size={11}/> : <Copy size={11}/>}
+      </button>
+    </div>
+  );
+}
+
+const PRIORITY_STYLE: Record<string, { bg: string; color: string }> = {
+  Crítica: { bg:'#fef2f2', color:'#991b1b' },
+  Alta:    { bg:'#fef9c3', color:'#a16207' },
+  Media:   { bg:'#eff6ff', color:'#1d4ed8' },
+  Baja:    { bg:'#f0fdf4', color:'#15803d' },
+};
+
 function ViewProyectos({ onSelect }: { onSelect:(p:typeof PROJ_DATA[0])=>void }) {
+  const [filterArea, setFilterArea] = useState('');
+  const filtered = filterArea ? PROJ_DATA.filter(p=>p.area===filterArea) : PROJ_DATA;
+  const areas = Array.from(new Set(PROJ_DATA.map(p=>p.area)));
+
   return (
     <div>
-      <p style={{ fontSize:11, fontWeight:500, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'.05em', margin:'0 0 10px' }}>Click en un proyecto para ver detalle</p>
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(240px, 1fr))', gap:10 }}>
-        {PROJ_DATA.map(p => {
+      {/* Filtro por área */}
+      <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:14 }}>
+        <span style={{ fontSize:11, color:'#94a3b8', fontWeight:500 }}>Filtrar por área:</span>
+        {['', ...areas].map(a => (
+          <button key={a||'all'} onClick={()=>setFilterArea(a)}
+            style={{ fontSize:11, padding:'3px 10px', borderRadius:6, border:'0.5px solid', cursor:'pointer',
+              borderColor: filterArea===a ? '#dc2626':'#e2e8f0',
+              background: filterArea===a ? '#fef2f2':'#fff',
+              color: filterArea===a ? '#dc2626':'#64748b',
+              fontWeight: filterArea===a ? 600 : 400 }}>
+            {a || 'Todos'}
+          </button>
+        ))}
+      </div>
+
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(310px, 1fr))', gap:12 }}>
+        {filtered.map(p => {
           const color = getProjectColor(p.id);
-          const status = p.risk > 0 ? (p.risk > 1 ? 'riesgo' : 'alerta') : 'ok';
+          const ps = PRIORITY_STYLE[p.priority] ?? PRIORITY_STYLE.Media;
           return (
-            <button key={p.id} onClick={()=>onSelect(p)} style={{ background:'#fff', border:`0.5px solid ${p.risk>1?'#fecaca':p.risk>0?'#fde68a':'#e2e8f0'}`, borderRadius:10, padding:12, textAlign:'left', cursor:'pointer', transition:'border .15s' }}>
-              <div style={{ display:'flex', justifyContent:'space-between', marginBottom:8 }}>
-                <span style={{ fontSize:12, fontWeight:500, color:'#111' }}>{p.id}</span>
-                <span style={{ fontSize:11, fontWeight:500, color }}>{p.pct}%</span>
+            <button key={p.id} onClick={()=>onSelect(p)} style={{
+              background:'#fff', border:`0.5px solid ${p.risk>1?'#fecaca':p.risk>0?'#fde68a':'#e2e8f0'}`,
+              borderRadius:12, padding:'14px 16px', textAlign:'left', cursor:'pointer',
+              transition:'box-shadow .15s', boxShadow:'0 1px 3px rgba(0,0,0,.04)',
+            }}>
+              {/* Header */}
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:6 }}>
+                <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                  <div style={{ width:32, height:32, borderRadius:8, background:color+'18', display:'flex', alignItems:'center', justifyContent:'center' }}>
+                    <span style={{ fontSize:11, fontWeight:700, color }}>{p.id.slice(0,2)}</span>
+                  </div>
+                  <div>
+                    <p style={{ margin:0, fontSize:13, fontWeight:600, color:'#111' }}>{p.id}</p>
+                    <p style={{ margin:0, fontSize:10, color:'#94a3b8' }}>{p.area}</p>
+                  </div>
+                </div>
+                <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                  <span style={{ fontSize:10, padding:'2px 8px', borderRadius:6, background:ps.bg, color:ps.color, fontWeight:600 }}>{p.priority}</span>
+                  <span style={{ fontSize:14, fontWeight:600, color }}>{p.pct}%</span>
+                </div>
               </div>
-              <div style={{ height:4, background:'#f1f5f9', borderRadius:4, overflow:'hidden', marginBottom:8 }}>
-                <div style={{ width:`${p.pct}%`, height:'100%', background:color }}/>
+
+              {/* Descripción */}
+              <p style={{ margin:'0 0 8px', fontSize:11, color:'#64748b', lineHeight:1.4 }}>{p.desc}</p>
+
+              {/* Barra progreso */}
+              <div style={{ height:5, background:'#f1f5f9', borderRadius:5, overflow:'hidden', marginBottom:10 }}>
+                <div style={{ width:`${p.pct}%`, height:'100%', background:color, borderRadius:5 }}/>
               </div>
-              <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
-                <span style={{ fontSize:10, padding:'2px 7px', borderRadius:8, background:status==='riesgo'?'#fef2f2':status==='alerta'?'#fefce8':'#f0fdf4', color:status==='riesgo'?'#991b1b':status==='alerta'?'#a16207':'#15803d' }}>
-                  {status==='riesgo'?`⚠ ${p.risk} riesgo`:status==='alerta'?'⚠ leve':'✓ en tiempo'}
-                </span>
-                <span style={{ fontSize:10, padding:'2px 7px', borderRadius:8, background:'#f1f5f9', color:'#64748b' }}>{p.members.length} dev</span>
+
+              {/* Personas */}
+              <div style={{ marginBottom:10 }}>
+                <p style={{ margin:'0 0 4px', fontSize:10, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'.04em' }}>Equipo</p>
+                <div style={{ display:'flex', flexWrap:'wrap', gap:4 }}>
+                  {p.members.map((m,i) => (
+                    <span key={i} style={{ fontSize:10, padding:'2px 7px', borderRadius:6, background:'#f8fafc', color:'#374151', border:'0.5px solid #e2e8f0' }}>
+                      {m.split(' ')[0]}
+                    </span>
+                  ))}
+                </div>
               </div>
+
+              {/* Footer: líder + Jira + estado */}
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', paddingTop:8, borderTop:'0.5px solid #f1f5f9' }}>
+                <div style={{ fontSize:10, color:'#64748b' }}>
+                  <span style={{ color:'#94a3b8' }}>Líder: </span>{p.lead.split(' ')[0]}
+                  {p.ref && <span> · <span style={{ color:'#94a3b8' }}>Ref: </span>{p.ref.split(' ')[0]}</span>}
+                </div>
+                <div onClick={e=>e.stopPropagation()}>
+                  <CopyJira jira={p.jira}/>
+                </div>
+              </div>
+
+              {/* Estado riesgo */}
+              {p.risk > 0 && (
+                <div style={{ marginTop:8, padding:'5px 8px', borderRadius:6, background:p.risk>1?'#fef2f2':'#fef9c3', display:'flex', alignItems:'center', gap:5 }}>
+                  <AlertTriangle size={11} color={p.risk>1?'#dc2626':'#d97706'}/>
+                  <span style={{ fontSize:10, color:p.risk>1?'#991b1b':'#a16207', fontWeight:500 }}>
+                    {p.risk} bloqueante{p.risk>1?'s':''} activo{p.risk>1?'s':''}
+                  </span>
+                </div>
+              )}
             </button>
           );
         })}
@@ -544,59 +691,178 @@ function ViewRiesgo() {
   );
 }
 
-// ─── Standup mailer ───────────────────────────────────────────────────────────
+// ─── Standup mailer (redesign PM-pro) ────────────────────────────────────────
 
 function StandupModal({ onClose }: { onClose: () => void }) {
-  const today = new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-  const vencidos = ANS_TASKS.filter(t => semaforo(t).remaining < 0);
-  const alertas  = ANS_TASKS.filter(t => { const s = semaforo(t); return s.remaining >= 0 && s.remaining <= 1; });
-  const bloqueados = PROJ_DATA.filter(p => p.risk > 0);
-  const promedio = Math.round(PROJ_DATA.reduce((a, p) => a + p.pct, 0) / PROJ_DATA.length);
+  const [scope, setScope] = useState<'all' | string>('all');
+  const [copied, setCopied] = useState(false);
 
-  const standupText = `[TIMIA HUB] Standup diario — ${today}
+  const today    = new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  const todayFmt = new Date().toLocaleDateString('es-CO', { day:'2-digit', month:'short', year:'numeric' });
+  const hour     = new Date().toLocaleTimeString('es-CO', { hour:'2-digit', minute:'2-digit' });
 
-📊 RESUMEN GENERAL
-• Avance global: ${promedio}% (${PROJ_DATA.length} proyectos activos)
-• Proyectos con riesgo: ${bloqueados.length}/${PROJ_DATA.length}
+  const scopeProjs = scope === 'all' ? PROJ_DATA : PROJ_DATA.filter(p => p.id === scope);
+  const scopeAns   = scope === 'all' ? ANS_TASKS  : ANS_TASKS.filter(t => t.project === scope);
+
+  const vencidos    = scopeAns.filter(t => semaforo(t).remaining < 0);
+  const alertasAns  = scopeAns.filter(t => { const s = semaforo(t); return s.remaining >= 0 && s.remaining <= 1; });
+  const bloqueados  = scopeProjs.filter(p => p.risk > 0);
+  const promedio    = scopeProjs.length > 0 ? Math.round(scopeProjs.reduce((a,p)=>a+p.pct,0)/scopeProjs.length) : 0;
+
+  const scopeName = scope === 'all' ? 'Todos los proyectos' : `Proyecto ${scope}`;
+  const proj1 = scope !== 'all' ? PROJ_DATA.find(p=>p.id===scope) : null;
+
+  const standupText =
+`[TIMIA HUB] Standup · ${todayFmt} — ${scopeName}
+──────────────────────────────────────────────
+
+📊 RESUMEN EJECUTIVO
+  Avance ${scope==='all'?'global promedio':'del proyecto'}: ${promedio}%
+  Proyectos / alcance: ${scopeProjs.length}${scope==='all'?' activos':''}
+  Tareas con riesgo ANS: ${vencidos.length} vencidas · ${alertasAns.length} por vencer
+  Bloqueantes activos: ${bloqueados.length}
 
 ${vencidos.length > 0 ? `🔴 ANS VENCIDOS (${vencidos.length})
-${vencidos.map(t => `• ${t.project} — ${t.task} (${t.responsable})`).join('\n')}
+${vencidos.map(t=>`  • [${t.project}] ${t.task}\n    → ${t.responsable} · Jira: ${t.jira}`).join('\n\n')}
 
-` : ''}${alertas.length > 0 ? `⚠️ ANS EN ALERTA (${alertas.length})
-${alertas.map(t => `• ${t.project} — ${t.task} (${t.responsable})`).join('\n')}
+` : ''}${alertasAns.length > 0 ? `⚠️  ANS EN ALERTA (${alertasAns.length})
+${alertasAns.map(t=>`  • [${t.project}] ${t.task}\n    → ${t.responsable} · Jira: ${t.jira}`).join('\n\n')}
 
 ` : ''}📋 ESTADO POR PROYECTO
-${PROJ_DATA.map(p => `• ${p.id}: ${p.pct}%${p.risk > 0 ? ` ⚠ ${p.risk} bloqueante${p.risk > 1 ? 's' : ''}` : ' ✓'}`).join('\n')}
+${scopeProjs.map(p=>`  ${p.risk>1?'🔴':p.risk>0?'🟡':'🟢'} ${p.id.padEnd(10)} ${String(p.pct).padStart(3)}%  ${p.risk>0?`⚠ ${p.risk} bloqueante${p.risk>1?'s':''}`:' ✓ En tiempo'}  ·  Líder: ${p.lead.split(' ')[0]}`).join('\n')}
 
-${bloqueados.length > 0 ? `🚧 BLOQUEANTES ACTIVOS
-${bloqueados.map(p => `• ${p.id} (${p.area}): ${p.risk} ítem${p.risk > 1 ? 's' : ''} bloqueado${p.risk > 1 ? 's' : ''}`).join('\n')}
+${bloqueados.length > 0 ? `🚧 ACCIONES REQUERIDAS
+${bloqueados.map(p=>`  • ${p.id}: ${p.risk} bloqueante${p.risk>1?'s':''} — escalar con ${p.area}`).join('\n')}
 
-` : ''}— Generado por Timia Hub · ${new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}`;
+` : ''}──────────────────────────────────────────────
+Generado por Timia Hub · ${hour} · ${today}`;
 
-  const mailtoHref = `mailto:?subject=${encodeURIComponent(`[TIMIA] Standup ${today}`)}&body=${encodeURIComponent(standupText)}`;
+  const mailtoHref = `mailto:?subject=${encodeURIComponent(`[TIMIA] Standup ${todayFmt}${scope!=='all'?' — '+scope:''}`)}&body=${encodeURIComponent(standupText)}`;
+
+  function doCopy() {
+    navigator.clipboard?.writeText(standupText).catch(()=>{});
+    setCopied(true);
+    setTimeout(()=>setCopied(false), 2500);
+  }
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', zIndex: 999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onClick={onClose}>
-      <div style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 580, maxHeight: '90vh', overflow: 'auto', position: 'relative' }} onClick={e => e.stopPropagation()}>
-        <div style={{ padding: '18px 22px', borderBottom: '0.5px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <h3 style={{ margin: 0, fontSize: 14, fontWeight: 500 }}>Standup diario</h3>
-            <p style={{ margin: '2px 0 0', fontSize: 11, color: '#94a3b8' }}>{today}</p>
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:999, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }} onClick={onClose}>
+      <div style={{ background:'#fff', borderRadius:18, width:'100%', maxWidth:660, maxHeight:'92vh', overflow:'auto', position:'relative', boxShadow:'0 20px 60px rgba(0,0,0,.18)' }} onClick={e=>e.stopPropagation()}>
+
+        {/* Header con branding */}
+        <div style={{ background:'linear-gradient(135deg,#0f172a,#1e293b)', borderRadius:'18px 18px 0 0', padding:'20px 24px' }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
+            <div>
+              <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:4 }}>
+                <div style={{ width:6, height:6, borderRadius:'50%', background:'#dc2626' }}/>
+                <span style={{ fontSize:10, color:'#94a3b8', fontWeight:500, letterSpacing:'.08em', textTransform:'uppercase' }}>TIMIA HUB · Daily Standup</span>
+              </div>
+              <h3 style={{ margin:0, fontSize:17, fontWeight:600, color:'#fff' }}>Standup diario</h3>
+              <p style={{ margin:'3px 0 0', fontSize:11, color:'#64748b' }}>{today}</p>
+            </div>
+            <button onClick={onClose} style={{ border:'none', background:'rgba(255,255,255,.08)', cursor:'pointer', color:'#94a3b8', padding:'6px 8px', borderRadius:8, display:'flex' }}>
+              <X size={15}/>
+            </button>
           </div>
-          <button onClick={onClose} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#94a3b8' }}><X size={16}/></button>
+
+          {/* KPIs rápidos */}
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:8, marginTop:16 }}>
+            {[
+              { v:`${promedio}%`, l:'Avance', c:'#34d399' },
+              { v:String(scopeProjs.length), l:'Proyectos', c:'#60a5fa' },
+              { v:String(vencidos.length), l:'ANS vencidos', c:vencidos.length>0?'#f87171':'#34d399' },
+              { v:String(bloqueados.length), l:'Bloqueantes', c:bloqueados.length>0?'#fbbf24':'#34d399' },
+            ].map(k => (
+              <div key={k.l} style={{ background:'rgba(255,255,255,.06)', borderRadius:10, padding:'9px 10px' }}>
+                <p style={{ margin:0, fontSize:18, fontWeight:600, color:k.c }}>{k.v}</p>
+                <p style={{ margin:'2px 0 0', fontSize:9, color:'#64748b', textTransform:'uppercase', letterSpacing:'.05em' }}>{k.l}</p>
+              </div>
+            ))}
+          </div>
         </div>
-        <div style={{ padding: '16px 22px' }}>
-          <pre style={{ margin: 0, fontSize: 11, color: '#374151', lineHeight: 1.7, whiteSpace: 'pre-wrap', background: '#f8fafc', padding: '14px 16px', borderRadius: 10, fontFamily: 'monospace', border: '0.5px solid #e2e8f0', maxHeight: 380, overflowY: 'auto' }}>
-            {standupText}
-          </pre>
-          <div style={{ display: 'flex', gap: 8, marginTop: 14, justifyContent: 'flex-end' }}>
-            <button onClick={() => { navigator.clipboard?.writeText(standupText); }}
-              style={{ padding: '8px 14px', fontSize: 12, border: '0.5px solid #e2e8f0', borderRadius: 7, background: '#fff', cursor: 'pointer' }}>
-              Copiar
+
+        <div style={{ padding:'18px 24px' }}>
+          {/* Selector de alcance */}
+          <div style={{ marginBottom:14 }}>
+            <p style={{ margin:'0 0 6px', fontSize:11, color:'#94a3b8', fontWeight:500, textTransform:'uppercase', letterSpacing:'.05em' }}>Alcance del standup</p>
+            <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
+              {[{id:'all',label:'Todos los proyectos'}, ...PROJ_DATA.map(p=>({id:p.id,label:p.id}))].map(opt => (
+                <button key={opt.id} onClick={()=>setScope(opt.id)}
+                  style={{ fontSize:11, padding:'4px 12px', borderRadius:8, border:'0.5px solid', cursor:'pointer',
+                    borderColor: scope===opt.id ? '#dc2626':'#e2e8f0',
+                    background:  scope===opt.id ? '#fef2f2':'#f8fafc',
+                    color:       scope===opt.id ? '#dc2626':'#64748b',
+                    fontWeight:  scope===opt.id ? 600 : 400 }}>
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Vista visual del standup */}
+          <div style={{ background:'#f8fafc', borderRadius:12, border:'0.5px solid #e2e8f0', padding:'14px 16px', marginBottom:14 }}>
+
+            {/* Proyectos */}
+            <p style={{ margin:'0 0 8px', fontSize:10, color:'#94a3b8', fontWeight:600, textTransform:'uppercase', letterSpacing:'.06em' }}>Estado por proyecto</p>
+            <div style={{ display:'grid', gap:5 }}>
+              {scopeProjs.map(p => {
+                const c = getProjectColor(p.id);
+                return (
+                  <div key={p.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'7px 10px', background:'#fff', borderRadius:8, border:`0.5px solid ${p.risk>1?'#fecaca':p.risk>0?'#fde68a':'#e2e8f0'}` }}>
+                    <div style={{ width:28, height:28, borderRadius:7, background:c+'18', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                      <span style={{ fontSize:9, fontWeight:700, color:c }}>{p.id.slice(0,2)}</span>
+                    </div>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                        <span style={{ fontSize:12, fontWeight:600, color:'#111' }}>{p.id}</span>
+                        <span style={{ fontSize:10, padding:'1px 6px', borderRadius:5, background:PRIORITY_STYLE[p.priority]?.bg, color:PRIORITY_STYLE[p.priority]?.color }}>{p.priority}</span>
+                        {p.risk > 0 && <span style={{ fontSize:10, color:p.risk>1?'#dc2626':'#d97706' }}>⚠ {p.risk} bloq.</span>}
+                      </div>
+                      <div style={{ height:3, background:'#f1f5f9', borderRadius:3, overflow:'hidden', marginTop:4 }}>
+                        <div style={{ width:`${p.pct}%`, height:'100%', background:c, borderRadius:3 }}/>
+                      </div>
+                    </div>
+                    <span style={{ fontSize:13, fontWeight:600, color:c, flexShrink:0 }}>{p.pct}%</span>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* ANS */}
+            {(vencidos.length > 0 || alertasAns.length > 0) && (
+              <div style={{ marginTop:12 }}>
+                <p style={{ margin:'0 0 6px', fontSize:10, color:'#94a3b8', fontWeight:600, textTransform:'uppercase', letterSpacing:'.06em' }}>Alertas ANS</p>
+                {[...vencidos.map(t=>({...t,tipo:'vencido'})), ...alertasAns.map(t=>({...t,tipo:'alerta'}))].map(t => (
+                  <div key={t.id} style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 10px', marginBottom:4, background:'#fff', borderRadius:7, border:`0.5px solid ${t.tipo==='vencido'?'#fecaca':'#fde68a'}` }}>
+                    <span style={{ fontSize:12 }}>{t.tipo==='vencido'?'🔴':'⚠️'}</span>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <p style={{ margin:0, fontSize:11, fontWeight:500, color:'#111', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{t.task}</p>
+                      <p style={{ margin:0, fontSize:10, color:'#94a3b8' }}>{t.project} · {t.responsable}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Texto plano */}
+          <details style={{ marginBottom:14 }}>
+            <summary style={{ fontSize:11, color:'#94a3b8', cursor:'pointer', userSelect:'none', marginBottom:6 }}>Ver texto para copiar / enviar por correo</summary>
+            <pre style={{ margin:0, fontSize:10, color:'#374151', lineHeight:1.7, whiteSpace:'pre-wrap', background:'#f8fafc', padding:'12px 14px', borderRadius:8, fontFamily:'monospace', border:'0.5px solid #e2e8f0', maxHeight:260, overflowY:'auto' }}>
+              {standupText}
+            </pre>
+          </details>
+
+          {/* Acciones */}
+          <div style={{ display:'flex', gap:8, justifyContent:'flex-end' }}>
+            <button onClick={doCopy}
+              style={{ display:'flex', alignItems:'center', gap:5, padding:'9px 14px', fontSize:12, border:'0.5px solid #e2e8f0', borderRadius:8, background:'#fff', cursor:'pointer', color:copied?'#059669':'#374151', fontWeight:500 }}>
+              {copied ? <Check size={13}/> : <Copy size={13}/>}
+              {copied ? 'Copiado' : 'Copiar texto'}
             </button>
             <a href={mailtoHref} target="_blank" rel="noreferrer"
-              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', fontSize: 12, background: '#dc2626', color: '#fff', borderRadius: 7, textDecoration: 'none', fontWeight: 500 }}>
-              <Mail size={13}/> Abrir en correo
+              style={{ display:'flex', alignItems:'center', gap:6, padding:'9px 18px', fontSize:12, background:'#dc2626', color:'#fff', borderRadius:8, textDecoration:'none', fontWeight:600 }}>
+              <Mail size={13}/> Enviar por correo
             </a>
           </div>
         </div>
@@ -607,13 +873,14 @@ ${bloqueados.map(p => `• ${p.id} (${p.area}): ${p.risk} ítem${p.risk > 1 ? 's
 
 // ─── Dashboard principal ──────────────────────────────────────────────────────
 
-type Tab = 'resumen'|'proyectos'|'plan'|'riesgo';
+type Tab = 'resumen'|'proyectos'|'equipos'|'plan';
 
 const TABS: { id:Tab; label:string; icon:React.ReactNode; highlight?:boolean }[] = [
-  { id:'resumen',    label:'Resumen',         icon:<TrendingUp size={13}/> },
+  { id:'resumen',    label:'Dashboard',       icon:<TrendingUp size={13}/> },
   { id:'proyectos',  label:'Proyectos',       icon:<Activity size={13}/> },
+  { id:'equipos',    label:'Equipos',         icon:<Users size={13}/> },
   { id:'plan',       label:'Plan de trabajo', icon:<FileText size={13}/>, highlight: true },
-  { id:'riesgo',     label:'Risk Score',      icon:<ShieldAlert size={13}/> },
+  // Risk Score oculto temporalmente (solicitud jefe)
 ];
 
 interface PMDashboardProps { onViewChange?: (v: string) => void; }
@@ -665,8 +932,8 @@ export default function PMDashboard({ onViewChange }: PMDashboardProps) {
       {/* Contenido */}
       {tab==='resumen'   && <ViewResumen/>}
       {tab==='proyectos' && <ViewProyectos onSelect={setProjModal}/>}
+      {tab==='equipos'   && <ViewEquipos/>}
       {tab==='plan'      && <PlanDeTrabajo onGoEstimaciones={onViewChange ? () => onViewChange('estimaciones') : undefined}/>}
-      {tab==='riesgo'    && <ViewRiesgo/>}
 
       {/* Modales */}
       {projModal    && <ProjectModal proj={projModal} onClose={()=>setProjModal(null)}/>}
