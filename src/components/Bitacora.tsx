@@ -22,7 +22,7 @@ interface InvRow {
   diccionario: string;    // link
   stages: Record<string, string>;  // stageId → '' | 'Sí' | 'N/A' | valor custom
 }
-interface InvStage { id: string; label: string; }
+interface InvStage { id: string; label: string; type?: 'check' | 'percent'; }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -115,6 +115,9 @@ function TabCambios({ user }: { user: any }) {
   const [filterTipo, setFT]   = useState('');
   const [search, setSearch]   = useState('');
 
+  const accessibleIds: string[] = user?.role === 'pm' ? PROJECTS.map((p: any) => p.id) : (user?.projectIds ?? []);
+  const accessibleProjects = PROJECTS.filter((p: any) => accessibleIds.includes(p.id));
+
   function save(next: BitacoraEntry[]) { setEntries(next); adminStore.saveBitacora(next); }
   function add() {
     if (!form.projectId || !form.descripcion.trim()) return;
@@ -124,6 +127,7 @@ function TabCambios({ user }: { user: any }) {
   }
 
   const filtered = entries.filter(e => {
+    if (!accessibleIds.includes(e.projectId)) return false;
     if (filterProj && e.projectId !== filterProj) return false;
     if (filterTipo && e.tipo !== filterTipo)       return false;
     if (search) { const q = search.toLowerCase(); return e.descripcion.toLowerCase().includes(q) || e.motivo.toLowerCase().includes(q); }
@@ -153,7 +157,7 @@ function TabCambios({ user }: { user: any }) {
         <div style={{ background:'#fff', border:'0.5px solid #e2e8f0', borderRadius:12, padding:'18px 20px', marginBottom:18 }}>
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:10, marginBottom:10 }}>
             {[
-              { label:'Proyecto *', node:<select value={form.projectId} onChange={e=>setForm(f=>({...f,projectId:e.target.value}))} style={inp()}><option value="">Seleccionar…</option>{PROJECTS.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select> },
+              { label:'Proyecto *', node:<select value={form.projectId} onChange={e=>setForm(f=>({...f,projectId:e.target.value}))} style={inp()}><option value="">Seleccionar…</option>{accessibleProjects.map((p: any)=><option key={p.id} value={p.id}>{p.name}</option>)}</select> },
               { label:'Tipo *', node:<select value={form.tipo} onChange={e=>setForm(f=>({...f,tipo:e.target.value as any}))} style={inp()}>{TIPOS_CAMBIO.map(t=><option key={t}>{t}</option>)}</select> },
               { label:'Ticket Jira', node:<input value={form.jira} onChange={e=>setForm(f=>({...f,jira:e.target.value}))} placeholder="DECRONOS-xxxx" style={inp()}/> },
             ].map(({label,node})=><div key={label}><label style={lbl()}>{label}</label>{node}</div>)}
@@ -178,7 +182,7 @@ function TabCambios({ user }: { user: any }) {
         </div>
         <select value={filterProj} onChange={e=>setFP(e.target.value)} style={inp()}>
           <option value="">Todos los proyectos</option>
-          {PROJECTS.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+          {accessibleProjects.map((p: any)=><option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
         <select value={filterTipo} onChange={e=>setFT(e.target.value)} style={inp()}>
           <option value="">Todos los tipos</option>
@@ -228,6 +232,9 @@ function TabLinks({ user }: { user: any }) {
   const [filterCat, setFC]      = useState('');
   const [form, setForm]         = useState({ projectId:'', title:'', url:'', category:'Confluence', descripcion:'' });
 
+  const accessibleIds: string[] = user?.role === 'pm' ? PROJECTS.map((p: any) => p.id) : (user?.projectIds ?? []);
+  const accessibleProjects = PROJECTS.filter((p: any) => accessibleIds.includes(p.id));
+
   function add() {
     if (!form.projectId || !form.title.trim() || !form.url.trim()) return;
     const next = [{ id:'l'+Date.now(), fecha:new Date().toISOString().slice(0,10), quien:user?.name??'Sistema', ...form }, ...links];
@@ -235,7 +242,7 @@ function TabLinks({ user }: { user: any }) {
   }
   function del(id: string) { if(confirm('¿Eliminar link?')){ const n=links.filter(l=>l.id!==id); setLinks(n); saveLinks(n); } }
 
-  const filtered = links.filter(l => (!filterProj||l.projectId===filterProj) && (!filterCat||l.category===filterCat));
+  const filtered = links.filter(l => accessibleIds.includes(l.projectId) && (!filterProj||l.projectId===filterProj) && (!filterCat||l.category===filterCat));
 
   const CAT_COLORS: Record<string,{bg:string;text:string}> = {
     Jira:          {bg:'#dbeafe',text:'#1d4ed8'},
@@ -256,12 +263,13 @@ function TabLinks({ user }: { user: any }) {
       {showForm && (
         <div style={{ background:'#fff', border:'0.5px solid #e2e8f0', borderRadius:12, padding:'18px 20px', marginBottom:18 }}>
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:10, marginBottom:10 }}>
-            <div><label style={lbl()}>Proyecto *</label><select value={form.projectId} onChange={e=>setForm(f=>({...f,projectId:e.target.value}))} style={inp()}><option value="">Seleccionar…</option>{PROJECTS.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
+            <div><label style={lbl()}>Proyecto *</label><select value={form.projectId} onChange={e=>setForm(f=>({...f,projectId:e.target.value}))} style={inp()}><option value="">Seleccionar…</option>{accessibleProjects.map((p: any)=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
             <div><label style={lbl()}>Título / Nombre *</label><input value={form.title} onChange={e=>setForm(f=>({...f,title:e.target.value}))} placeholder="Ej: Confluence FICO Q2" style={inp()}/></div>
             <div><label style={lbl()}>Categoría</label><select value={form.category} onChange={e=>setForm(f=>({...f,category:e.target.value}))} style={inp()}>{LINK_CATS.map(c=><option key={c}>{c}</option>)}</select></div>
           </div>
           <div style={{ marginBottom:10 }}><label style={lbl()}>URL *</label><input value={form.url} onChange={e=>setForm(f=>({...f,url:e.target.value}))} placeholder="https://…" style={inp()}/></div>
           <div style={{ marginBottom:12 }}><label style={lbl()}>Descripción</label><input value={form.descripcion} onChange={e=>setForm(f=>({...f,descripcion:e.target.value}))} placeholder="Qué contiene o para qué sirve este link…" style={inp()}/></div>
+
           <div style={{ display:'flex', gap:8, justifyContent:'flex-end' }}>
             <button onClick={()=>setShow(false)} style={btnSec()}>Cancelar</button>
             <button onClick={add} style={btnPrimary()}>Guardar</button>
@@ -273,7 +281,7 @@ function TabLinks({ user }: { user: any }) {
       <div style={{ display:'flex', gap:8, marginBottom:14, flexWrap:'wrap' }}>
         <select value={filterProj} onChange={e=>setFP(e.target.value)} style={inp()}>
           <option value="">Todos los proyectos</option>
-          {PROJECTS.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+          {accessibleProjects.map((p: any)=><option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
         <select value={filterCat} onChange={e=>setFC(e.target.value)} style={inp()}>
           <option value="">Todas las categorías</option>
@@ -334,6 +342,7 @@ const CELL_COLOR: Record<string, string> = {
   '':    '#111',
 };
 const STAGE_CYCLE: Record<string, string> = { '': 'Sí', 'Sí': 'N/A', 'N/A': '' };
+const PCT_CYCLE: string[] = ['', '25', '50', '75', '100'];
 
 function InlineEdit({ value, placeholder, mono, onSave }: { value: string; placeholder?: string; mono?: boolean; onSave: (v:string)=>void; }) {
   const [editing, setEditing] = useState(false);
@@ -422,14 +431,20 @@ function TabInventario({ user }: { user: any }) {
   const [search,  setSearch]  = useState('');
   const [addStage, setAddSt]  = useState(false);
   const [newStLbl, setNewStL] = useState('');
+  const [newStType, setNewStT]= useState<'check'|'percent'>('check');
   const [delMode,  setDelMode]= useState(false);
+
+  // Projects accessible to this user
+  const accessibleIds: string[] = user?.role === 'pm' ? PROJECTS.map((p: any) => p.id) : (user?.projectIds ?? []);
+  const accessibleProjects = PROJECTS.filter((p: any) => accessibleIds.includes(p.id));
 
   function save(next: InvRow[]) { setRows(next); saveInvRows(next); }
 
   function addRow() {
+    const defaultProj = filterProj || (accessibleProjects[0]?.id ?? PROJECTS[0]?.id ?? '');
     const row: InvRow = {
       id: 'r'+Date.now(),
-      projectId: filterProj || (PROJECTS[0]?.id ?? ''),
+      projectId: defaultProj,
       objeto: '', descripcion: '', documentacion: '',
       versionModelo: '', versionObjeto: '', diccionario: '',
       stages: {},
@@ -446,10 +461,17 @@ function TabInventario({ user }: { user: any }) {
   }
 
   function cycleStage(rowId: string, stageId: string) {
-    const row = rows.find(r => r.id === rowId);
+    const row   = rows.find(r => r.id === rowId);
+    const stage = stages.find(s => s.id === stageId);
     if (!row) return;
-    const cur  = row.stages[stageId] ?? '';
-    const next = STAGE_CYCLE[cur] ?? 'Sí';
+    const cur = row.stages[stageId] ?? '';
+    let next: string;
+    if (stage?.type === 'percent') {
+      const idx = PCT_CYCLE.indexOf(cur);
+      next = PCT_CYCLE[(idx + 1) % PCT_CYCLE.length];
+    } else {
+      next = STAGE_CYCLE[cur] ?? 'Sí';
+    }
     save(rows.map(r => r.id === rowId ? { ...r, stages: { ...r.stages, [stageId]: next } } : r));
   }
 
@@ -459,9 +481,9 @@ function TabInventario({ user }: { user: any }) {
 
   function addStageCol() {
     if (!newStLbl.trim()) return;
-    const next = [...stages, { id: 'st-'+Date.now(), label: newStLbl.trim() }];
+    const next: InvStage[] = [...stages, { id: 'st-'+Date.now(), label: newStLbl.trim(), type: newStType }];
     setStages(next); saveInvStages(next);
-    setNewStL(''); setAddSt(false);
+    setNewStL(''); setNewStT('check'); setAddSt(false);
   }
 
   function delStageCol(id: string) {
@@ -471,6 +493,7 @@ function TabInventario({ user }: { user: any }) {
   }
 
   const visible = rows.filter(r =>
+    accessibleIds.includes(r.projectId) &&
     (!filterProj || r.projectId === filterProj) &&
     (!search || (r.objeto + r.descripcion).toLowerCase().includes(search.toLowerCase()))
   );
@@ -495,7 +518,7 @@ function TabInventario({ user }: { user: any }) {
         </div>
         <select value={filterProj} onChange={e=>setFP(e.target.value)} style={{ ...inp(), width:'auto' }}>
           <option value="">Todos los proyectos</option>
-          {PROJECTS.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+          {accessibleProjects.map((p: any)=><option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
         <span style={{ fontSize:11, color:'#94a3b8' }}>{visible.length} fila{visible.length!==1?'s':''}</span>
         <div style={{ marginLeft:'auto', display:'flex', gap:6 }}>
@@ -599,20 +622,58 @@ function TabInventario({ user }: { user: any }) {
                   </td>
                   {/* Stage cells */}
                   {stages.map(s => {
-                    const val = row.stages[s.id] ?? '';
-                    const isNum = val !== '' && val !== 'Sí' && val !== 'N/A' && !isNaN(Number(val));
+                    const val    = row.stages[s.id] ?? '';
+                    const isPct  = s.type === 'percent';
+                    const pctNum = isPct && val !== '' ? Number(val) : 0;
+
+                    // Percent cell
+                    if (isPct) {
+                      const pctBg = val === '' ? '#fff'
+                        : pctNum >= 100 ? '#dcfce7'
+                        : pctNum >= 75  ? '#d1fae5'
+                        : pctNum >= 50  ? '#fef9c3'
+                        : pctNum >= 25  ? '#fff7ed'
+                        : '#fff';
+                      const pctTx = val === '' ? '#cbd5e1'
+                        : pctNum >= 100 ? '#15803d'
+                        : pctNum >= 75  ? '#059669'
+                        : pctNum >= 50  ? '#a16207'
+                        : '#d97706';
+                      return (
+                        <td key={s.id} style={{ ...TD, width:52, padding:0, cursor:'pointer', background: pctBg, position:'relative' }}
+                          onClick={() => cycleStage(row.id, s.id)}
+                          title={`${s.label}: clic para cambiar · clic derecho para valor exacto`}
+                          onContextMenu={e => {
+                            e.preventDefault();
+                            const v = prompt(`% para "${s.label}" (0-100):`, val || '0');
+                            if (v !== null) { const n = Math.min(100,Math.max(0,Number(v)||0)); setStageVal(row.id, s.id, String(n)); }
+                          }}>
+                          {val !== '' && (
+                            <div style={{ position:'absolute', bottom:0, left:0, right:0, height:3, background:'#e2e8f0' }}>
+                              <div style={{ width:`${pctNum}%`, height:'100%', background: pctNum>=100?'#059669':pctNum>=50?'#d97706':'#f59e0b', transition:'width .2s' }}/>
+                            </div>
+                          )}
+                          <span style={{ fontSize:10, fontWeight:600, color: pctTx, display:'block', textAlign:'center', lineHeight:'28px' }}>
+                            {val === '' ? '' : `${val}%`}
+                          </span>
+                        </td>
+                      );
+                    }
+
+                    // Check cell
+                    const isCustom = val !== '' && val !== 'Sí' && val !== 'N/A';
                     return (
                       <td key={s.id} style={{ ...TD, width:52, textAlign:'center', padding:0,
-                        background: isNum ? `rgba(220,252,231,${Math.min(1,Number(val))})` : (CELL_BG[val] ?? '#fff'),
+                        background: isCustom ? '#fef9c3' : (CELL_BG[val] ?? '#fff'),
                         cursor:'pointer' }}
                         onClick={() => cycleStage(row.id, s.id)}
-                        title={`${s.label}: clic para cambiar`}
+                        title={`${s.label}: clic para cambiar · clic derecho para valor personalizado`}
                         onContextMenu={e => {
                           e.preventDefault();
-                          const v = prompt(`Valor para "${s.label}" (Sí / N/A / número 0-1):`, val);
+                          const v = prompt(`Valor para "${s.label}" (Sí / N/A / texto):`, val);
                           if (v !== null) setStageVal(row.id, s.id, v.trim());
                         }}>
-                        <span style={{ fontSize: isNum?10:12, fontWeight: 600, color: isNum?'#15803d':(CELL_COLOR[val]??'#111') }}>
+                        <span style={{ fontSize: isCustom?9:12, fontWeight: 600, color: isCustom?'#92400e':(CELL_COLOR[val]??'#111') }}>
                           {val === 'Sí' ? '✓' : val === 'N/A' ? <span style={{fontSize:8}}>N/A</span> : val || ''}
                         </span>
                       </td>
@@ -636,19 +697,33 @@ function TabInventario({ user }: { user: any }) {
       </div>
 
       <p style={{ margin:'8px 0 0', fontSize:10, color:'#94a3b8' }}>
-        Clic en una celda de etapa para marcar ✓ / N/A / vacío · Clic derecho para ingresar un valor personalizado (ej: 0.86) · Clic en celda de texto para editar
+        Columna <strong>Check</strong>: clic para ciclar ✓ → N/A → vacío · clic derecho para valor personalizado &nbsp;|&nbsp;
+        Columna <strong>%</strong>: clic para avanzar 0 → 25 → 50 → 75 → 100% · clic derecho para valor exacto · Clic en celda de texto para editar
       </p>
 
       {/* Add stage column modal */}
       {addStage && (
         <div style={{ position:'fixed', inset:0, background:'rgba(15,23,42,.45)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:200 }}>
-          <div style={{ background:'#fff', borderRadius:14, padding:'24px', width:340, boxShadow:'0 20px 60px rgba(0,0,0,.25)' }}>
+          <div style={{ background:'#fff', borderRadius:14, padding:'24px', width:380, boxShadow:'0 20px 60px rgba(0,0,0,.25)' }}>
             <p style={{ margin:'0 0 12px', fontWeight:700, fontSize:14, color:'#111' }}>Nueva columna de etapa</p>
+            <label style={lbl()}>Nombre de la etapa</label>
             <input value={newStLbl} onChange={e=>setNewStL(e.target.value)} placeholder="Ej: Aprobación QA"
               onKeyDown={e=>e.key==='Enter'&&addStageCol()}
-              style={{ ...inp(), marginBottom:14 }} autoFocus/>
+              style={{ ...inp(), marginBottom:12 }} autoFocus/>
+            <label style={lbl()}>Tipo de celda</label>
+            <div style={{ display:'flex', gap:8, marginBottom:16 }}>
+              {(['check','percent'] as const).map(t => (
+                <button key={t} onClick={()=>setNewStT(t)}
+                  style={{ flex:1, padding:'8px 0', fontSize:12, fontWeight:newStType===t?700:400, borderRadius:8,
+                    border:`1.5px solid ${newStType===t?'#dc2626':'#e2e8f0'}`,
+                    background: newStType===t?'#fef2f2':'#fff',
+                    color: newStType===t?'#dc2626':'#64748b', cursor:'pointer' }}>
+                  {t === 'check' ? '✓ Check (Sí / N/A)' : '% Porcentaje (0–100)'}
+                </button>
+              ))}
+            </div>
             <div style={{ display:'flex', gap:8, justifyContent:'flex-end' }}>
-              <button onClick={()=>{setAddSt(false);setNewStL('');}} style={btnSec()}>Cancelar</button>
+              <button onClick={()=>{setAddSt(false);setNewStL('');setNewStT('check');}} style={btnSec()}>Cancelar</button>
               <button onClick={addStageCol} style={btnPrimary()}>Agregar</button>
             </div>
           </div>

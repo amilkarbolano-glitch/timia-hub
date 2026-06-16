@@ -110,7 +110,7 @@ export const PROJECTS = [
 export const MOCK_ACCOUNTS: AuthUser[] = [
   // ── Project Manager ───────────────────────────────────────────────────────
   {
-    id: 'u-amilkar', name: 'Amilkar Bolaño', email: 'byjossone@gmail.com',
+    id: 'u-amilkar', name: 'Amilkar Bolaño', email: 'amilkar.bolano@timia.ai',
     initials: 'AB', role: 'pm', avatarColor: '#dc2626',
     projectIds: PROJECTS.map(p => p.id),
     areaLabel: 'Project Manager · BBVA CO & Credicorp Capital',
