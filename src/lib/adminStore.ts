@@ -240,7 +240,7 @@ const DEFAULT_BBVA_ANS: BbvaAnsConfig = {
 const DEFAULT_USERS: AdminUser[] = [
   // ── Project Manager ──────────────────────────────────────────────────────────
   {
-    id: 'u-amilkar', name: 'Amilkar Bolaño', email: 'byjossone@gmail.com',
+    id: 'u-amilkar', name: 'Amilkar Bolaño', email: 'amilkar.bolano@timia.ai',
     role: 'pm', projectIds: BASE_PROJECTS.map(p => p.id),
     initials: 'AB', avatarColor: '#dc2626', active: true,
     areaLabel: 'Project Manager · BBVA CO & Credicorp Capital',

@@ -746,124 +746,171 @@ Generado por Timia Hub · ${hour} · ${today}`;
   }
 
   return (
-    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:999, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }} onClick={onClose}>
-      <div style={{ background:'#fff', borderRadius:18, width:'100%', maxWidth:660, maxHeight:'92vh', overflow:'auto', position:'relative', boxShadow:'0 20px 60px rgba(0,0,0,.18)' }} onClick={e=>e.stopPropagation()}>
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.55)', zIndex:999, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }} onClick={onClose}>
+      <div style={{ background:'#fff', borderRadius:20, width:'100%', maxWidth:1040, maxHeight:'94vh', overflow:'hidden', display:'flex', flexDirection:'column', boxShadow:'0 24px 80px rgba(0,0,0,.22)' }} onClick={e=>e.stopPropagation()}>
 
-        {/* Header con branding */}
-        <div style={{ background:'linear-gradient(135deg,#0f172a,#1e293b)', borderRadius:'18px 18px 0 0', padding:'20px 24px' }}>
-          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
-            <div>
-              <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:4 }}>
-                <div style={{ width:6, height:6, borderRadius:'50%', background:'#dc2626' }}/>
-                <span style={{ fontSize:10, color:'#94a3b8', fontWeight:500, letterSpacing:'.08em', textTransform:'uppercase' }}>TIMIA HUB · Daily Standup</span>
-              </div>
-              <h3 style={{ margin:0, fontSize:17, fontWeight:600, color:'#fff' }}>Standup diario</h3>
-              <p style={{ margin:'3px 0 0', fontSize:11, color:'#64748b' }}>{today}</p>
+        {/* Header gradient */}
+        <div style={{ background:'linear-gradient(135deg,#0f172a,#1e293b)', padding:'18px 28px', flexShrink:0 }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14 }}>
+            <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+              <div style={{ width:7, height:7, borderRadius:'50%', background:'#dc2626' }}/>
+              <span style={{ fontSize:10, color:'#94a3b8', fontWeight:600, letterSpacing:'.1em', textTransform:'uppercase' }}>TIMIA HUB · Status Report</span>
             </div>
-            <button onClick={onClose} style={{ border:'none', background:'rgba(255,255,255,.08)', cursor:'pointer', color:'#94a3b8', padding:'6px 8px', borderRadius:8, display:'flex' }}>
+            <button onClick={onClose} style={{ border:'none', background:'rgba(255,255,255,.1)', cursor:'pointer', color:'#94a3b8', padding:'5px 8px', borderRadius:8, display:'flex' }}>
               <X size={15}/>
             </button>
           </div>
-
-          {/* KPIs rápidos */}
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:8, marginTop:16 }}>
+          {/* KPIs row */}
+          <div style={{ display:'flex', gap:10, alignItems:'center' }}>
             {[
-              { v:`${promedio}%`, l:'Avance', c:'#34d399' },
+              { v:`${promedio}%`, l:'Avance global',   c:'#34d399' },
               { v:String(scopeProjs.length), l:'Proyectos', c:'#60a5fa' },
-              { v:String(vencidos.length), l:'ANS vencidos', c:vencidos.length>0?'#f87171':'#34d399' },
+              { v:String(vencidos.length),   l:'ANS vencidos', c:vencidos.length>0?'#f87171':'#34d399' },
+              { v:String(alertasAns.length), l:'ANS en alerta', c:alertasAns.length>0?'#fbbf24':'#34d399' },
               { v:String(bloqueados.length), l:'Bloqueantes', c:bloqueados.length>0?'#fbbf24':'#34d399' },
             ].map(k => (
-              <div key={k.l} style={{ background:'rgba(255,255,255,.06)', borderRadius:10, padding:'9px 10px' }}>
-                <p style={{ margin:0, fontSize:18, fontWeight:600, color:k.c }}>{k.v}</p>
-                <p style={{ margin:'2px 0 0', fontSize:9, color:'#64748b', textTransform:'uppercase', letterSpacing:'.05em' }}>{k.l}</p>
+              <div key={k.l} style={{ background:'rgba(255,255,255,.07)', borderRadius:10, padding:'8px 14px', flex:1 }}>
+                <p style={{ margin:0, fontSize:20, fontWeight:700, color:k.c, lineHeight:1 }}>{k.v}</p>
+                <p style={{ margin:'3px 0 0', fontSize:9, color:'#64748b', textTransform:'uppercase', letterSpacing:'.05em' }}>{k.l}</p>
               </div>
             ))}
+            {/* Scope filter */}
+            <div style={{ marginLeft:8 }}>
+              <select value={scope} onChange={e=>setScope(e.target.value)}
+                style={{ fontSize:11, padding:'6px 10px', borderRadius:8, border:'1px solid rgba(255,255,255,.15)',
+                  background:'rgba(255,255,255,.08)', color:'#e2e8f0', cursor:'pointer', outline:'none' }}>
+                <option value="all" style={{background:'#1e293b'}}>Todos los proyectos</option>
+                {PROJ_DATA.map(p=><option key={p.id} value={p.id} style={{background:'#1e293b'}}>{p.id}</option>)}
+              </select>
+            </div>
           </div>
         </div>
 
-        <div style={{ padding:'18px 24px' }}>
-          {/* Selector de alcance */}
-          <div style={{ marginBottom:14 }}>
-            <p style={{ margin:'0 0 6px', fontSize:11, color:'#94a3b8', fontWeight:500, textTransform:'uppercase', letterSpacing:'.05em' }}>Alcance del standup</p>
-            <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
-              {[{id:'all',label:'Todos los proyectos'}, ...PROJ_DATA.map(p=>({id:p.id,label:p.id}))].map(opt => (
-                <button key={opt.id} onClick={()=>setScope(opt.id)}
-                  style={{ fontSize:11, padding:'4px 12px', borderRadius:8, border:'0.5px solid', cursor:'pointer',
-                    borderColor: scope===opt.id ? '#dc2626':'#e2e8f0',
-                    background:  scope===opt.id ? '#fef2f2':'#f8fafc',
-                    color:       scope===opt.id ? '#dc2626':'#64748b',
-                    fontWeight:  scope===opt.id ? 600 : 400 }}>
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-          </div>
+        {/* Body — 2 columns */}
+        <div style={{ display:'flex', flex:1, overflow:'hidden', minHeight:0 }}>
 
-          {/* Vista visual del standup */}
-          <div style={{ background:'#f8fafc', borderRadius:12, border:'0.5px solid #e2e8f0', padding:'14px 16px', marginBottom:14 }}>
+          {/* LEFT: Visual status cards */}
+          <div style={{ flex:'0 0 420px', overflowY:'auto', padding:'18px 20px', borderRight:'1px solid #f1f5f9' }}>
 
-            {/* Proyectos */}
-            <p style={{ margin:'0 0 8px', fontSize:10, color:'#94a3b8', fontWeight:600, textTransform:'uppercase', letterSpacing:'.06em' }}>Estado por proyecto</p>
-            <div style={{ display:'grid', gap:5 }}>
+            {/* Projects */}
+            <p style={{ margin:'0 0 8px', fontSize:10, color:'#94a3b8', fontWeight:700, textTransform:'uppercase', letterSpacing:'.07em' }}>Estado por proyecto</p>
+            <div style={{ display:'grid', gap:5, marginBottom:16 }}>
               {scopeProjs.map(p => {
                 const c = getProjectColor(p.id);
+                const riskLvl = p.risk > 1 ? 'high' : p.risk > 0 ? 'med' : 'ok';
                 return (
-                  <div key={p.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'7px 10px', background:'#fff', borderRadius:8, border:`0.5px solid ${p.risk>1?'#fecaca':p.risk>0?'#fde68a':'#e2e8f0'}` }}>
-                    <div style={{ width:28, height:28, borderRadius:7, background:c+'18', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-                      <span style={{ fontSize:9, fontWeight:700, color:c }}>{p.id.slice(0,2)}</span>
+                  <div key={p.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 12px', background:'#fff', borderRadius:10,
+                    border:`1px solid ${riskLvl==='high'?'#fecaca':riskLvl==='med'?'#fde68a':'#e2e8f0'}`,
+                    boxShadow: riskLvl!=='ok' ? `0 0 0 3px ${riskLvl==='high'?'#fef2f2':'#fffbeb'}` : 'none' }}>
+                    <div style={{ width:32, height:32, borderRadius:8, background:c+'18', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                      <span style={{ fontSize:9, fontWeight:800, color:c }}>{p.id.slice(0,3)}</span>
                     </div>
                     <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:3 }}>
+                        <span style={{ fontSize:12, fontWeight:700, color:'#111' }}>{p.id}</span>
+                        <span style={{ fontSize:9, padding:'1px 5px', borderRadius:4, background:PRIORITY_STYLE[p.priority]?.bg, color:PRIORITY_STYLE[p.priority]?.color }}>{p.priority}</span>
+                        {p.risk > 0 && <span style={{ fontSize:9, fontWeight:600, color:p.risk>1?'#dc2626':'#d97706', background:p.risk>1?'#fef2f2':'#fffbeb', padding:'1px 5px', borderRadius:4 }}>⚠ {p.risk} bloq.</span>}
+                      </div>
                       <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                        <span style={{ fontSize:12, fontWeight:600, color:'#111' }}>{p.id}</span>
-                        <span style={{ fontSize:10, padding:'1px 6px', borderRadius:5, background:PRIORITY_STYLE[p.priority]?.bg, color:PRIORITY_STYLE[p.priority]?.color }}>{p.priority}</span>
-                        {p.risk > 0 && <span style={{ fontSize:10, color:p.risk>1?'#dc2626':'#d97706' }}>⚠ {p.risk} bloq.</span>}
+                        <div style={{ flex:1, height:4, background:'#f1f5f9', borderRadius:4, overflow:'hidden' }}>
+                          <div style={{ width:`${p.pct}%`, height:'100%', background:c, borderRadius:4, transition:'width .3s' }}/>
+                        </div>
+                        <span style={{ fontSize:11, fontWeight:700, color:c, minWidth:32, textAlign:'right' }}>{p.pct}%</span>
                       </div>
-                      <div style={{ height:3, background:'#f1f5f9', borderRadius:3, overflow:'hidden', marginTop:4 }}>
-                        <div style={{ width:`${p.pct}%`, height:'100%', background:c, borderRadius:3 }}/>
-                      </div>
+                      <p style={{ margin:'2px 0 0', fontSize:9, color:'#94a3b8', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{p.desc}</p>
                     </div>
-                    <span style={{ fontSize:13, fontWeight:600, color:c, flexShrink:0 }}>{p.pct}%</span>
                   </div>
                 );
               })}
             </div>
 
-            {/* ANS */}
-            {(vencidos.length > 0 || alertasAns.length > 0) && (
-              <div style={{ marginTop:12 }}>
-                <p style={{ margin:'0 0 6px', fontSize:10, color:'#94a3b8', fontWeight:600, textTransform:'uppercase', letterSpacing:'.06em' }}>Alertas ANS</p>
-                {[...vencidos.map(t=>({...t,tipo:'vencido'})), ...alertasAns.map(t=>({...t,tipo:'alerta'}))].map(t => (
-                  <div key={t.id} style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 10px', marginBottom:4, background:'#fff', borderRadius:7, border:`0.5px solid ${t.tipo==='vencido'?'#fecaca':'#fde68a'}` }}>
-                    <span style={{ fontSize:12 }}>{t.tipo==='vencido'?'🔴':'⚠️'}</span>
-                    <div style={{ flex:1, minWidth:0 }}>
-                      <p style={{ margin:0, fontSize:11, fontWeight:500, color:'#111', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{t.task}</p>
-                      <p style={{ margin:0, fontSize:10, color:'#94a3b8' }}>{t.project} · {t.responsable}</p>
-                    </div>
+            {/* Alerts & Blockers — always visible */}
+            {(vencidos.length > 0 || alertasAns.length > 0 || bloqueados.length > 0) && (
+              <div>
+                {vencidos.length > 0 && (
+                  <div style={{ marginBottom:10 }}>
+                    <p style={{ margin:'0 0 5px', fontSize:10, color:'#dc2626', fontWeight:700, textTransform:'uppercase', letterSpacing:'.06em' }}>🔴 ANS Vencidos ({vencidos.length})</p>
+                    {vencidos.map(t => (
+                      <div key={t.id} style={{ display:'flex', gap:8, padding:'7px 10px', marginBottom:3, background:'#fef2f2', borderRadius:8, border:'1px solid #fecaca' }}>
+                        <div style={{ flex:1, minWidth:0 }}>
+                          <p style={{ margin:0, fontSize:11, fontWeight:600, color:'#991b1b' }}>[{t.project}] {t.task}</p>
+                          <p style={{ margin:0, fontSize:10, color:'#dc2626' }}>→ {t.responsable} · {t.jira}</p>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                ))}
+                )}
+                {alertasAns.length > 0 && (
+                  <div style={{ marginBottom:10 }}>
+                    <p style={{ margin:'0 0 5px', fontSize:10, color:'#b45309', fontWeight:700, textTransform:'uppercase', letterSpacing:'.06em' }}>⚠️ ANS En alerta ({alertasAns.length})</p>
+                    {alertasAns.map(t => (
+                      <div key={t.id} style={{ display:'flex', gap:8, padding:'7px 10px', marginBottom:3, background:'#fffbeb', borderRadius:8, border:'1px solid #fde68a' }}>
+                        <div style={{ flex:1, minWidth:0 }}>
+                          <p style={{ margin:0, fontSize:11, fontWeight:600, color:'#92400e' }}>[{t.project}] {t.task}</p>
+                          <p style={{ margin:0, fontSize:10, color:'#b45309' }}>→ {t.responsable} · {t.jira}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {bloqueados.length > 0 && (
+                  <div>
+                    <p style={{ margin:'0 0 5px', fontSize:10, color:'#7c3aed', fontWeight:700, textTransform:'uppercase', letterSpacing:'.06em' }}>🚧 Acciones requeridas</p>
+                    {bloqueados.map(p => (
+                      <div key={p.id} style={{ padding:'7px 10px', marginBottom:3, background:'#faf5ff', borderRadius:8, border:'1px solid #ede9fe' }}>
+                        <p style={{ margin:0, fontSize:11, fontWeight:600, color:'#6d28d9' }}>• {p.id}: {p.risk} bloqueante{p.risk>1?'s':''} — escalar con {p.area}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>
 
-          {/* Texto plano */}
-          <details style={{ marginBottom:14 }}>
-            <summary style={{ fontSize:11, color:'#94a3b8', cursor:'pointer', userSelect:'none', marginBottom:6 }}>Ver texto para copiar / enviar por correo</summary>
-            <pre style={{ margin:0, fontSize:10, color:'#374151', lineHeight:1.7, whiteSpace:'pre-wrap', background:'#f8fafc', padding:'12px 14px', borderRadius:8, fontFamily:'monospace', border:'0.5px solid #e2e8f0', maxHeight:260, overflowY:'auto' }}>
-              {standupText}
-            </pre>
-          </details>
+          {/* RIGHT: Corporate email preview */}
+          <div style={{ flex:1, overflowY:'auto', padding:'18px 20px', display:'flex', flexDirection:'column' }}>
+            <p style={{ margin:'0 0 10px', fontSize:10, color:'#94a3b8', fontWeight:700, textTransform:'uppercase', letterSpacing:'.07em' }}>Vista de correo corporativo</p>
 
-          {/* Acciones */}
-          <div style={{ display:'flex', gap:8, justifyContent:'flex-end' }}>
-            <button onClick={doCopy}
-              style={{ display:'flex', alignItems:'center', gap:5, padding:'9px 14px', fontSize:12, border:'0.5px solid #e2e8f0', borderRadius:8, background:'#fff', cursor:'pointer', color:copied?'#059669':'#374151', fontWeight:500 }}>
-              {copied ? <Check size={13}/> : <Copy size={13}/>}
-              {copied ? 'Copiado' : 'Copiar texto'}
-            </button>
-            <a href={mailtoHref} target="_blank" rel="noreferrer"
-              style={{ display:'flex', alignItems:'center', gap:6, padding:'9px 18px', fontSize:12, background:'#dc2626', color:'#fff', borderRadius:8, textDecoration:'none', fontWeight:600 }}>
-              <Mail size={13}/> Enviar por correo
-            </a>
+            {/* Email shell */}
+            <div style={{ flex:1, background:'#f8fafc', borderRadius:12, border:'1px solid #e2e8f0', overflow:'hidden', display:'flex', flexDirection:'column' }}>
+              {/* Email header bar */}
+              <div style={{ background:'#fff', borderBottom:'1px solid #e2e8f0', padding:'10px 16px' }}>
+                <div style={{ display:'grid', gap:4 }}>
+                  {[
+                    { l:'De:', v:'Timia Hub <noreply@timia.ai>' },
+                    { l:'Para:', v:'equipo.tecnico@timia.ai; liderazgo@timia.ai' },
+                    { l:'Asunto:', v:`[TIMIA STATUS] Reporte diario — ${todayFmt}${scope!=='all'?' · '+scope:''}` },
+                    { l:'Fecha:', v:`${today}, ${hour}` },
+                  ].map(f => (
+                    <div key={f.l} style={{ display:'flex', gap:8, fontSize:11 }}>
+                      <span style={{ color:'#94a3b8', minWidth:52, flexShrink:0 }}>{f.l}</span>
+                      <span style={{ color:'#374151', fontWeight: f.l==='Asunto:'?600:400 }}>{f.v}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Email body */}
+              <div style={{ flex:1, overflowY:'auto' }}>
+                <pre style={{ margin:0, fontSize:10.5, color:'#1e293b', lineHeight:1.75, whiteSpace:'pre-wrap',
+                  padding:'16px 20px', fontFamily:"'Courier New',Courier,monospace", background:'transparent' }}>
+                  {standupText}
+                </pre>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:12, flexShrink:0 }}>
+              <button onClick={doCopy}
+                style={{ display:'flex', alignItems:'center', gap:5, padding:'9px 16px', fontSize:12, border:'1px solid #e2e8f0', borderRadius:9, background:'#fff', cursor:'pointer', color:copied?'#059669':'#374151', fontWeight:500, transition:'all .15s' }}>
+                {copied ? <Check size={13}/> : <Copy size={13}/>}
+                {copied ? '¡Copiado!' : 'Copiar texto'}
+              </button>
+              <a href={mailtoHref} target="_blank" rel="noreferrer"
+                style={{ display:'flex', alignItems:'center', gap:6, padding:'9px 20px', fontSize:12, background:'#dc2626', color:'#fff', borderRadius:9, textDecoration:'none', fontWeight:700 }}>
+                <Mail size={13}/> Enviar por correo
+              </a>
+            </div>
           </div>
         </div>
       </div>
