@@ -898,10 +898,19 @@ export default function PMDashboard({ onViewChange }: PMDashboardProps) {
           <h1 style={{ margin: 0, fontSize: 22, fontWeight: 500, color: '#111' }}>Dashboard ejecutivo</h1>
           <p style={{ margin: '3px 0 0', fontSize: 13, color: '#94a3b8' }}>Vista global · BBVA CO &amp; Credicorp Capital · {new Date().toLocaleDateString('es-CO',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</p>
         </div>
-        <button onClick={() => setShowStandup(true)}
-          style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 18px', background: '#111', color: '#fff', border: 'none', borderRadius: 9, cursor: 'pointer', fontSize: 12, fontWeight: 500, flexShrink: 0 }}>
-          <Mail size={14}/> Generar standup
-        </button>
+        <div style={{ display:'flex', gap:8, flexShrink:0 }}>
+          {onViewChange && (
+            <button onClick={() => onViewChange('setup-project')}
+              style={{ display:'flex', alignItems:'center', gap:6, padding:'9px 14px', background:'#f0fdf4', color:'#15803d', border:'0.5px solid #bbf7d0', borderRadius:9, cursor:'pointer', fontSize:12, fontWeight:500 }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Nuevo proyecto
+            </button>
+          )}
+          <button onClick={() => setShowStandup(true)}
+            style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 18px', background: '#111', color: '#fff', border: 'none', borderRadius: 9, cursor: 'pointer', fontSize: 12, fontWeight: 500 }}>
+            <Mail size={14}/> Generar standup
+          </button>
+        </div>
       </div>
 
       {/* Tabs */}

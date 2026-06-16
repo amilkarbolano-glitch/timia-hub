@@ -1,19 +1,9 @@
 import React, { useState } from 'react';
-import { 
-  GitBranch, 
-  Plus, 
-  Edit2, 
-  Trash2, 
-  ChevronRight, 
-  Cloud, 
-  Cpu, 
-  Database, 
-  Layout, 
-  CheckCircle2,
-  X,
-  Save,
-  PlusCircle,
-  GripVertical
+import {
+  GitBranch, Plus, Edit2, Trash2, ChevronRight, Cloud, Cpu, Database, Layout,
+  CheckCircle2, X, Save, PlusCircle, GripVertical, BarChart3, FileText, Shield,
+  Layers, Settings, Activity, Box, Zap, Globe, Code2, HardDrive, Network,
+  AlertTriangle, ClipboardList,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ProjectTemplate, TemplateTask } from '../types';
@@ -23,14 +13,90 @@ interface ProjectTemplatesProps {
   setTemplates: React.Dispatch<React.SetStateAction<ProjectTemplate[]>>;
 }
 
+// ─── Icon registry (20 opciones) ─────────────────────────────────────────────
+
+const ICON_LIST = [
+  { id:'Layout',       label:'Layout',      El: Layout      },
+  { id:'GitBranch',    label:'Rama',        El: GitBranch   },
+  { id:'Cloud',        label:'Cloud',       El: Cloud       },
+  { id:'Cpu',          label:'CPU',         El: Cpu         },
+  { id:'Database',     label:'Datos',       El: Database    },
+  { id:'BarChart3',    label:'Métricas',    El: BarChart3   },
+  { id:'FileText',     label:'Documento',   El: FileText    },
+  { id:'Shield',       label:'Seguridad',   El: Shield      },
+  { id:'Layers',       label:'Capas',       El: Layers      },
+  { id:'Settings',     label:'Config',      El: Settings    },
+  { id:'Activity',     label:'Actividad',   El: Activity    },
+  { id:'Box',          label:'Módulo',      El: Box         },
+  { id:'Zap',          label:'Pipeline',    El: Zap         },
+  { id:'Globe',        label:'Global',      El: Globe       },
+  { id:'Code2',        label:'Código',      El: Code2       },
+  { id:'HardDrive',    label:'Storage',     El: HardDrive   },
+  { id:'Network',      label:'Red',         El: Network     },
+  { id:'AlertTriangle',label:'Alerta',      El: AlertTriangle },
+  { id:'ClipboardList',label:'Checklist',   El: ClipboardList },
+  { id:'CheckCircle2', label:'Certificado', El: CheckCircle2 },
+];
+
+function getIcon(name: string, size = 20) {
+  const found = ICON_LIST.find(i => i.id === name);
+  if (!found) return <Layout size={size}/>;
+  const { El } = found;
+  return <El size={size}/>;
+}
+
+// ─── Predefined task starters (item 9) ───────────────────────────────────────
+
+const PREDEFINED_SETS: { label: string; icon: string; tasks: TemplateTask[] }[] = [
+  {
+    label: 'Ingesta ADA básica', icon: 'Database',
+    tasks: [
+      { title: 'Levantamiento de requisitos y dudas',        description: 'Reuniones con BBVA para resolver dudas funcionales y técnicas.',          points: 5, peso: 10 },
+      { title: 'Diccionario técnico de campos',              description: 'Documentar los 370+ campos con tipo, descripción y fuente.',              points: 8, peso: 15 },
+      { title: 'Diseño lógico y físico de tablas ADA',       description: 'Definir tablas input, work y live con su esquema completo.',              points: 8, peso: 20 },
+      { title: 'Construcción jobs Control-M',                description: 'Crear y configurar los jobs de orquestación en Control-M.',               points: 6, peso: 15 },
+      { title: 'Construcción transformaciones Spark-Scala',  description: 'Desarrollar las transformaciones de procesamiento en ADA.',               points: 8, peso: 20 },
+      { title: 'Pruebas de calidad de datos (LIVE)',         description: 'Validar reglas de calidad con datos reales de BBVA.',                    points: 5, peso: 10 },
+      { title: 'Certificación y paso a producción',          description: 'Circuito de certificación con gobierno técnico BBVA y paso PRD.',        points: 5, peso: 10 },
+    ],
+  },
+  {
+    label: 'Gobierno de datos FICO', icon: 'Shield',
+    tasks: [
+      { title: 'Análisis funcional modelo FICO',             description: 'Entender variables, target y lógica de negocio del modelo.',             points: 5, peso: 15 },
+      { title: 'Documentación en Confluence',                description: 'Crear y actualizar la documentación técnica en Confluence.',             points: 4, peso: 10 },
+      { title: 'Diccionario y linaje de datos',              description: 'Mapear el linaje desde fuente hasta el score final.',                   points: 6, peso: 20 },
+      { title: 'Validación gobierno técnico',                description: 'Presentar y aprobar con el comité de gobierno técnico de BBVA.',        points: 5, peso: 15 },
+      { title: 'Reglas Hammurabi de calidad',                description: 'Definir e implementar reglas de validación de calidad de datos.',       points: 6, peso: 20 },
+      { title: 'Monitoreo continuo post-producción',         description: 'Configurar alertas y reportes de seguimiento en producción.',           points: 4, peso: 20 },
+    ],
+  },
+  {
+    label: 'Pipeline ETL estándar', icon: 'Zap',
+    tasks: [
+      { title: 'Análisis de fuentes de datos',               description: 'Identificar y documentar todas las fuentes origen.',                    points: 4, peso: 10 },
+      { title: 'Diseño del pipeline de ingesta',             description: 'Definir arquitectura del pipeline con stages y frecuencias.',           points: 5, peso: 15 },
+      { title: 'Construcción extracción (Extract)',           description: 'Implementar lecturas desde Oracle/SQL Server/archivos planos.',         points: 6, peso: 25 },
+      { title: 'Transformaciones y limpieza (Transform)',    description: 'Aplicar reglas de negocio, normalización y enriquecimiento.',           points: 7, peso: 25 },
+      { title: 'Carga a destino (Load)',                     description: 'Insertar/actualizar datos en tablas ADA live o data warehouse.',        points: 5, peso: 15 },
+      { title: 'Pruebas end-to-end y reconciliación',        description: 'Validar conteos, sumas de control y completitud.',                     points: 4, peso: 10 },
+    ],
+  },
+  {
+    label: 'Proyecto vacío', icon: 'Layout',
+    tasks: [],
+  },
+];
+
+// ─── Main component ───────────────────────────────────────────────────────────
+
 export default function ProjectTemplates({ templates, setTemplates }: ProjectTemplatesProps) {
   const [editingTemplate, setEditingTemplate] = useState<ProjectTemplate | null>(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isModalOpen,     setIsModalOpen]     = useState(false);
+  const [showPredefined,  setShowPredefined]  = useState(false);
 
   const handleDeleteTemplate = (id: string) => {
-    if (confirm('¿Estás seguro de eliminar esta plantilla?')) {
-      setTemplates(prev => prev.filter(t => t.id !== id));
-    }
+    if (confirm('¿Eliminar esta plantilla?')) setTemplates(prev => prev.filter(t => t.id !== id));
   };
 
   const handleEditTemplate = (template: ProjectTemplate) => {
@@ -39,72 +105,55 @@ export default function ProjectTemplates({ templates, setTemplates }: ProjectTem
   };
 
   const handleNewTemplate = () => {
+    setShowPredefined(true);
+  };
+
+  const handleSelectPredefined = (set: typeof PREDEFINED_SETS[0]) => {
     setEditingTemplate({
       id: `temp-${Date.now()}`,
-      name: '',
+      name: set.label !== 'Proyecto vacío' ? '' : '',
       description: '',
-      icon: 'Layout',
-      tasks: []
+      icon: set.icon,
+      tasks: JSON.parse(JSON.stringify(set.tasks)),
     });
+    setShowPredefined(false);
     setIsModalOpen(true);
   };
 
   const handleSaveTemplate = () => {
     if (!editingTemplate) return;
-    
     setTemplates(prev => {
       const exists = prev.find(t => t.id === editingTemplate.id);
-      if (exists) {
-        return prev.map(t => t.id === editingTemplate.id ? editingTemplate : t);
-      }
+      if (exists) return prev.map(t => t.id === editingTemplate.id ? editingTemplate : t);
       return [...prev, editingTemplate];
     });
-    
     setIsModalOpen(false);
     setEditingTemplate(null);
   };
 
   const addTask = () => {
     if (!editingTemplate) return;
-    const newTask: TemplateTask = {
-      title: '',
-      description: '',
-      points: 5
-    };
-    setEditingTemplate({
-      ...editingTemplate,
-      tasks: [...editingTemplate.tasks, newTask]
-    });
+    const newTask: TemplateTask = { title: '', description: '', points: 5, peso: 0 };
+    setEditingTemplate({ ...editingTemplate, tasks: [...editingTemplate.tasks, newTask] });
   };
 
   const removeTask = (index: number) => {
     if (!editingTemplate) return;
     const newTasks = [...editingTemplate.tasks];
     newTasks.splice(index, 1);
-    setEditingTemplate({
-      ...editingTemplate,
-      tasks: newTasks
-    });
+    setEditingTemplate({ ...editingTemplate, tasks: newTasks });
   };
 
   const updateTask = (index: number, field: keyof TemplateTask, value: any) => {
     if (!editingTemplate) return;
     const newTasks = [...editingTemplate.tasks];
     newTasks[index] = { ...newTasks[index], [field]: value };
-    setEditingTemplate({
-      ...editingTemplate,
-      tasks: newTasks
-    });
+    setEditingTemplate({ ...editingTemplate, tasks: newTasks });
   };
 
-  const getIcon = (iconName: string) => {
-    switch (iconName) {
-      case 'Cloud': return <Cloud size={20} />;
-      case 'Cpu': return <Cpu size={20} />;
-      case 'Database': return <Database size={20} />;
-      default: return <Layout size={20} />;
-    }
-  };
+  // ── Ponderation helpers ─────────────────────────────────────────────────────
+  const totalPeso = (editingTemplate?.tasks ?? []).reduce((s, t) => s + (t.peso ?? 0), 0);
+  const pesoColor = Math.abs(totalPeso - 100) < 1 ? '#15803d' : totalPeso > 100 ? '#dc2626' : '#d97706';
 
   return (
     <div className="p-8 space-y-8">
@@ -116,182 +165,195 @@ export default function ProjectTemplates({ templates, setTemplates }: ProjectTem
           </h1>
           <p className="text-slate-500 mt-1">Gestiona las tareas predefinidas para cada tipo de proyecto.</p>
         </div>
-        <button 
-          onClick={handleNewTemplate}
-          className="flex items-center gap-2 px-6 h-12 bg-primary text-white rounded-xl font-bold hover:opacity-90 transition-all shadow-lg shadow-primary/20"
-        >
-          <Plus size={20} />
-          Nueva Plantilla
+        <button onClick={handleNewTemplate} className="flex items-center gap-2 px-6 h-12 bg-primary text-white rounded-xl font-bold hover:opacity-90 transition-all shadow-lg shadow-primary/20">
+          <Plus size={20}/> Nueva Plantilla
         </button>
       </div>
 
+      {/* Cards grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {templates.map((template) => (
-          <div key={template.id} className="bg-white rounded-2xl border border-slate-200 p-6 hover:shadow-md transition-all group">
-            <div className="flex items-start justify-between mb-4">
-              <div className={`w-12 h-12 rounded-xl flex items-center justify-center bg-slate-50 text-slate-600 group-hover:bg-primary group-hover:text-white transition-colors`}>
-                {getIcon(template.icon)}
+        {templates.map((template) => {
+          const totalPesoCard = template.tasks.reduce((s, t) => s + (t.peso ?? 0), 0);
+          const isPonderado   = template.tasks.some(t => (t.peso ?? 0) > 0);
+          return (
+            <div key={template.id} className="bg-white rounded-2xl border border-slate-200 p-6 hover:shadow-md transition-all group">
+              <div className="flex items-start justify-between mb-4">
+                <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-slate-50 text-slate-600 group-hover:bg-primary group-hover:text-white transition-colors">
+                  {getIcon(template.icon)}
+                </div>
+                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button onClick={() => handleEditTemplate(template)} className="p-2 text-slate-400 hover:text-primary hover:bg-primary/5 rounded-lg transition-all"><Edit2 size={16}/></button>
+                  <button onClick={() => handleDeleteTemplate(template.id)} className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"><Trash2 size={16}/></button>
+                </div>
               </div>
-              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button 
-                  onClick={() => handleEditTemplate(template)}
-                  className="p-2 text-slate-400 hover:text-primary hover:bg-primary/5 rounded-lg transition-all"
-                >
-                  <Edit2 size={16} />
-                </button>
-                <button 
-                  onClick={() => handleDeleteTemplate(template.id)}
-                  className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
-                >
-                  <Trash2 size={16} />
-                </button>
-              </div>
-            </div>
-            
-            <h3 className="text-lg font-bold text-slate-900 mb-1">{template.name}</h3>
-            <p className="text-sm text-slate-500 mb-6 line-clamp-2">{template.description}</p>
-            
-            <div className="space-y-3">
-              <div className="flex items-center justify-between text-xs font-bold text-slate-400 uppercase tracking-wider">
-                <span>Tareas Predefinidas</span>
-                <span>{template.tasks.length}</span>
-              </div>
+              <h3 className="text-lg font-bold text-slate-900 mb-1">{template.name}</h3>
+              <p className="text-sm text-slate-500 mb-4 line-clamp-2">{template.description}</p>
+              {/* Ponderation bar */}
+              {isPonderado && (
+                <div className="mb-4">
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="text-xs text-slate-400">Ponderación total</span>
+                    <span className="text-xs font-bold" style={{ color: Math.abs(totalPesoCard-100)<1 ? '#15803d' : totalPesoCard>100 ? '#dc2626' : '#d97706' }}>{totalPesoCard}%</span>
+                  </div>
+                  <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                    <div className="h-full rounded-full transition-all" style={{ width:`${Math.min(totalPesoCard,100)}%`, background: Math.abs(totalPesoCard-100)<1?'#15803d':totalPesoCard>100?'#dc2626':'#d97706' }}/>
+                  </div>
+                </div>
+              )}
               <div className="space-y-2">
+                <div className="flex items-center justify-between text-xs font-bold text-slate-400 uppercase tracking-wider">
+                  <span>Tareas predefinidas</span><span>{template.tasks.length}</span>
+                </div>
                 {template.tasks.slice(0, 3).map((task, idx) => (
                   <div key={idx} className="flex items-center gap-2 text-sm text-slate-600">
-                    <CheckCircle2 size={14} className="text-emerald-500 shrink-0" />
-                    <span className="truncate">{task.title}</span>
+                    <CheckCircle2 size={14} className="text-emerald-500 shrink-0"/>
+                    <span className="truncate flex-1">{task.title}</span>
+                    {(task.peso ?? 0) > 0 && <span className="text-xs text-slate-400 shrink-0">{task.peso}%</span>}
                   </div>
                 ))}
-                {template.tasks.length > 3 && (
-                  <p className="text-xs text-slate-400 font-medium pl-6">+{template.tasks.length - 3} tareas más...</p>
-                )}
+                {template.tasks.length > 3 && <p className="text-xs text-slate-400 font-medium pl-6">+{template.tasks.length-3} tareas más…</p>}
               </div>
             </div>
+          );
+        })}
+        {templates.length === 0 && (
+          <div className="col-span-3 flex flex-col items-center justify-center py-20 text-slate-400">
+            <ClipboardList size={40} className="mb-4 opacity-30"/>
+            <p className="text-sm">No hay plantillas. Crea tu primera con el botón de arriba.</p>
           </div>
-        ))}
+        )}
       </div>
+
+      {/* Selector de plantillas predefinidas */}
+      <AnimatePresence>
+        {showPredefined && (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[150] flex items-center justify-center p-4">
+            <motion.div initial={{ opacity:0, scale:0.95, y:20 }} animate={{ opacity:1, scale:1, y:0 }} exit={{ opacity:0, scale:0.95, y:20 }}
+              className="bg-white rounded-3xl w-full max-w-xl shadow-2xl overflow-hidden">
+              <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900">Nueva plantilla</h3>
+                  <p className="text-sm text-slate-500 mt-0.5">Elige un punto de partida</p>
+                </div>
+                <button onClick={()=>setShowPredefined(false)} className="p-2 hover:bg-slate-200 rounded-full transition-colors"><X size={18} className="text-slate-500"/></button>
+              </div>
+              <div className="p-6 space-y-3">
+                {PREDEFINED_SETS.map(set => (
+                  <button key={set.label} onClick={()=>handleSelectPredefined(set)}
+                    className="w-full flex items-center gap-4 p-4 rounded-2xl border border-slate-200 hover:border-primary hover:bg-primary/5 transition-all text-left group">
+                    <div className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-500 group-hover:bg-primary group-hover:text-white transition-colors shrink-0">
+                      {getIcon(set.icon)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-bold text-slate-900 text-sm">{set.label}</p>
+                      <p className="text-xs text-slate-400 mt-0.5">{set.tasks.length === 0 ? 'Sin tareas predefinidas — empezar desde cero' : `${set.tasks.length} tareas · ${set.tasks.reduce((s,t)=>s+(t.peso??0),0)}% ponderado`}</p>
+                    </div>
+                    <ChevronRight size={16} className="text-slate-300 group-hover:text-primary shrink-0"/>
+                  </button>
+                ))}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Template Editor Modal */}
       <AnimatePresence>
         {isModalOpen && editingTemplate && (
           <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[150] flex items-center justify-center p-4">
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="bg-white rounded-3xl w-full max-w-4xl max-h-[90vh] shadow-2xl overflow-hidden flex flex-col"
-            >
+            <motion.div initial={{ opacity:0, scale:0.95, y:20 }} animate={{ opacity:1, scale:1, y:0 }} exit={{ opacity:0, scale:0.95, y:20 }}
+              className="bg-white rounded-3xl w-full max-w-4xl max-h-[90vh] shadow-2xl overflow-hidden flex flex-col">
               <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
                 <h3 className="text-xl font-bold text-slate-900">
                   {editingTemplate.id.startsWith('temp-') ? 'Nueva Plantilla' : 'Editar Plantilla'}
                 </h3>
-                <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-slate-200 rounded-full transition-colors">
-                  <X size={20} className="text-slate-500" />
-                </button>
+                <button onClick={()=>setIsModalOpen(false)} className="p-2 hover:bg-slate-200 rounded-full transition-colors"><X size={20} className="text-slate-500"/></button>
               </div>
 
               <div className="flex-1 overflow-y-auto p-8">
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                  {/* Basic Info */}
+                  {/* Left — Basic info + Icons */}
                   <div className="space-y-6">
                     <div className="space-y-2">
                       <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Nombre de la Plantilla</label>
-                      <input 
-                        type="text" 
-                        value={editingTemplate.name}
-                        onChange={(e) => setEditingTemplate({ ...editingTemplate, name: e.target.value })}
-                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary/20 outline-none font-medium"
-                        placeholder="Ej: Ingesta Avanzada"
-                      />
+                      <input type="text" value={editingTemplate.name} onChange={(e)=>setEditingTemplate({...editingTemplate,name:e.target.value})}
+                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary/20 outline-none font-medium" placeholder="Ej: Ingesta Avanzada ADA"/>
                     </div>
-
                     <div className="space-y-2">
                       <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Descripción</label>
-                      <textarea 
-                        value={editingTemplate.description}
-                        onChange={(e) => setEditingTemplate({ ...editingTemplate, description: e.target.value })}
-                        rows={3}
-                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary/20 outline-none resize-none text-sm"
-                        placeholder="Describe el propósito de esta plantilla..."
-                      />
+                      <textarea value={editingTemplate.description} onChange={(e)=>setEditingTemplate({...editingTemplate,description:e.target.value})}
+                        rows={3} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary/20 outline-none resize-none text-sm" placeholder="Describe el propósito de esta plantilla…"/>
                     </div>
-
+                    {/* Icon picker — 20 options */}
                     <div className="space-y-2">
-                      <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Icono</label>
-                      <div className="grid grid-cols-4 gap-2">
-                        {['Cloud', 'Cpu', 'Database', 'Layout'].map(icon => (
-                          <button
-                            key={icon}
-                            onClick={() => setEditingTemplate({ ...editingTemplate, icon })}
-                            className={`p-3 rounded-xl flex items-center justify-center transition-all ${
-                              editingTemplate.icon === icon 
-                                ? 'bg-primary text-white shadow-lg shadow-primary/20' 
-                                : 'bg-slate-50 text-slate-400 hover:bg-slate-100'
-                            }`}
-                          >
-                            {getIcon(icon)}
+                      <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Ícono ({ICON_LIST.length} opciones)</label>
+                      <div className="grid grid-cols-5 gap-1.5">
+                        {ICON_LIST.map(ic => (
+                          <button key={ic.id} onClick={()=>setEditingTemplate({...editingTemplate,icon:ic.id})} title={ic.label}
+                            className={`p-2 rounded-lg flex items-center justify-center transition-all ${editingTemplate.icon===ic.id?'bg-primary text-white shadow-lg shadow-primary/20':'bg-slate-50 text-slate-400 hover:bg-slate-100'}`}>
+                            {getIcon(ic.id, 16)}
                           </button>
                         ))}
                       </div>
+                      <p className="text-xs text-slate-400">Seleccionado: <strong>{ICON_LIST.find(i=>i.id===editingTemplate.icon)?.label ?? editingTemplate.icon}</strong></p>
                     </div>
+                    {/* Ponderation summary */}
+                    {editingTemplate.tasks.length > 0 && (
+                      <div className="p-4 rounded-xl bg-slate-50 border border-slate-200">
+                        <div className="flex justify-between items-center mb-2">
+                          <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Ponderación total</span>
+                          <span className="text-sm font-bold" style={{ color: pesoColor }}>{totalPeso}%</span>
+                        </div>
+                        <div className="h-2 bg-slate-200 rounded-full overflow-hidden mb-1">
+                          <div className="h-full rounded-full transition-all" style={{ width:`${Math.min(totalPeso,100)}%`, background:pesoColor }}/>
+                        </div>
+                        <p className="text-xs" style={{ color: pesoColor }}>
+                          {Math.abs(totalPeso-100)<1 ? '✓ Ponderación completa (100%)' : totalPeso > 100 ? `⚠ Excede el 100% en ${totalPeso-100}%` : `Faltan ${100-totalPeso}% por ponderar`}
+                        </p>
+                      </div>
+                    )}
                   </div>
 
-                  {/* Tasks List */}
+                  {/* Right — Tasks */}
                   <div className="lg:col-span-2 space-y-4">
                     <div className="flex items-center justify-between">
-                      <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Tareas Predefinidas</label>
-                      <button 
-                        onClick={addTask}
-                        className="flex items-center gap-1 text-xs font-bold text-primary hover:underline"
-                      >
-                        <PlusCircle size={14} />
-                        Añadir Tarea
+                      <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Tareas Predefinidas ({editingTemplate.tasks.length})</label>
+                      <button onClick={addTask} className="flex items-center gap-1 text-xs font-bold text-primary hover:underline">
+                        <PlusCircle size={14}/> Añadir tarea
                       </button>
                     </div>
 
                     <div className="space-y-3">
                       {editingTemplate.tasks.map((task, index) => (
                         <div key={index} className="bg-slate-50 rounded-2xl p-4 border border-slate-100 flex gap-4">
-                          <div className="pt-2 text-slate-300">
-                            <GripVertical size={18} />
-                          </div>
+                          <div className="pt-2 text-slate-300"><GripVertical size={18}/></div>
                           <div className="flex-1 space-y-3">
-                            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                              <input 
-                                type="text" 
-                                value={task.title}
-                                onChange={(e) => updateTask(index, 'title', e.target.value)}
-                                className="md:col-span-3 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold outline-none focus:ring-2 focus:ring-primary/10"
-                                placeholder="Título de la tarea"
-                              />
-                              <input 
-                                type="number" 
-                                value={task.points}
-                                onChange={(e) => updateTask(index, 'points', parseInt(e.target.value))}
-                                className="px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold outline-none focus:ring-2 focus:ring-primary/10"
-                                placeholder="Pts"
-                              />
+                            <div className="grid grid-cols-12 gap-2">
+                              <input type="text" value={task.title} onChange={(e)=>updateTask(index,'title',e.target.value)}
+                                className="col-span-7 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold outline-none focus:ring-2 focus:ring-primary/10" placeholder="Título de la tarea"/>
+                              <div className="col-span-2 relative">
+                                <input type="number" value={task.points} min={1} max={99}
+                                  onChange={(e)=>updateTask(index,'points',parseInt(e.target.value)||0)}
+                                  className="w-full px-2 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold outline-none focus:ring-2 focus:ring-primary/10 text-center" placeholder="Pts" title="Story points"/>
+                                <span className="absolute -top-4 left-0 text-xs text-slate-400">Pts</span>
+                              </div>
+                              <div className="col-span-3 relative">
+                                <input type="number" value={task.peso ?? 0} min={0} max={100}
+                                  onChange={(e)=>updateTask(index,'peso',Math.min(100,parseInt(e.target.value)||0))}
+                                  className="w-full px-2 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold outline-none focus:ring-2 focus:ring-primary/10 text-center"
+                                  placeholder="%" title="Peso ponderado (%)"/>
+                                <span className="absolute -top-4 left-0 text-xs text-slate-400">Peso %</span>
+                              </div>
                             </div>
-                            <textarea 
-                              value={task.description}
-                              onChange={(e) => updateTask(index, 'description', e.target.value)}
-                              rows={2}
-                              className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-primary/10 resize-none"
-                              placeholder="Descripción detallada..."
-                            />
+                            <textarea value={task.description} onChange={(e)=>updateTask(index,'description',e.target.value)}
+                              rows={2} className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-primary/10 resize-none" placeholder="Descripción detallada de la tarea…"/>
                           </div>
-                          <button 
-                            onClick={() => removeTask(index)}
-                            className="p-2 text-slate-300 hover:text-red-500 transition-colors"
-                          >
-                            <Trash2 size={18} />
-                          </button>
+                          <button onClick={()=>removeTask(index)} className="p-2 text-slate-300 hover:text-red-500 transition-colors"><Trash2 size={18}/></button>
                         </div>
                       ))}
                       {editingTemplate.tasks.length === 0 && (
                         <div className="p-12 border-2 border-dashed border-slate-100 rounded-3xl text-center">
-                          <p className="text-slate-400 text-sm italic">No hay tareas. Añade la primera para esta plantilla.</p>
+                          <p className="text-slate-400 text-sm italic">Sin tareas. Añade la primera o vuelve al inicio para usar una plantilla base.</p>
                         </div>
                       )}
                     </div>
@@ -300,19 +362,10 @@ export default function ProjectTemplates({ templates, setTemplates }: ProjectTem
               </div>
 
               <div className="p-6 bg-slate-50 border-t border-slate-100 flex justify-end gap-3">
-                <button 
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-6 py-3 text-sm font-bold text-slate-600 hover:bg-slate-200 rounded-xl transition-colors"
-                >
-                  Cancelar
-                </button>
-                <button 
-                  onClick={handleSaveTemplate}
-                  disabled={!editingTemplate.name.trim()}
-                  className="flex items-center gap-2 px-8 py-3 text-sm font-bold bg-primary text-white rounded-xl hover:bg-primary/90 transition-all shadow-lg shadow-primary/20 disabled:opacity-50"
-                >
-                  <Save size={18} />
-                  Guardar Plantilla
+                <button onClick={()=>setIsModalOpen(false)} className="px-6 py-3 text-sm font-bold text-slate-600 hover:bg-slate-200 rounded-xl transition-colors">Cancelar</button>
+                <button onClick={handleSaveTemplate} disabled={!editingTemplate.name.trim()}
+                  className="flex items-center gap-2 px-8 py-3 text-sm font-bold bg-primary text-white rounded-xl hover:bg-primary/90 transition-all shadow-lg shadow-primary/20 disabled:opacity-50">
+                  <Save size={18}/> Guardar Plantilla
                 </button>
               </div>
             </motion.div>
