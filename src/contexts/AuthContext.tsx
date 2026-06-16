@@ -2,11 +2,11 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
-// pm: Rodo → vista ejecutiva total, acceso admin y estimaciones
-// tech_lead: Juan/Diego/David → multi-proyecto de su área, marca etapas
+// pm: Amilkar → vista ejecutiva total, acceso admin y estimaciones
+// tech_lead: Juan Pablo/Diego/David → multi-proyecto de su área, marca etapas
 // project_lead: lidera un proyecto específico
-// tech_ref: Juliana/Daniel → referente técnico, apoya líder en actividades asignadas
-// developer: Sergio/Fabrizio → ejecuta sus tareas asignadas
+// tech_ref: Juliana → referente técnico, apoya líder en actividades asignadas
+// developer: Sergio/Fabrizio/Ana → ejecuta sus tareas asignadas
 export type UserRole = 'pm' | 'tech_lead' | 'project_lead' | 'tech_ref' | 'developer';
 
 export interface AuthUser {
@@ -87,52 +87,46 @@ export const ROLE_LABEL: Record<UserRole, string> = {
 // ─── Proyectos del sistema ─────────────────────────────────────────────────────
 
 export const PROJECTS = [
-  // Juan Arévalo
-  { id: 'NGA',      name: 'NGA',      area: 'Juan Arévalo', color: '#7c3aed' },
-  { id: 'CRONOS',   name: 'CRONOS',   area: 'Juan Arévalo', color: '#0891b2' },
-  { id: 'FICO',     name: 'FICO',     area: 'Juan Arévalo', color: '#dc2626' },
-  { id: 'PINTO',    name: 'PINTO',    area: 'Juan Arévalo', color: '#059669' },
-  { id: 'QA',       name: 'QA',       area: 'Juan Arévalo', color: '#d97706' },
-  // Diego Sánchez
+  // Juan Pablo Arévalo — BBVA CO
+  { id: 'FICO',     name: 'FICO',     area: 'Juan Pablo Arévalo', color: '#dc2626' },
+  { id: 'NGA',      name: 'NGA',      area: 'Juan Pablo Arévalo', color: '#7c3aed' },
+  { id: 'CRONOS',   name: 'CRONOS',   area: 'Juan Pablo Arévalo', color: '#0891b2' },
+  { id: 'PINTO',    name: 'PINTO',    area: 'Juan Pablo Arévalo', color: '#059669' },
+  { id: 'QA',       name: 'QA',       area: 'Juan Pablo Arévalo', color: '#d97706' },
+  // Diego Sánchez — BBVA CO · SDM
   { id: 'SDM1',     name: 'SDM 1',    area: 'Diego Sánchez', color: '#2563eb' },
   { id: 'SDM2',     name: 'SDM 2',    area: 'Diego Sánchez', color: '#4f46e5' },
   { id: 'MURIC',    name: 'MURIC',    area: 'Diego Sánchez', color: '#0f766e' },
   { id: 'BRICKELL', name: 'BRICKELL', area: 'Diego Sánchez', color: '#b45309' },
   { id: 'BCBS239',  name: 'BCBS239',  area: 'Diego Sánchez', color: '#7e22ce' },
-  // David Huamán
+  // David Huamán — Credicorp Capital
   { id: 'OPTIM',    name: 'Optimización', area: 'David Huamán', color: '#0369a1' },
   { id: 'FABRICA',  name: 'Fábrica',  area: 'David Huamán', color: '#be185d' },
 ];
 
-// ─── Cuentas simuladas (@timia.ai) ────────────────────────────────────────────
+// ─── Equipo real Timia ────────────────────────────────────────────────────────
 // En producción: reemplazar login() por token de Cloudflare Access / Google OAuth
 
 export const MOCK_ACCOUNTS: AuthUser[] = [
-  // ── Demo principal: 3 roles visibles ──────────────────────────────────────
+  // ── Project Manager ───────────────────────────────────────────────────────
   {
-    id: 'u-rodolfo', name: 'Rodolfo Pereda', email: 'rodolfo.pereda@timia.ai',
-    initials: 'RP', role: 'pm', avatarColor: '#7c3aed',
+    id: 'u-amilkar', name: 'Amilkar Bolaño', email: 'byjossone@gmail.com',
+    initials: 'AB', role: 'pm', avatarColor: '#dc2626',
     projectIds: PROJECTS.map(p => p.id),
-    areaLabel: 'Project Manager · BBVA CO & CAP',
+    areaLabel: 'Project Manager · BBVA CO & Credicorp Capital',
+  },
+  // ── Líderes Técnicos ──────────────────────────────────────────────────────
+  {
+    id: 'u-juan', name: 'Juan Pablo Arévalo', email: 'juanpablo.arevalo@timia.ai',
+    initials: 'JA', role: 'tech_lead', avatarColor: '#7c3aed',
+    projectIds: ['FICO', 'NGA', 'CRONOS', 'PINTO', 'QA'],
+    areaLabel: 'Líder Técnico · FICO · NGA · CRONOS · PINTO · QA',
   },
   {
     id: 'u-david', name: 'David Huamán', email: 'david.huaman@timia.ai',
     initials: 'DH', role: 'tech_lead', avatarColor: '#0369a1',
-    projectIds: ['FICO', 'NGA', 'CRONOS', 'OPTIM', 'FABRICA'],
-    areaLabel: 'Líder Técnico · BBVA CO & Credicorp Capital',
-  },
-  {
-    id: 'u-juliana', name: 'Juliana Garzón', email: 'juliana.garzon@timia.ai',
-    initials: 'JG', role: 'tech_ref', avatarColor: '#0f766e',
-    projectIds: ['FICO', 'NGA'],
-    areaLabel: 'Referente Técnico · FICO · NGA',
-  },
-  // ── Resto del equipo ──────────────────────────────────────────────────────
-  {
-    id: 'u-juan', name: 'Juan Arévalo', email: 'juan.arevalo@timia.ai',
-    initials: 'JA', role: 'tech_lead', avatarColor: '#dc2626',
-    projectIds: ['NGA', 'CRONOS', 'FICO', 'PINTO', 'QA'],
-    areaLabel: 'Líder Técnico · NGA · CRONOS · FICO · PINTO · QA',
+    projectIds: ['OPTIM', 'FABRICA', 'SDM1', 'SDM2'],
+    areaLabel: 'Líder Técnico · Credicorp Capital · SDM',
   },
   {
     id: 'u-diego', name: 'Diego Sánchez', email: 'diego.sanchez@timia.ai',
@@ -140,24 +134,31 @@ export const MOCK_ACCOUNTS: AuthUser[] = [
     projectIds: ['SDM1', 'SDM2', 'MURIC', 'BRICKELL', 'BCBS239'],
     areaLabel: 'Líder Técnico · SDM · MURIC · BRICKELL · BCBS239',
   },
+  // ── Referente Técnico ─────────────────────────────────────────────────────
+  {
+    id: 'u-juliana', name: 'Juliana Garzón', email: 'juliana.garzon@timia.ai',
+    initials: 'JG', role: 'tech_ref', avatarColor: '#0f766e',
+    projectIds: ['FICO', 'NGA'],
+    areaLabel: 'Referente Técnico · FICO · NGA',
+  },
   // ── Desarrolladores ───────────────────────────────────────────────────────
   {
-    id: 'u-sergio', name: 'Sergio Mendoza', email: 'sergio.mendoza@timia.ai',
-    initials: 'SM', role: 'developer', avatarColor: '#b45309',
-    projectIds: ['FICO', 'NGA'],
-    areaLabel: 'Desarrollador · FICO · NGA',
+    id: 'u-sergio', name: 'Sergio David Rodriguez', email: 'sergio.rodriguez@timia.ai',
+    initials: 'SR', role: 'developer', avatarColor: '#b45309',
+    projectIds: ['FICO', 'NGA', 'CRONOS'],
+    areaLabel: 'Desarrollador · FICO · NGA · CRONOS',
   },
   {
-    id: 'u-fabrizio', name: 'Fabrizio Torres', email: 'fabrizio.torres@timia.ai',
-    initials: 'FT', role: 'developer', avatarColor: '#059669',
-    projectIds: ['CRONOS', 'FICO'],
-    areaLabel: 'Desarrollador · CRONOS · FICO',
+    id: 'u-fabrizio', name: 'Fabrizio Atiquipa', email: 'fabrizio.atiquipa@timia.ai',
+    initials: 'FA', role: 'developer', avatarColor: '#059669',
+    projectIds: ['FICO', 'NGA', 'CRONOS'],
+    areaLabel: 'Desarrollador · FICO · NGA · CRONOS',
   },
   {
     id: 'u-ana', name: 'Ana Restrepo', email: 'ana.restrepo@timia.ai',
-    initials: 'AR', role: 'developer', avatarColor: '#7c3aed',
-    projectIds: ['NGA', 'CRONOS'],
-    areaLabel: 'Desarrolladora · NGA · CRONOS',
+    initials: 'AR', role: 'developer', avatarColor: '#be185d',
+    projectIds: ['NGA', 'CRONOS', 'PINTO'],
+    areaLabel: 'Desarrolladora · NGA · CRONOS · PINTO',
   },
 ];
 

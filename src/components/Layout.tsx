@@ -43,7 +43,7 @@ export default function Layout({ children, currentView, onViewChange, userRole }
     return () => document.removeEventListener('mousedown', handleClick);
   }, []);
 
-  const herramientasViews: View[] = ['standards','roles-permissions','audit','project-templates'];
+  const herramientasViews: View[] = ['roles-permissions','audit','project-templates'];
   const herramientasActive = herramientasViews.includes(currentView);
 
   return (
@@ -106,8 +106,8 @@ export default function Layout({ children, currentView, onViewChange, userRole }
                 </button>
               )}
 
-              {/* Herramientas dropdown — engloba Estándares, Roles, Auditoría */}
-              {(canAccess(userRole as UserRole,'view_standards')||canAccess(userRole as UserRole,'u_roles')||canAccess(userRole as UserRole,'view_audit')) && (
+              {/* Herramientas dropdown — Roles, Auditoría, Plantillas */}
+              {(canAccess(userRole as UserRole,'u_roles')||canAccess(userRole as UserRole,'view_audit')||canAccess(userRole as UserRole,'create_projects')) && (
                 <div ref={herramRef} className="relative">
                   <button
                     onClick={() => setShowHerramientas(v=>!v)}
@@ -117,12 +117,6 @@ export default function Layout({ children, currentView, onViewChange, userRole }
                   </button>
                   {showHerramientas && (
                     <div className="absolute top-full left-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-50 overflow-hidden" style={{minWidth:170}}>
-                      {canAccess(userRole as UserRole,'view_standards') && (
-                        <button onClick={()=>{setShowHerramientas(false);onViewChange('standards');}}
-                          className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm text-left transition-colors ${currentView==='standards'?'bg-primary/10 text-primary font-medium':'text-slate-600 hover:bg-slate-50'}`}>
-                          <Layers size={13}/> Estándares
-                        </button>
-                      )}
                       {canAccess(userRole as UserRole,'u_roles') && (
                         <button onClick={()=>{setShowHerramientas(false);onViewChange('roles-permissions');}}
                           className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm text-left transition-colors ${currentView==='roles-permissions'?'bg-primary/10 text-primary font-medium':'text-slate-600 hover:bg-slate-50'}`}>
@@ -230,42 +224,6 @@ export default function Layout({ children, currentView, onViewChange, userRole }
       <div className="flex flex-1">
         {/* UserProfile modal */}
         {showProfile && <UserProfile onClose={() => setShowProfile(false)} />}
-
-        {/* Sidebar — solo para Estándares (las demás vistas son full-width) */}
-        {currentView === 'standards' && (
-          <aside className="hidden lg:flex flex-col w-64 p-4 border-r border-slate-200 bg-white">
-            <div className="mb-6 px-2">
-              <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wider">Consola Admin</h2>
-            </div>
-            <nav className="flex flex-col gap-1">
-              <SidebarLink 
-                icon={<Layers size={18} />} 
-                label="Estándares" 
-                active={currentView === 'standards'} 
-                onClick={() => onViewChange('standards')}
-              />
-              {/* Ingesta, Procesamiento, Reglas — ocultos temporalmente */}
-              <SidebarLink 
-                icon={<GitBranch size={18} />} 
-                label="Plantillas de Proyecto" 
-                active={currentView === 'project-templates'} 
-                onClick={() => onViewChange('project-templates')}
-              />
-              <SidebarLink 
-                icon={<Shield size={18} />} 
-                label="Roles y Permisos" 
-                active={currentView === 'roles-permissions'} 
-                onClick={() => onViewChange('roles-permissions')}
-              />
-              <SidebarLink 
-                icon={<Shield size={18} />} 
-                label="Registro de Auditoría" 
-                active={currentView === 'audit'} 
-                onClick={() => onViewChange('audit')}
-              />
-            </nav>
-          </aside>
-        )}
 
         {/* Main Content */}
         <main className="flex-1 overflow-auto">

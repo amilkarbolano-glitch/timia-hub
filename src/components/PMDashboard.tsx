@@ -9,9 +9,9 @@ import { PROJECTS } from '../contexts/AuthContext';
 const JIRA_BASE = 'https://jira.globaldevtools.bbva.com/browse/';
 
 const PROJ_DATA = [
-  { id:'FICO',     pct:62, tasks:18, done:11, risk:2,  members:['David Huamán','Juliana Garzón','Sergio Rodriguez','Fabrizio Atiquipa'],   lead:'David Huamán',     ref:'Juliana Garzón',  area:'Juan Arévalo',  jira:'DECRONOS-1997', priority:'Alta',    startDate:'2026-01-15', desc:'Gobierno y calidad de datos · plataforma FICO LIVE/WORK' },
-  { id:'NGA',      pct:91, tasks:12, done:11, risk:0,  members:['Juliana Garzón','Carlos Suárez','Camila Castro','Juan Vargas'],            lead:'Juliana Garzón',   ref:null,              area:'Juan Arévalo',  jira:'DECRONOS-1400', priority:'Media',   startDate:'2026-02-01', desc:'Ingesta y transformación de datos NGA · ETL campos' },
-  { id:'CRONOS',   pct:80, tasks:22, done:18, risk:1,  members:['Eric Buitrago','Jorge Acosta','Lina Bernal','Alejandro Uribe'],            lead:'Eric Buitrago',    ref:null,              area:'Juan Arévalo',  jira:'DECRONOS-1682', priority:'Alta',    startDate:'2026-01-10', desc:'Reglas Hammurabi · pipeline Spark · control-m' },
+  { id:'FICO',     pct:62, tasks:18, done:11, risk:2,  members:['Juan Pablo Arévalo','Juliana Garzón','Sergio David Rodriguez','Fabrizio Atiquipa'],   lead:'Juan Pablo Arévalo', ref:'Juliana Garzón',  area:'Juan Pablo Arévalo',  jira:'DECRONOS-1997', priority:'Alta',    startDate:'2026-01-15', desc:'Gobierno y calidad de datos · plataforma FICO LIVE/WORK' },
+  { id:'NGA',      pct:91, tasks:12, done:11, risk:0,  members:['Juan Pablo Arévalo','Juliana Garzón','Sergio David Rodriguez','Fabrizio Atiquipa'], lead:'Juan Pablo Arévalo', ref:'Juliana Garzón', area:'Juan Pablo Arévalo',  jira:'DECRONOS-1400', priority:'Media',   startDate:'2026-02-01', desc:'Ingesta y transformación de datos NGA · ETL campos' },
+  { id:'CRONOS',   pct:80, tasks:22, done:18, risk:1,  members:['Juan Pablo Arévalo','Sergio David Rodriguez','Fabrizio Atiquipa','Ana Restrepo'], lead:'Juan Pablo Arévalo', ref:null,              area:'Juan Pablo Arévalo',  jira:'DECRONOS-1682', priority:'Alta',    startDate:'2026-01-10', desc:'Reglas Hammurabi · pipeline Spark · control-m' },
   { id:'SDM1',     pct:55, tasks:14, done:8,  risk:2,  members:['Omar Bonilla','Mónica Mejía','Javier Moreno','Yurany Benavides'],          lead:'Omar Bonilla',     ref:null,              area:'Diego Sánchez', jira:'SDM-0412',     priority:'Alta',    startDate:'2026-03-01', desc:'Calidad datos SDM · entorno Work certificación' },
   { id:'SDM2',     pct:70, tasks:20, done:14, risk:1,  members:['Gustavo Sandoval','Felipe Cárdenas','Jorge Gil','Juan Muñoz'],             lead:'Gustavo Sandoval', ref:'Daniel Gómez',   area:'Diego Sánchez', jira:'SDM-0488',     priority:'Media',   startDate:'2026-02-15', desc:'Procesamiento SDM2 · reglas calidad · pruebas entorno' },
   { id:'MURIC',    pct:72, tasks:16, done:12, risk:1,  members:['Edson Huerta','Juan Jiménez','Camilo García','Carlos Bolaño'],             lead:'Edson Huerta',     ref:'Daniel Gómez',   area:'Diego Sánchez', jira:'MUR-0231',     priority:'Media',   startDate:'2026-02-01', desc:'Mutuos y recursos IC · certificación QA · ANS' },
@@ -35,7 +35,7 @@ const ACTIVITY = [
   { who:'Sistema ANS',    action:'alertó vencimiento',      detail:'Validación calidad datos LIVE · FICO ⚠',    time:'1 h',    color:'#ef4444', initials:'⚠' },
   { who:'Eric Buitrago',  action:'completó',                detail:'Gestión repositorios Bitbucket · CRONOS',   time:'2 h',    color:'#0891b2', initials:'EB' },
   { who:'Juliana Garzón', action:'cerró',                   detail:'Despliegue esquemas Work · NGA',            time:'3 h',    color:'#0f766e', initials:'JG' },
-  { who:'Juan Arévalo',   action:'creó tarea',              detail:'Solicitud ACLs Live FICO Q2-II',            time:'4 h',    color:'#dc2626', initials:'JA' },
+  { who:'Juan Pablo Arévalo',   action:'creó tarea',              detail:'Solicitud ACLs Live FICO Q2-II',            time:'4 h',    color:'#7c3aed', initials:'JA' },
   { who:'Fabrizio Atiquipa', action:'subió commit',         detail:'t_kbrb_output_data_co_proactivo · FICO',   time:'ayer',   color:'#059669', initials:'FA' },
   { who:'Juliana Garzón',   action:'asignada como ref.',    detail:'Validación calidad LIVE · FICO',            time:'ayer',   color:'#0f766e', initials:'JG' },
   { who:'Daniel Gómez',     action:'asignado a',            detail:'Pruebas entorno Work · SDM2',               time:'2 días', color:'#0891b2', initials:'DG' },
@@ -291,9 +291,9 @@ function ViewResumen() {
   ];
 
   const teams = [
-    { lead:'Juan Arévalo', initials:'JA', color:'#dc2626',
-      projs: PROJ_DATA.filter(p=>p.area==='Juan Arévalo'),
-      note: 'NGA · CRONOS · FICO' },
+    { lead:'Juan Pablo Arévalo', initials:'JA', color:'#7c3aed',
+      projs: PROJ_DATA.filter(p=>p.area==='Juan Pablo Arévalo'),
+      note: 'FICO · NGA · CRONOS · PINTO · QA' },
     { lead:'Diego Sánchez', initials:'DS', color:'#2563eb',
       projs: PROJ_DATA.filter(p=>p.area==='Diego Sánchez'),
       note: 'SDM1 · SDM2 · MURIC · BCBS239 · BRICKELL' },

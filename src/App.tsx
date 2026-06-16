@@ -7,7 +7,7 @@ import ProjectStandards from './components/ProjectStandards';
 import Analytics from './components/Analytics';
 import AuditLog from './components/AuditLog';
 import SetupProject from './components/SetupProject';
-import SetupTeam from './components/SetupTeam';
+// SetupTeam removed — team management via Admin panel
 import BankStatus from './components/BankStatus';
 import RolesPermissions from './components/RolesPermissions';
 import ProjectTemplates from './components/ProjectTemplates';
@@ -90,7 +90,6 @@ function AppInner() {
     const guards: Record<string, string> = {
       'audit':            's_audit',
       'roles-permissions':'u_roles',
-      'standards':        'view_standards',
       'analytics':        'view_analytics',
       'project-templates':'create_projects',
     };
@@ -105,15 +104,12 @@ function AppInner() {
       case 'setup-project':
         return (
           <SetupProject
-            onNext={() => navigate('setup-team')}
+            onNext={() => navigate('estimaciones')}
             templates={templates}
             selectedTemplateId={selectedTemplateId}
             onSelectTemplate={setSelectedTemplateId}
           />
         );
-      case 'setup-team':
-        // Al lanzar el proyecto, va directo a Estimaciones (no hay paso de tareas)
-        return <SetupTeam onNext={() => navigate('estimaciones')} onBack={() => navigate('setup-project')} />;
 
       case 'dashboard':
         return <KanbanBoard userRole={role} setUserRole={() => {}} />;
@@ -145,8 +141,7 @@ function AppInner() {
       case 'audit':
         return <AuditLog />;
 
-      case 'standards':
-        return <ProjectStandards />;
+      // standards removed
 
       case 'roles-permissions':
         return <RolesPermissions />;

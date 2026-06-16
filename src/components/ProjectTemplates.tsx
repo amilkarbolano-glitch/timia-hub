@@ -233,11 +233,15 @@ export default function ProjectTemplates({ templates, setTemplates }: ProjectTem
               <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
                 <div>
                   <h3 className="text-lg font-bold text-slate-900">Nueva plantilla</h3>
-                  <p className="text-sm text-slate-500 mt-0.5">Elige un punto de partida</p>
+                  <p className="text-sm text-slate-500 mt-0.5">Elige un punto de partida — se crea una <strong>copia editable</strong>, los originales no se modifican</p>
                 </div>
                 <button onClick={()=>setShowPredefined(false)} className="p-2 hover:bg-slate-200 rounded-full transition-colors"><X size={18} className="text-slate-500"/></button>
               </div>
               <div className="p-6 space-y-3">
+                <div className="flex items-start gap-2 px-3 py-2 bg-blue-50 border border-blue-100 rounded-xl mb-2">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="2" className="shrink-0 mt-0.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                  <p className="text-xs text-blue-700 leading-relaxed">Al seleccionar un punto de partida, se genera una <strong>copia nueva</strong> que puedes personalizar libremente. Las plantillas base nunca cambian.</p>
+                </div>
                 {PREDEFINED_SETS.map(set => (
                   <button key={set.label} onClick={()=>handleSelectPredefined(set)}
                     className="w-full flex items-center gap-4 p-4 rounded-2xl border border-slate-200 hover:border-primary hover:bg-primary/5 transition-all text-left group">
