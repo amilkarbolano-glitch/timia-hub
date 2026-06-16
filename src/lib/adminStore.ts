@@ -238,29 +238,25 @@ const DEFAULT_BBVA_ANS: BbvaAnsConfig = {
 };
 
 const DEFAULT_USERS: AdminUser[] = [
+  // ── Project Manager ──────────────────────────────────────────────────────────
   {
-    id: 'u-rodolfo', name: 'Rodolfo Pereda', email: 'rodolfo.pereda@timia.ai',
+    id: 'u-amilkar', name: 'Amilkar Bolaño', email: 'byjossone@gmail.com',
     role: 'pm', projectIds: BASE_PROJECTS.map(p => p.id),
-    initials: 'RP', avatarColor: '#7c3aed', active: true,
-    areaLabel: 'Project Manager · BBVA CO & CAP',
+    initials: 'AB', avatarColor: '#dc2626', active: true,
+    areaLabel: 'Project Manager · BBVA CO & Credicorp Capital',
+  },
+  // ── Líderes Técnicos ─────────────────────────────────────────────────────────
+  {
+    id: 'u-juan', name: 'Juan Pablo Arévalo', email: 'juanpablo.arevalo@timia.ai',
+    role: 'tech_lead', projectIds: ['FICO','NGA','CRONOS','PINTO','QA'],
+    initials: 'JA', avatarColor: '#7c3aed', active: true,
+    areaLabel: 'Líder Técnico · FICO · NGA · CRONOS · PINTO · QA',
   },
   {
     id: 'u-david', name: 'David Huamán', email: 'david.huaman@timia.ai',
-    role: 'tech_lead', projectIds: ['FICO','NGA','CRONOS','OPTIM','FABRICA'],
+    role: 'tech_lead', projectIds: ['OPTIM','FABRICA','SDM1','SDM2'],
     initials: 'DH', avatarColor: '#0369a1', active: true,
-    areaLabel: 'Líder Técnico · BBVA CO & Credicorp Capital',
-  },
-  {
-    id: 'u-juliana', name: 'Juliana Garzón', email: 'juliana.garzon@timia.ai',
-    role: 'tech_ref', projectIds: ['FICO','NGA'],
-    initials: 'JG', avatarColor: '#0f766e', active: true,
-    areaLabel: 'Referente Técnico · FICO · NGA',
-  },
-  {
-    id: 'u-juan', name: 'Juan Arévalo', email: 'juan.arevalo@timia.ai',
-    role: 'tech_lead', projectIds: ['NGA','CRONOS','FICO','PINTO','QA'],
-    initials: 'JA', avatarColor: '#dc2626', active: true,
-    areaLabel: 'Líder Técnico · NGA · CRONOS · FICO · PINTO · QA',
+    areaLabel: 'Líder Técnico · Credicorp Capital · SDM',
   },
   {
     id: 'u-diego', name: 'Diego Sánchez', email: 'diego.sanchez@timia.ai',
@@ -268,24 +264,31 @@ const DEFAULT_USERS: AdminUser[] = [
     initials: 'DS', avatarColor: '#2563eb', active: true,
     areaLabel: 'Líder Técnico · SDM · MURIC · BRICKELL · BCBS239',
   },
+  // ── Referente Técnico ────────────────────────────────────────────────────────
+  {
+    id: 'u-juliana', name: 'Juliana Garzón', email: 'juliana.garzon@timia.ai',
+    role: 'tech_ref', projectIds: ['FICO','NGA'],
+    initials: 'JG', avatarColor: '#0f766e', active: true,
+    areaLabel: 'Referente Técnico · FICO · NGA',
+  },
   // ── Desarrolladores ───────────────────────────────────────────────────────────
   {
-    id: 'u-sergio', name: 'Sergio Mendoza', email: 'sergio.mendoza@timia.ai',
-    role: 'developer', projectIds: ['FICO','NGA'],
-    initials: 'SM', avatarColor: '#b45309', active: true,
-    areaLabel: 'Desarrollador · FICO · NGA',
+    id: 'u-sergio', name: 'Sergio David Rodriguez', email: 'sergio.rodriguez@timia.ai',
+    role: 'developer', projectIds: ['FICO','NGA','CRONOS'],
+    initials: 'SR', avatarColor: '#b45309', active: true,
+    areaLabel: 'Desarrollador · FICO · NGA · CRONOS',
   },
   {
-    id: 'u-fabrizio', name: 'Fabrizio Torres', email: 'fabrizio.torres@timia.ai',
-    role: 'developer', projectIds: ['CRONOS','FICO'],
-    initials: 'FT', avatarColor: '#059669', active: true,
-    areaLabel: 'Desarrollador · CRONOS · FICO',
+    id: 'u-fabrizio', name: 'Fabrizio Atiquipa', email: 'fabrizio.atiquipa@timia.ai',
+    role: 'developer', projectIds: ['FICO','NGA','CRONOS'],
+    initials: 'FA', avatarColor: '#059669', active: true,
+    areaLabel: 'Desarrollador · FICO · NGA · CRONOS',
   },
   {
     id: 'u-ana', name: 'Ana Restrepo', email: 'ana.restrepo@timia.ai',
-    role: 'developer', projectIds: ['NGA','CRONOS'],
-    initials: 'AR', avatarColor: '#7c3aed', active: true,
-    areaLabel: 'Desarrolladora · NGA · CRONOS',
+    role: 'developer', projectIds: ['NGA','CRONOS','PINTO'],
+    initials: 'AR', avatarColor: '#be185d', active: true,
+    areaLabel: 'Desarrolladora · NGA · CRONOS · PINTO',
   },
 ];
 
