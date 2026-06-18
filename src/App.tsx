@@ -118,7 +118,9 @@ function AppInner() {
         return <BankStatus />;
 
       case 'estimaciones':
-        return canAccess(role, 'view_estimaciones') ? <Estimaciones onViewChange={navigate}/> : <AccessDenied onBack={goHome}/>;
+        return canAccess(role, 'view_estimaciones')
+          ? <div style={{ padding: '28px 36px' }}><Estimaciones onViewChange={navigate}/></div>
+          : <AccessDenied onBack={goHome}/>;
 
       case 'admin':
         return role === 'pm' ? <AdminPanel /> : <AccessDenied onBack={goHome}/>;

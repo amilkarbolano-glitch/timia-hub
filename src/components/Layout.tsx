@@ -2,14 +2,9 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useAuth, canAccess, UserRole } from '../contexts/AuthContext';
 import UserProfile from './UserProfile';
 import {
-  Layers,
   Settings,
   Search,
-  Bell,
   GitBranch,
-  Cloud,
-  Cpu,
-  Archive,
   Shield,
   BarChart3,
   Building2,
@@ -161,13 +156,11 @@ export default function Layout({ children, currentView, onViewChange, userRole }
           </div>
           
           <div className="flex items-center gap-2">
-            <button 
-              onClick={() => onViewChange('notifications')}
+            <button
+              onClick={() => { setShowUserMenu(false); setShowProfile(true); }}
               className="flex items-center justify-center w-10 h-10 rounded-lg bg-slate-100 text-slate-600 hover:bg-primary/10 hover:text-primary transition-all"
+              title="Perfil y configuración"
             >
-              <Bell size={20} />
-            </button>
-            <button className="flex items-center justify-center w-10 h-10 rounded-lg bg-slate-100 text-slate-600 hover:bg-primary/10 hover:text-primary transition-all">
               <Settings size={20} />
             </button>
             <div className="relative ml-2">
@@ -231,21 +224,5 @@ export default function Layout({ children, currentView, onViewChange, userRole }
         </main>
       </div>
     </div>
-  );
-}
-
-function SidebarLink({ icon, label, active, onClick }: { icon: React.ReactNode, label: string, active: boolean, onClick: () => void }) {
-  return (
-    <button 
-      onClick={onClick}
-      className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-colors text-sm font-medium ${
-        active 
-          ? 'bg-primary/10 text-primary' 
-          : 'text-slate-600 hover:bg-slate-100'
-      }`}
-    >
-      {icon}
-      {label}
-    </button>
   );
 }

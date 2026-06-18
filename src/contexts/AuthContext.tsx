@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
-// pm: Amilkar → vista ejecutiva total, acceso admin y estimaciones
+// pm: Rodolfo Pereda → vista ejecutiva total, acceso admin y estimaciones
 // tech_lead: Juan Pablo/Diego/David → multi-proyecto de su área, marca etapas
 // project_lead: lidera un proyecto específico
 // tech_ref: Juliana → referente técnico, apoya líder en actividades asignadas
@@ -110,8 +110,8 @@ export const PROJECTS = [
 export const MOCK_ACCOUNTS: AuthUser[] = [
   // ── Project Manager ───────────────────────────────────────────────────────
   {
-    id: 'u-amilkar', name: 'Amilkar Bolaño', email: 'amilkar.bolano@timia.ai',
-    initials: 'AB', role: 'pm', avatarColor: '#dc2626',
+    id: 'u-rodolfo', name: 'Rodolfo Pereda', email: 'rodolfo.pereda@timia.ai',
+    initials: 'RP', role: 'pm', avatarColor: '#dc2626',
     projectIds: PROJECTS.map(p => p.id),
     areaLabel: 'Project Manager · BBVA CO & Credicorp Capital',
   },
@@ -184,7 +184,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) setUser(JSON.parse(stored));
+      if (stored) {
+        const parsed: AuthUser = JSON.parse(stored);
+        // Validate that the stored user ID still exists in current accounts
+        // (prevents stale sessions when user accounts are renamed/removed)
+        const isValid = MOCK_ACCOUNTS.some(a => a.id === parsed.id);
+        if (isValid) {
+          // Refresh with current account data (picks up name/email/role changes)
+          const current = MOCK_ACCOUNTS.find(a => a.id === parsed.id)!;
+          setUser(current);
+        } else {
+          localStorage.removeItem(STORAGE_KEY);
+        }
+      }
     } catch {}
     setIsLoading(false);
   }, []);
