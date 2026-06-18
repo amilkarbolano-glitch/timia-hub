@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Trash2, FileDown, Search, Link2, Package, BookOpen, X, ExternalLink, Copy, Check } from 'lucide-react';
 import { adminStore, BitacoraEntry } from '../lib/adminStore';
-import { PROJECTS, useAuth } from '../contexts/AuthContext';
+import { PROJECTS, useAuth, canAccess } from '../contexts/AuthContext';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -148,9 +148,11 @@ function TabCambios({ user }: { user: any }) {
         <button onClick={exportCsv} style={{ display:'flex', alignItems:'center', gap:5, padding:'7px 12px', fontSize:12, border:'0.5px solid #e2e8f0', borderRadius:7, background:'#fff', cursor:'pointer', color:'#374151' }}>
           <FileDown size={13}/> CSV
         </button>
-        <button onClick={()=>setShow(v=>!v)} style={{ display:'flex', alignItems:'center', gap:5, padding:'7px 14px', fontSize:12, background:'#dc2626', color:'#fff', border:'none', borderRadius:7, cursor:'pointer', fontWeight:500 }}>
-          <Plus size={13}/> Nuevo cambio
-        </button>
+        {canAccess(user?.role, 'write_bitacora') && (
+          <button onClick={()=>setShow(v=>!v)} style={{ display:'flex', alignItems:'center', gap:5, padding:'7px 14px', fontSize:12, background:'#dc2626', color:'#fff', border:'none', borderRadius:7, cursor:'pointer', fontWeight:500 }}>
+            <Plus size={13}/> Nuevo cambio
+          </button>
+        )}
       </div>
 
       {showForm && (
@@ -522,14 +524,18 @@ function TabInventario({ user }: { user: any }) {
         </select>
         <span style={{ fontSize:11, color:'#94a3b8' }}>{visible.length} fila{visible.length!==1?'s':''}</span>
         <div style={{ marginLeft:'auto', display:'flex', gap:6 }}>
-          <button onClick={()=>setDelMode(v=>!v)}
-            style={{ padding:'6px 11px', fontSize:11, border:`0.5px solid ${delMode?'#dc2626':'#e2e8f0'}`,
-              borderRadius:7, background: delMode?'#fef2f2':'#fff', color: delMode?'#dc2626':'#64748b', cursor:'pointer' }}>
-            {delMode ? 'Listo' : 'Gestionar columnas'}
-          </button>
-          <button onClick={addRow} style={{ display:'flex', alignItems:'center', gap:5, padding:'6px 12px', fontSize:12, background:'#dc2626', color:'#fff', border:'none', borderRadius:7, cursor:'pointer', fontWeight:500 }}>
-            <Plus size={13}/> Agregar objeto
-          </button>
+          {canAccess(user?.role, 'write_bitacora') && (
+            <>
+              <button onClick={()=>setDelMode(v=>!v)}
+                style={{ padding:'6px 11px', fontSize:11, border:`0.5px solid ${delMode?'#dc2626':'#e2e8f0'}`,
+                  borderRadius:7, background: delMode?'#fef2f2':'#fff', color: delMode?'#dc2626':'#64748b', cursor:'pointer' }}>
+                {delMode ? 'Listo' : 'Gestionar columnas'}
+              </button>
+              <button onClick={addRow} style={{ display:'flex', alignItems:'center', gap:5, padding:'6px 12px', fontSize:12, background:'#dc2626', color:'#fff', border:'none', borderRadius:7, cursor:'pointer', fontWeight:500 }}>
+                <Plus size={13}/> Agregar objeto
+              </button>
+            </>
+          )}
         </div>
       </div>
 

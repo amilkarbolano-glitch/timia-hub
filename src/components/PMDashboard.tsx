@@ -930,7 +930,8 @@ const TABS: { id:Tab; label:string; icon:React.ReactNode; highlight?:boolean }[]
   // Risk Score oculto temporalmente (solicitud jefe)
 ];
 
-interface PMDashboardProps { onViewChange?: (v: string) => void; }
+type PMView = 'setup-project' | 'estimaciones' | 'plan-trabajo' | 'admin' | 'bitacora' | 'analytics';
+interface PMDashboardProps { onViewChange?: (v: PMView) => void; }
 
 export default function PMDashboard({ onViewChange }: PMDashboardProps) {
   const [tab, setTab] = useState<Tab>('resumen');
