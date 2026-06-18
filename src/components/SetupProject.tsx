@@ -1,6 +1,47 @@
 import React, { useState } from 'react';
-import { Rocket, ArrowRight, Database, Cloud, Cpu, Layout as LayoutIcon, Building2 } from 'lucide-react';
+import { Rocket, ArrowRight, Database, Cloud, Cpu, Layout as LayoutIcon, Building2, CheckCircle2 } from 'lucide-react';
 import { ProjectTemplate } from '../types';
+
+// ─── Flow Stepper ─────────────────────────────────────────────────────────────
+const FLOW_STEPS = [
+  { n: 1, label: 'Configurar proyecto' },
+  { n: 2, label: 'Estimar plan' },
+  { n: 3, label: 'Plan de trabajo' },
+];
+
+export function FlowStepper({ current }: { current: 1 | 2 | 3 }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0, marginBottom: 32 }}>
+      {FLOW_STEPS.map((step, idx) => {
+        const done   = step.n < current;
+        const active = step.n === current;
+        return (
+          <React.Fragment key={step.n}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+              <div style={{
+                width: 32, height: 32, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: done ? '#15803d' : active ? '#dc2626' : '#f1f5f9',
+                border: `2px solid ${done ? '#15803d' : active ? '#dc2626' : '#e2e8f0'}`,
+                transition: 'all .2s',
+              }}>
+                {done
+                  ? <CheckCircle2 size={16} color="#fff" fill="#15803d" strokeWidth={0}/>
+                  : <span style={{ fontSize: 12, fontWeight: 700, color: active ? '#fff' : '#94a3b8' }}>{step.n}</span>
+                }
+              </div>
+              <span style={{ fontSize: 10, fontWeight: active ? 600 : 400, color: active ? '#dc2626' : done ? '#15803d' : '#94a3b8', whiteSpace: 'nowrap' }}>
+                {step.label}
+              </span>
+            </div>
+            {idx < FLOW_STEPS.length - 1 && (
+              <div style={{ width: 64, height: 2, background: done ? '#86efac' : '#e2e8f0', margin: '0 4px', marginBottom: 20, transition: 'background .2s' }}/>
+            )}
+          </React.Fragment>
+        );
+      })}
+    </div>
+  );
+}
 
 const BANCOS = [
   { id: 'bbva-co',   label: 'BBVA CO',    color: '#004481' },
@@ -29,6 +70,7 @@ export default function SetupProject({ onNext, templates, selectedTemplateId, on
 
   return (
     <div className="max-w-4xl mx-auto px-6 py-12">
+      <FlowStepper current={1} />
       <div className="text-center mb-12 space-y-4">
         <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary/10 text-primary mb-4">
           <Rocket size={32} />
@@ -102,10 +144,14 @@ export default function SetupProject({ onNext, templates, selectedTemplateId, on
 
       <div className="mt-12 flex justify-end">
         <button
-          onClick={onNext}
+          onClick={() => {
+            // Señaliza que venimos del flujo de creación para que Estimaciones muestre el stepper
+            localStorage.setItem('timia_setup_flow', '2');
+            onNext();
+          }}
           className="flex items-center gap-2 px-8 h-14 bg-primary text-white rounded-2xl font-bold text-lg shadow-lg shadow-primary/20 hover:opacity-90 transition-all group"
         >
-          Lanzar Proyecto
+          Siguiente: Estimar plan
           <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" />
         </button>
       </div>

@@ -5,6 +5,7 @@ import {
   Plus, Trash2, Printer,
 } from 'lucide-react';
 import { PROJECTS, useAuth } from '../contexts/AuthContext';
+import { FlowStepper } from './SetupProject';
 import {
   adminStore,
   type PlanEtapa, type EtapaStates, type PlanHistorialEntry,
@@ -1358,6 +1359,10 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
   const [exportingPptx,     setExportingPptx]     = useState(false);
   const [exportingPdf,      setExportingPdf]      = useState(false);
   const [exportError,       setExportError]       = useState<string>('');
+  // inFlow: true cuando venimos del wizard (paso 3/3)
+  const [inFlow, setInFlow] = useState<boolean>(
+    () => localStorage.getItem('timia_setup_flow') === '3'
+  );
 
   // El plan activo: buscar primero en effectivePlans
   const plan = effectivePlans.find(p => p.projectId === selected);
@@ -1856,7 +1861,31 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
   const drawerEffectivePct = drawer ? getActivityPct(drawer.projectId, drawer.entregableId, drawer.actIdx, drawer.act) : 0;
 
   return (
-    <div id="timia-plan-root" style={{ display: 'flex', gap: 14 }}>
+    <div id="timia-plan-root">
+      {/* ── Flow stepper (paso 3/3 — solo si venimos del wizard) ─────────── */}
+      {inFlow && (
+        <div data-print-hide style={{ marginBottom: 20 }}>
+          <FlowStepper current={3} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', background: '#f0fdf4', border: '0.5px solid #86efac', borderRadius: 10, marginTop: -12 }}>
+            <CheckCircle size={14} color="#15803d"/>
+            <p style={{ margin: 0, fontSize: 11, color: '#15803d', fontWeight: 600 }}>
+              ¡Plan generado! Revisa el Gantt y marca el avance de cada actividad.
+            </p>
+            <button
+              onClick={() => {
+                localStorage.removeItem('timia_setup_flow');
+                setInFlow(false);
+                onGoEstimaciones?.();
+              }}
+              style={{ marginLeft: 'auto', fontSize: 10, padding: '4px 10px', border: '0.5px solid #86efac', borderRadius: 6, background: '#fff', color: '#15803d', cursor: 'pointer', fontWeight: 500, flexShrink: 0 }}
+            >
+              ← Ajustar estimación
+            </button>
+          </div>
+        </div>
+      )}
+
+    <div style={{ display: 'flex', gap: 14 }}>
       {/* Sidebar — hidden on print */}
       <div id="timia-plan-sidebar" data-print-hide style={{ width: 128, flexShrink: 0 }}>
         <p style={{ margin:'0 0 8px', fontSize:9, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'.06em', fontWeight:600 }}>Proyectos</p>
@@ -1931,6 +1960,7 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
           onClose={() => setDrawer(null)}
         />
       )}
+    </div>
     </div>
   );
 }

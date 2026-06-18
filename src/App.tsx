@@ -119,7 +119,7 @@ function AppInner() {
 
       case 'estimaciones':
         return canAccess(role, 'view_estimaciones')
-          ? <div style={{ padding: '28px 36px' }}><Estimaciones onViewChange={navigate}/></div>
+          ? <div style={{ padding: '28px 36px' }}><Estimaciones onViewChange={navigate} onBack={() => navigate('setup-project')}/></div>
           : <AccessDenied onBack={goHome}/>;
 
       case 'admin':

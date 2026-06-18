@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import {
-  ChevronDown, ChevronRight, Plus, Trash2, Save, ArrowRight,
+  ChevronDown, ChevronRight, Plus, Trash2, Save, ArrowRight, ArrowLeft,
   LayoutList, Clock, CalendarDays, Settings2, CheckSquare,
 } from 'lucide-react';
 import { PROJECTS, useAuth } from '../contexts/AuthContext';
 import { adminStore, type PlanEtapa, type PlanActivityConfig, type PlanEntregableConfig, type PlanConfig } from '../lib/adminStore';
 import type { View } from './Layout';
+import { FlowStepper } from './SetupProject';
 
 // ─── Default templates ────────────────────────────────────────────────────────
 // We bootstrap FICO from the known plan structure.
@@ -408,9 +409,10 @@ function EntregablePanel({
 
 interface EstimacionesProps {
   onViewChange: (view: View) => void;
+  onBack?: () => void;   // Volver al paso anterior (SetupProject)
 }
 
-export default function Estimaciones({ onViewChange }: EstimacionesProps) {
+export default function Estimaciones({ onViewChange, onBack }: EstimacionesProps) {
   const { user } = useAuth();
   const role = user?.role ?? 'developer';
   // PM ve todos los proyectos; otros roles solo los que tienen asignados
@@ -424,6 +426,10 @@ export default function Estimaciones({ onViewChange }: EstimacionesProps) {
   const [configs, setConfigs] = useState<Record<string, PlanConfig>>(() => adminStore.getPlanConfigs());
   const [dirty, setDirty]     = useState(false);
   const [saved, setSaved]     = useState(false);
+  // inFlow: true cuando venimos del wizard de creación de proyecto
+  const [inFlow, setInFlow]   = useState<boolean>(
+    () => localStorage.getItem('timia_setup_flow') === '2'
+  );
 
   // Get or bootstrap the config for the selected project
   const currentConfig: PlanConfig = configs[selectedProjectId] ?? (
@@ -458,6 +464,10 @@ export default function Estimaciones({ onViewChange }: EstimacionesProps) {
     setDirty(false);
     // Marca el proyecto para que PlanDeTrabajo lo auto-seleccione al montar
     localStorage.setItem('timia_last_plan_project', selectedProjectId);
+    // Avanza al paso 3 del flujo de creación
+    if (inFlow) {
+      localStorage.setItem('timia_setup_flow', '3');
+    }
     onViewChange('plan-trabajo');
   }
 
@@ -486,7 +496,31 @@ export default function Estimaciones({ onViewChange }: EstimacionesProps) {
   const totalEtapas     = currentConfig.entregables.reduce((s, e) => s + e.activities.reduce((s2, a) => s2 + (a.etapas?.length ?? 0), 0), 0);
 
   return (
-    <div style={{ display: 'flex', gap: 16, minHeight: '100%' }}>
+    <div style={{ minHeight: '100%' }}>
+
+      {/* ── Flow stepper (solo cuando venimos del wizard) ────────────────── */}
+      {inFlow && (
+        <div style={{ marginBottom: 24 }}>
+          <FlowStepper current={2} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', background: '#fafafa', border: '0.5px solid #e2e8f0', borderRadius: 10, marginTop: -12 }}>
+            <button
+              onClick={() => {
+                localStorage.removeItem('timia_setup_flow');
+                setInFlow(false);
+                onBack?.();
+              }}
+              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', fontSize: 11, background: '#fff', border: '0.5px solid #e2e8f0', borderRadius: 7, cursor: 'pointer', color: '#374151', fontWeight: 500 }}
+            >
+              <ArrowLeft size={12}/> Volver a configurar proyecto
+            </button>
+            <p style={{ margin: 0, fontSize: 11, color: '#64748b' }}>
+              Configura el plan de tu nuevo proyecto y haz clic en <strong>Generar Plan de Trabajo</strong> para continuar.
+            </p>
+          </div>
+        </div>
+      )}
+
+    <div style={{ display: 'flex', gap: 16 }}>
 
       {/* ── Sidebar proyectos ───────────────────────────────────────────────── */}
       <div style={{ width: 140, flexShrink: 0 }}>
@@ -644,6 +678,7 @@ export default function Estimaciones({ onViewChange }: EstimacionesProps) {
           </button>
         </div>
       </div>
+    </div>
     </div>
   );
 }
