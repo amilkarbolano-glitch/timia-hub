@@ -1333,9 +1333,6 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
   // Refrescar en cada mount (puede venir de Estimaciones con nuevo plan)
   useEffect(() => { setEffectivePlans(buildEffectivePlans()); }, []);
 
-  // Limpiar error de exportación al cambiar de proyecto seleccionado
-  useEffect(() => { setExportError(''); }, [selected]);
-
   // Filtrar según rol del usuario
   const visiblePlans = role === 'pm'
     ? effectivePlans
@@ -1366,6 +1363,9 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
   const [inFlow, setInFlow] = useState<boolean>(
     () => localStorage.getItem('timia_setup_flow') === '3'
   );
+
+  // Limpiar error de exportación al cambiar de proyecto (debe ir después de selected y setExportError)
+  useEffect(() => { setExportError(''); }, [selected]);
 
   // ── Auto-limpiar el flag del wizard al montar ────────────────────────────────
   // El stepper/banner se muestra una sola vez (sesión actual).
