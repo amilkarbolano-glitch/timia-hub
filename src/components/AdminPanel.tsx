@@ -55,6 +55,64 @@ function saveProjRoles(r: Record<string, UserRole>) {
 }
 function projRoleKey(userId: string, projId: string) { return `${userId}:${projId}`; }
 
+// ─── UserRow: componente nivel módulo — evita re-montaje en cada render ───────
+// IMPORTANTE: definirlo FUERA de TeamModal para que React no lo trate como
+// un tipo nuevo en cada render de TeamModal, lo que causaría pérdida de estado.
+interface UserRowProps {
+  u: AdminUser;
+  proj: AdminProject;
+  projRoles: Record<string, UserRole>;
+  onSetProjRole: (userId: string, role: UserRole) => void;
+  onToggle: (userId: string, projId: string) => void;
+  ROLE_COLOR: Record<UserRole, string>;
+}
+function UserRow({ u, proj, projRoles, onSetProjRole, onToggle, ROLE_COLOR }: UserRowProps) {
+  const isAssigned = u.projectIds.includes(proj.id);
+  const pk = projRoleKey(u.id, proj.id);
+  const effectiveRole = (projRoles[pk] ?? u.role) as UserRole;
+  const rc = ROLE_COLOR[effectiveRole] ?? '#64748b';
+  return (
+    <div style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 12px', borderRadius:10,
+      border:`1px solid ${isAssigned ? proj.color+'60' : '#e2e8f0'}`,
+      background: isAssigned ? proj.color+'06' : '#fafafa' }}>
+      {/* Avatar */}
+      <div style={{ width:34, height:34, borderRadius:'50%', background:u.avatarColor+'20', color:u.avatarColor,
+        display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:700, flexShrink:0 }}>
+        {u.initials}
+      </div>
+      {/* Info */}
+      <div style={{ flex:1, minWidth:0 }}>
+        <div style={{ fontSize:12, fontWeight:500, color:'#111', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{u.name}</div>
+        <div style={{ fontSize:10, color:'#94a3b8', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{u.email}</div>
+      </div>
+      {/* Rol en el proyecto — editable si está asignado */}
+      {isAssigned ? (
+        <select
+          value={effectiveRole}
+          onChange={e => onSetProjRole(u.id, e.target.value as UserRole)}
+          onClick={e => e.stopPropagation()}
+          title="Rol en este proyecto"
+          style={{ fontSize:10, padding:'3px 6px', borderRadius:6, border:`1px solid ${rc}40`,
+            background:rc+'15', color:rc, fontWeight:600, outline:'none', cursor:'pointer', flexShrink:0 }}>
+          {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+        </select>
+      ) : (
+        <span style={{ fontSize:10, padding:'2px 7px', borderRadius:6, background:ROLE_COLOR[u.role]+'15', color:ROLE_COLOR[u.role], fontWeight:500, flexShrink:0 }}>
+          {ROLES.find(r=>r.value===u.role)?.label}
+        </span>
+      )}
+      {/* Checkbox asignación */}
+      <div
+        onClick={() => onToggle(u.id, proj.id)}
+        style={{ width:22, height:22, borderRadius:6, border:`2px solid ${isAssigned ? proj.color : '#d1d5db'}`,
+          background: isAssigned ? proj.color : 'transparent', display:'flex', alignItems:'center',
+          justifyContent:'center', flexShrink:0, cursor:'pointer', transition:'all .12s' }}>
+        {isAssigned && <CheckCircle size={13} color="#fff" strokeWidth={3}/>}
+      </div>
+    </div>
+  );
+}
+
 // ─── Modal gestión equipo (con búsqueda + rol por proyecto) ───────────────────
 function TeamModal({
   proj, users, onToggle, onClose, ROLE_COLOR,
@@ -68,7 +126,8 @@ function TeamModal({
   const [search,    setSearch]    = useState('');
   const [projRoles, setProjRoles] = useState<Record<string, UserRole>>(loadProjRoles);
 
-  function setProjRole(userId: string, role: UserRole) {
+  // Guarda el rol de userId dentro de ESTE proyecto en localStorage y en estado
+  function handleSetProjRole(userId: string, role: UserRole) {
     const next = { ...projRoles, [projRoleKey(userId, proj.id)]: role };
     setProjRoles(next);
     saveProjRoles(next);
@@ -82,53 +141,6 @@ function TeamModal({
 
   const assigned  = filtered.filter(u => u.projectIds.includes(proj.id));
   const available = filtered.filter(u => !u.projectIds.includes(proj.id));
-
-  function UserRow({ u }: { u: AdminUser }) {
-    const isAssigned = u.projectIds.includes(proj.id);
-    const pk = projRoleKey(u.id, proj.id);
-    const effectiveRole = (projRoles[pk] ?? u.role) as UserRole;
-    const rc = ROLE_COLOR[effectiveRole] ?? '#64748b';
-    return (
-      <div style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 12px', borderRadius:10,
-        border:`1px solid ${isAssigned ? proj.color+'60' : '#e2e8f0'}`,
-        background: isAssigned ? proj.color+'06' : '#fafafa' }}>
-        {/* Avatar */}
-        <div style={{ width:34, height:34, borderRadius:'50%', background:u.avatarColor+'20', color:u.avatarColor,
-          display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:700, flexShrink:0 }}>
-          {u.initials}
-        </div>
-        {/* Info */}
-        <div style={{ flex:1, minWidth:0 }}>
-          <div style={{ fontSize:12, fontWeight:500, color:'#111', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{u.name}</div>
-          <div style={{ fontSize:10, color:'#94a3b8', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{u.email}</div>
-        </div>
-        {/* Rol en el proyecto — editable si asignado */}
-        {isAssigned ? (
-          <select
-            value={effectiveRole}
-            onChange={e => setProjRole(u.id, e.target.value as UserRole)}
-            onClick={e => e.stopPropagation()}
-            title="Rol en este proyecto"
-            style={{ fontSize:10, padding:'3px 6px', borderRadius:6, border:`1px solid ${rc}40`,
-              background:rc+'15', color:rc, fontWeight:600, outline:'none', cursor:'pointer', flexShrink:0 }}>
-            {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
-          </select>
-        ) : (
-          <span style={{ fontSize:10, padding:'2px 7px', borderRadius:6, background:ROLE_COLOR[u.role]+'15', color:ROLE_COLOR[u.role], fontWeight:500, flexShrink:0 }}>
-            {ROLES.find(r=>r.value===u.role)?.label}
-          </span>
-        )}
-        {/* Checkbox asignación */}
-        <div
-          onClick={() => onToggle(u.id, proj.id)}
-          style={{ width:22, height:22, borderRadius:6, border:`2px solid ${isAssigned ? proj.color : '#d1d5db'}`,
-            background: isAssigned ? proj.color : 'transparent', display:'flex', alignItems:'center',
-            justifyContent:'center', flexShrink:0, cursor:'pointer', transition:'all .12s' }}>
-          {isAssigned && <CheckCircle size={13} color="#fff" strokeWidth={3}/>}
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:999, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }} onClick={onClose}>
@@ -171,7 +183,7 @@ function TeamModal({
                 Asignados ({assigned.length})
               </p>
               <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
-                {assigned.map(u=><UserRow key={u.id} u={u}/>)}
+                {assigned.map(u=><UserRow key={u.id} u={u} proj={proj} projRoles={projRoles} onSetProjRole={handleSetProjRole} onToggle={onToggle} ROLE_COLOR={ROLE_COLOR}/>)}
               </div>
             </div>
           )}
@@ -183,7 +195,7 @@ function TeamModal({
                 Disponibles ({available.length})
               </p>
               <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
-                {available.map(u=><UserRow key={u.id} u={u}/>)}
+                {available.map(u=><UserRow key={u.id} u={u} proj={proj} projRoles={projRoles} onSetProjRole={handleSetProjRole} onToggle={onToggle} ROLE_COLOR={ROLE_COLOR}/>)}
               </div>
             </div>
           )}
@@ -216,6 +228,8 @@ function TabProyectos() {
   const [teamModal, setTeamModal] = useState<{ proj: AdminProject } | null>(null);
   const [dirty, setDirty]         = useState(false);
   const [usersDirty, setUsersDirty] = useState(false);
+  // Roles por proyecto (persona-dentro-de-proyecto): se refresca al cerrar el modal
+  const [projRoles, setProjRolesDisplay] = useState<Record<string, UserRole>>(loadProjRoles);
 
   const PRIORIDADES: Priority[] = ['Baja', 'Media', 'Alta', 'Crítica'];
   const PRIO_COLOR: Record<Priority, string> = { Baja: '#64748b', Media: '#2563eb', Alta: '#d97706', Crítica: '#dc2626' };
@@ -282,12 +296,15 @@ function TabProyectos() {
                 <span style={{ fontSize: 11, color: '#64748b' }}>{p.startDate || '—'}</span>
                 {/* Equipo inline: avatares */}
                 <div style={{ display: 'flex', gap: 3, alignItems: 'center', flexWrap: 'wrap' }}>
-                  {team.slice(0, 5).map(u => (
-                    <div key={u.id} title={`${u.name} (${ROLE_LABEL[u.role]})`}
-                      style={{ width: 26, height: 26, borderRadius: '50%', background: u.avatarColor + '25', color: u.avatarColor, border: `1.5px solid ${u.avatarColor}50`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, flexShrink: 0 }}>
-                      {u.initials}
-                    </div>
-                  ))}
+                  {team.slice(0, 5).map(u => {
+                    const pRoleLabel = (projRoles[projRoleKey(u.id, p.id)] ?? u.role) as UserRole;
+                    return (
+                      <div key={u.id} title={`${u.name} (${ROLE_LABEL[pRoleLabel]})`}
+                        style={{ width: 26, height: 26, borderRadius: '50%', background: u.avatarColor + '25', color: u.avatarColor, border: `1.5px solid ${u.avatarColor}50`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, flexShrink: 0 }}>
+                        {u.initials}
+                      </div>
+                    );
+                  })}
                   {team.length > 5 && <span style={{ fontSize: 10, color: '#94a3b8' }}>+{team.length - 5}</span>}
                   {team.length === 0 && <span style={{ fontSize: 10, color: '#cbd5e1' }}>Sin equipo</span>}
                 </div>
@@ -317,17 +334,20 @@ function TabProyectos() {
                     <p style={{ margin: 0, fontSize: 11, color: '#94a3b8' }}>Ningún miembro asignado aún. Haz clic en "Gestionar equipo" para añadir personas.</p>
                   ) : (
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                      {team.map(u => (
-                        <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', background: '#fff', border: `0.5px solid ${u.avatarColor}40`, borderRadius: 20, boxShadow: '0 1px 3px rgba(0,0,0,.04)' }}>
-                          <div style={{ width: 22, height: 22, borderRadius: '50%', background: u.avatarColor + '25', color: u.avatarColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 700 }}>{u.initials}</div>
-                          <span style={{ fontSize: 11, fontWeight: 500, color: '#111' }}>{u.name}</span>
-                          <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 4, background: ROLE_COLOR[u.role] + '20', color: ROLE_COLOR[u.role], fontWeight: 600 }}>{ROLES.find(r => r.value === u.role)?.label}</span>
-                          <button onClick={() => toggleUserOnProject(u.id, p.id)}
-                            style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#cbd5e1', padding: 1, lineHeight: 1 }} title="Quitar del proyecto">
-                            <X size={11}/>
-                          </button>
-                        </div>
-                      ))}
+                      {team.map(u => {
+                        const pRole = (projRoles[projRoleKey(u.id, p.id)] ?? u.role) as UserRole;
+                        return (
+                          <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', background: '#fff', border: `0.5px solid ${u.avatarColor}40`, borderRadius: 20, boxShadow: '0 1px 3px rgba(0,0,0,.04)' }}>
+                            <div style={{ width: 22, height: 22, borderRadius: '50%', background: u.avatarColor + '25', color: u.avatarColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 700 }}>{u.initials}</div>
+                            <span style={{ fontSize: 11, fontWeight: 500, color: '#111' }}>{u.name}</span>
+                            <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 4, background: ROLE_COLOR[pRole] + '20', color: ROLE_COLOR[pRole], fontWeight: 600 }}>{ROLES.find(r => r.value === pRole)?.label}</span>
+                            <button onClick={() => toggleUserOnProject(u.id, p.id)}
+                              style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#cbd5e1', padding: 1, lineHeight: 1 }} title="Quitar del proyecto">
+                              <X size={11}/>
+                            </button>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -403,7 +423,7 @@ function TabProyectos() {
           proj={teamModal.proj}
           users={users}
           onToggle={toggleUserOnProject}
-          onClose={() => setTeamModal(null)}
+          onClose={() => { setTeamModal(null); setProjRolesDisplay(loadProjRoles()); }}
           ROLE_COLOR={ROLE_COLOR}
         />
       )}
