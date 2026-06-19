@@ -156,6 +156,12 @@ export const MOCK_ACCOUNTS: AuthUser[] = [
     areaLabel: 'Desarrollador · FICO · NGA · CRONOS',
   },
   {
+    id: 'u-amilkar', name: 'Amilkar José Bolaño', email: 'amilkar.bolano@timia.ai',
+    initials: 'AB', role: 'developer', avatarColor: '#7c3aed',
+    projectIds: ['FICO', 'NGA', 'CRONOS'],
+    areaLabel: 'Desarrollador · FICO · NGA · CRONOS',
+  },
+  {
     id: 'u-ana', name: 'Ana Restrepo', email: 'ana.restrepo@timia.ai',
     initials: 'AR', role: 'developer', avatarColor: '#be185d',
     projectIds: ['NGA', 'CRONOS', 'PINTO'],
