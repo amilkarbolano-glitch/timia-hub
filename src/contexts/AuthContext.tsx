@@ -60,6 +60,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
   developer: [
     'view_my_tasks', 'update_task_status', 'comment_tasks',
     'view_inventory', 'view_bitacora',
+    'add_inv_row',  // puede agregar objetos al inventario pero NO configurar columnas ni borrar
   ],
 };
 
