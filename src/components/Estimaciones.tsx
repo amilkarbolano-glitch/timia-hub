@@ -8,14 +8,42 @@ import { adminStore, type PlanEtapa, type PlanActivityConfig, type PlanEntregabl
 import type { View } from './Layout';
 import { FlowStepper } from './SetupProject';
 
+// ─── Week label computation (date-based + holiday awareness) ──────────────────
+
+function computeWeekLabels(startDate: string, totalWeeks: number, holidayDates: Set<string>): string[] {
+  if (!startDate) return Array.from({ length: totalWeeks }, (_, i) => `S${i + 1}`);
+  const base = new Date(startDate + 'T12:00:00');
+  return Array.from({ length: totalWeeks }, (_, i) => {
+    const d = new Date(base);
+    d.setDate(base.getDate() + i * 7);
+    const iso  = d.toISOString().slice(0, 10);
+    const day  = d.getDate();
+    const mon  = d.toLocaleDateString('es-CO', { month: 'short' });
+    const flag = holidayDates.has(iso) ? ' 🗓' : '';
+    return `S${i + 1} · ${day} ${mon}${flag}`;
+  });
+}
+
+// ─── Combined project list (static + dynamic from adminStore) ─────────────────
+
+function getAllProjects() {
+  const dynamic = adminStore.getProjects().filter(p => p.active);
+  const base = PROJECTS as { id: string; name: string; color: string }[];
+  const extra = dynamic.filter(ap => !base.find(p => p.id === ap.id));
+  return [
+    ...base,
+    ...extra.map(ap => ({ id: ap.id, name: ap.name, color: ap.color })),
+  ];
+}
+
 // ─── Default templates ────────────────────────────────────────────────────────
 // We bootstrap FICO from the known plan structure.
 // Other projects get a blank 3-entregable template.
 
 const FICO_DEFAULT: PlanConfig = {
   projectId: 'FICO',
-  totalWeeks: 13,
-  weekLabels: ['S1','S2','S3','S4','S5','S6','S7','S8','S9','S10','S11','S12','S13'],
+  totalWeeks: 10,
+  weekLabels: ['S1','S2','S3','S4','S5','S6','S7','S8','S9','S10'],
   generatedAt: '',
   entregables: [
     {
@@ -102,7 +130,7 @@ const FICO_DEFAULT: PlanConfig = {
 
 const BLANK_TEMPLATE = (projectId: string): PlanConfig => ({
   projectId,
-  totalWeeks: 13,
+  totalWeeks: 10,
   generatedAt: '',
   entregables: [
     {
@@ -415,14 +443,22 @@ interface EstimacionesProps {
 export default function Estimaciones({ onViewChange, onBack }: EstimacionesProps) {
   const { user } = useAuth();
   const role = user?.role ?? 'developer';
-  // PM ve todos los proyectos; otros roles solo los que tienen asignados
-  const visibleProjects = role === 'pm'
-    ? PROJECTS
-    : PROJECTS.filter(p => (user?.projectIds ?? []).includes(p.id));
 
-  const [selectedProjectId, setSelectedProjectId] = useState<string>(
-    () => visibleProjects[0]?.id ?? 'FICO'
-  );
+  // Build project list combining static PROJECTS + dynamic adminStore projects
+  const allProjects = getAllProjects();
+  const visibleProjects = role === 'pm'
+    ? allProjects
+    : allProjects.filter(p => (user?.projectIds ?? []).includes(p.id));
+
+  // Auto-select the newly-created project if we're coming from SetupProject
+  const [selectedProjectId, setSelectedProjectId] = useState<string>(() => {
+    const draftId = localStorage.getItem('timia_setup_draft_id');
+    if (draftId) {
+      localStorage.removeItem('timia_setup_draft_id');
+      return draftId;
+    }
+    return visibleProjects[0]?.id ?? 'FICO';
+  });
   const [configs, setConfigs] = useState<Record<string, PlanConfig>>(() => adminStore.getPlanConfigs());
   const [dirty, setDirty]     = useState(false);
   const [saved, setSaved]     = useState(false);
@@ -430,6 +466,12 @@ export default function Estimaciones({ onViewChange, onBack }: EstimacionesProps
   const [inFlow, setInFlow]   = useState<boolean>(
     () => localStorage.getItem('timia_setup_flow') === '2'
   );
+
+  // Holiday dates set for week label computation
+  const holidayDates = React.useMemo(() => {
+    const holidays = adminStore.getHolidays();
+    return new Set(holidays.map(h => h.date));
+  }, []);
 
   // Get or bootstrap the config for the selected project
   const currentConfig: PlanConfig = configs[selectedProjectId] ?? (
@@ -449,7 +491,16 @@ export default function Estimaciones({ onViewChange, onBack }: EstimacionesProps
   }
 
   function saveConfig() {
-    const updated = { ...configs, [selectedProjectId]: { ...currentConfig, generatedAt: new Date().toISOString() } };
+    const labels = computeWeekLabels(startDate, currentConfig.totalWeeks, holidayDates);
+    const updated = {
+      ...configs,
+      [selectedProjectId]: {
+        ...currentConfig,
+        startDate,
+        weekLabels: labels,
+        generatedAt: new Date().toISOString(),
+      },
+    };
     setConfigs(updated);
     adminStore.savePlanConfigs(updated);
     setDirty(false);
@@ -458,7 +509,17 @@ export default function Estimaciones({ onViewChange, onBack }: EstimacionesProps
   }
 
   function generatePlan() {
-    const updated = { ...configs, [selectedProjectId]: { ...currentConfig, generatedAt: new Date().toISOString() } };
+    // Recompute weekLabels based on current startDate before saving
+    const labels = computeWeekLabels(startDate, currentConfig.totalWeeks, holidayDates);
+    const updated = {
+      ...configs,
+      [selectedProjectId]: {
+        ...currentConfig,
+        startDate,
+        weekLabels: labels,
+        generatedAt: new Date().toISOString(),
+      },
+    };
     setConfigs(updated);
     adminStore.savePlanConfigs(updated);
     setDirty(false);
@@ -489,8 +550,12 @@ export default function Estimaciones({ onViewChange, onBack }: EstimacionesProps
     });
   }
 
-  const proj  = PROJECTS.find(p => p.id === selectedProjectId);
+  const proj  = allProjects.find(p => p.id === selectedProjectId);
   const color = proj?.color ?? '#64748b';
+
+  // Start date: stored in config or today by default
+  const today = new Date().toISOString().slice(0, 10);
+  const startDate = currentConfig.startDate ?? today;
 
   const totalActivities = currentConfig.entregables.reduce((s, e) => s + e.activities.length, 0);
   const totalEtapas     = currentConfig.entregables.reduce((s, e) => s + e.activities.reduce((s2, a) => s2 + (a.etapas?.length ?? 0), 0), 0);
@@ -581,13 +646,33 @@ export default function Estimaciones({ onViewChange, onBack }: EstimacionesProps
 
           {/* Action buttons */}
           <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+            {/* Start date */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8 }}>
+              <CalendarDays size={12} color="#64748b"/>
+              <label style={{ fontSize: 10, color: '#64748b' }}>Inicio:</label>
+              <input
+                type="date"
+                value={startDate}
+                onChange={e => {
+                  const newStart = e.target.value;
+                  const labels = computeWeekLabels(newStart, currentConfig.totalWeeks, holidayDates);
+                  updateConfig({ startDate: newStart, weekLabels: labels });
+                }}
+                style={{ padding: '2px 6px', fontSize: 11, fontWeight: 600, border: '1px solid #e2e8f0', borderRadius: 5, outline: 'none', background: 'transparent', cursor: 'pointer' }}
+              />
+            </div>
+
             {/* Weeks editor */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8 }}>
               <Clock size={12} color="#64748b"/>
               <label style={{ fontSize: 10, color: '#64748b' }}>Semanas:</label>
               <input
                 type="number" min={4} max={52} value={currentConfig.totalWeeks}
-                onChange={e => updateConfig({ totalWeeks: Math.max(4, Math.min(52, +e.target.value || 13)) })}
+                onChange={e => {
+                  const weeks = Math.max(4, Math.min(52, +e.target.value || 10));
+                  const labels = computeWeekLabels(startDate, weeks, holidayDates);
+                  updateConfig({ totalWeeks: weeks, weekLabels: labels });
+                }}
                 style={{ width: 40, padding: '2px 4px', fontSize: 11, fontWeight: 600, textAlign: 'center', border: '1px solid #e2e8f0', borderRadius: 5, outline: 'none' }}
               />
             </div>

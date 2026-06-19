@@ -45,18 +45,29 @@ function SaveBanner({ onSave, dirty }: { onSave: () => void; dirty: boolean }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Tab 1: Proyectos
+// Tab 1: Proyectos (con equipo inline)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function TabProyectos() {
-  const [projects, setProjects] = useState<AdminProject[]>(() => adminStore.getProjects());
-  const [editing, setEditing] = useState<AdminProject | null>(null);
-  const [dirty, setDirty] = useState(false);
+  const [projects, setProjects]   = useState<AdminProject[]>(() => adminStore.getProjects());
+  const [users, setUsers]         = useState<AdminUser[]>(() => adminStore.getUsers());
+  const [editing, setEditing]     = useState<AdminProject | null>(null);
+  const [expanded, setExpanded]   = useState<string | null>(null);
+  const [teamModal, setTeamModal] = useState<{ proj: AdminProject } | null>(null);
+  const [dirty, setDirty]         = useState(false);
+  const [usersDirty, setUsersDirty] = useState(false);
 
   const PRIORIDADES: Priority[] = ['Baja', 'Media', 'Alta', 'Crítica'];
   const PRIO_COLOR: Record<Priority, string> = { Baja: '#64748b', Media: '#2563eb', Alta: '#d97706', Crítica: '#dc2626' };
+  const ROLE_COLOR: Record<UserRole, string> = {
+    pm: '#7c3aed', tech_lead: '#dc2626', project_lead: '#0891b2',
+    tech_ref: '#059669', developer: '#d97706',
+  };
+  const ROLE_LABEL: Record<UserRole, string> = {
+    pm: 'PM', tech_lead: 'TL', project_lead: 'PL', tech_ref: 'TR', developer: 'DEV',
+  };
 
-  function update(proj: AdminProject) {
+  function updateProject(proj: AdminProject) {
     setProjects(ps => ps.map(p => p.id === proj.id ? proj : p));
     setDirty(true);
     setEditing(null);
@@ -69,8 +80,22 @@ function TabProyectos() {
 
   function save() {
     adminStore.saveProjects(projects);
+    if (usersDirty) { adminStore.saveUsers(users); setUsersDirty(false); }
     setDirty(false);
   }
+
+  // Toggle a user on/off the project
+  function toggleUserOnProject(userId: string, projId: string) {
+    setUsers(us => us.map(u => {
+      if (u.id !== userId) return u;
+      const has = u.projectIds.includes(projId);
+      return { ...u, projectIds: has ? u.projectIds.filter(x => x !== projId) : [...u.projectIds, projId] };
+    }));
+    setUsersDirty(true);
+    setDirty(true);
+  }
+
+  const projTeam = (projId: string) => users.filter(u => u.projectIds.includes(projId));
 
   return (
     <div>
@@ -80,35 +105,81 @@ function TabProyectos() {
         </p>
       </div>
 
-      {/* Tabla */}
-      <div style={{ background: '#fff', border: '0.5px solid #e2e8f0', borderRadius: 12, overflow: 'hidden' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '60px 1fr 1fr 90px 100px 80px 70px 60px', gap: 8, padding: '10px 16px', background: '#f8fafc', borderBottom: '0.5px solid #e2e8f0', fontSize: 10, color: '#94a3b8', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.04em' }}>
-          <span>ID</span><span>Nombre</span><span>Líder técnico</span><span>Cliente</span><span>Prioridad</span><span>Inicio</span><span style={{textAlign:'center'}}>Estado</span><span style={{textAlign:'center'}}>Acción</span>
-        </div>
-        {projects.map((p, i) => (
-          <div key={p.id} style={{ display: 'grid', gridTemplateColumns: '60px 1fr 1fr 90px 100px 80px 70px 60px', gap: 8, alignItems: 'center', padding: '11px 16px', borderBottom: i < projects.length - 1 ? '0.5px solid #f1f5f9' : 'none', background: p.active ? (i % 2 === 0 ? '#fff' : '#fafafe') : '#f8fafc', opacity: p.active ? 1 : 0.55 }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: p.color }}>{p.id}</span>
-            <span style={{ fontSize: 12, fontWeight: 500, color: '#111' }}>{p.name}</span>
-            <span style={{ fontSize: 11, color: '#64748b' }}>{p.area}</span>
-            <span style={{ fontSize: 11, color: '#64748b' }}>{p.client}</span>
-            <Badge color={PRIO_COLOR[p.priority]}>{p.priority}</Badge>
-            <span style={{ fontSize: 11, color: '#64748b' }}>{p.startDate}</span>
-            <div style={{ textAlign: 'center' }}>
-              <button onClick={() => toggle(p.id)} style={{ fontSize: 10, padding: '3px 10px', borderRadius: 8, background: p.active ? '#dcfce7' : '#f1f5f9', color: p.active ? '#15803d' : '#64748b', border: 'none', cursor: 'pointer', fontWeight: 500 }}>
-                {p.active ? 'Activo' : 'Inactivo'}
-              </button>
+      {/* Cards de proyecto */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {projects.map((p) => {
+          const team = projTeam(p.id);
+          const isExp = expanded === p.id;
+          return (
+            <div key={p.id} style={{ background: '#fff', border: `0.5px solid ${isExp ? p.color + '60' : '#e2e8f0'}`, borderRadius: 12, overflow: 'hidden', opacity: p.active ? 1 : 0.6, transition: 'border-color .15s' }}>
+              {/* Main row */}
+              <div style={{ display: 'grid', gridTemplateColumns: '56px 1fr 1fr 90px 100px 80px 120px 80px 60px', gap: 8, alignItems: 'center', padding: '12px 16px' }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: p.color }}>{p.id}</span>
+                <span style={{ fontSize: 12, fontWeight: 500, color: '#111' }}>{p.name}</span>
+                <span style={{ fontSize: 11, color: '#64748b' }}>{p.area || '—'}</span>
+                <span style={{ fontSize: 11, color: '#64748b' }}>{p.client}</span>
+                <Badge color={PRIO_COLOR[p.priority]}>{p.priority}</Badge>
+                <span style={{ fontSize: 11, color: '#64748b' }}>{p.startDate || '—'}</span>
+                {/* Equipo inline: avatares */}
+                <div style={{ display: 'flex', gap: 3, alignItems: 'center', flexWrap: 'wrap' }}>
+                  {team.slice(0, 5).map(u => (
+                    <div key={u.id} title={`${u.name} (${ROLE_LABEL[u.role]})`}
+                      style={{ width: 26, height: 26, borderRadius: '50%', background: u.avatarColor + '25', color: u.avatarColor, border: `1.5px solid ${u.avatarColor}50`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, flexShrink: 0 }}>
+                      {u.initials}
+                    </div>
+                  ))}
+                  {team.length > 5 && <span style={{ fontSize: 10, color: '#94a3b8' }}>+{team.length - 5}</span>}
+                  {team.length === 0 && <span style={{ fontSize: 10, color: '#cbd5e1' }}>Sin equipo</span>}
+                </div>
+                <button onClick={() => toggle(p.id)} style={{ fontSize: 10, padding: '3px 10px', borderRadius: 8, background: p.active ? '#dcfce7' : '#f1f5f9', color: p.active ? '#15803d' : '#64748b', border: 'none', cursor: 'pointer', fontWeight: 500 }}>
+                  {p.active ? 'Activo' : 'Inactivo'}
+                </button>
+                <div style={{ display: 'flex', gap: 2, justifyContent: 'center' }}>
+                  <button onClick={() => setEditing({ ...p })} title="Editar proyecto" style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#94a3b8', padding: 4 }}><Edit2 size={13}/></button>
+                  <button onClick={() => setExpanded(isExp ? null : p.id)} title="Ver / gestionar equipo"
+                    style={{ border: 'none', background: 'none', cursor: 'pointer', color: isExp ? p.color : '#94a3b8', padding: 4, transition: 'color .15s' }}>
+                    <Users size={13}/>
+                  </button>
+                </div>
+              </div>
+
+              {/* Expanded equipo panel */}
+              {isExp && (
+                <div style={{ borderTop: `0.5px solid ${p.color}30`, padding: '12px 16px 14px', background: p.color + '06' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: p.color }}>Equipo asignado a {p.id}</span>
+                    <button onClick={() => setTeamModal({ proj: p })}
+                      style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, padding: '4px 10px', background: p.color, color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 500 }}>
+                      <Plus size={11}/> Gestionar equipo
+                    </button>
+                  </div>
+                  {team.length === 0 ? (
+                    <p style={{ margin: 0, fontSize: 11, color: '#94a3b8' }}>Ningún miembro asignado aún. Haz clic en "Gestionar equipo" para añadir personas.</p>
+                  ) : (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {team.map(u => (
+                        <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', background: '#fff', border: `0.5px solid ${u.avatarColor}40`, borderRadius: 20, boxShadow: '0 1px 3px rgba(0,0,0,.04)' }}>
+                          <div style={{ width: 22, height: 22, borderRadius: '50%', background: u.avatarColor + '25', color: u.avatarColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 700 }}>{u.initials}</div>
+                          <span style={{ fontSize: 11, fontWeight: 500, color: '#111' }}>{u.name}</span>
+                          <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 4, background: ROLE_COLOR[u.role] + '20', color: ROLE_COLOR[u.role], fontWeight: 600 }}>{ROLES.find(r => r.value === u.role)?.label}</span>
+                          <button onClick={() => toggleUserOnProject(u.id, p.id)}
+                            style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#cbd5e1', padding: 1, lineHeight: 1 }} title="Quitar del proyecto">
+                            <X size={11}/>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
-            <div style={{ textAlign: 'center' }}>
-              <button onClick={() => setEditing({ ...p })} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#94a3b8', padding: 4 }}>
-                <Edit2 size={14}/>
-              </button>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
+
       <SaveBanner onSave={save} dirty={dirty} />
 
-      {/* Modal edición */}
+      {/* Modal edición proyecto */}
       {editing && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', zIndex: 999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onClick={() => setEditing(null)}>
           <div style={{ background: '#fff', borderRadius: 14, width: '100%', maxWidth: 480, padding: '22px 24px' }} onClick={e => e.stopPropagation()}>
@@ -160,7 +231,45 @@ function TabProyectos() {
             </div>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 20 }}>
               <button onClick={() => setEditing(null)} style={{ padding: '8px 14px', fontSize: 12, border: '0.5px solid #e2e8f0', borderRadius: 7, background: '#fff', cursor: 'pointer' }}>Cancelar</button>
-              <button onClick={() => update(editing!)} style={{ padding: '8px 14px', fontSize: 12, background: '#dc2626', color: '#fff', border: 'none', borderRadius: 7, cursor: 'pointer', fontWeight: 500 }}>Guardar</button>
+              <button onClick={() => updateProject(editing!)} style={{ padding: '8px 14px', fontSize: 12, background: '#dc2626', color: '#fff', border: 'none', borderRadius: 7, cursor: 'pointer', fontWeight: 500 }}>Guardar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal gestión equipo */}
+      {teamModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', zIndex: 999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onClick={() => setTeamModal(null)}>
+          <div style={{ background: '#fff', borderRadius: 14, width: '100%', maxWidth: 520, padding: '22px 24px', maxHeight: '80vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>Equipo · {teamModal.proj.id}</h3>
+                <p style={{ margin: '2px 0 0', fontSize: 11, color: '#94a3b8' }}>Selecciona quién trabaja en este proyecto</p>
+              </div>
+              <button onClick={() => setTeamModal(null)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#94a3b8' }}><X size={16}/></button>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {users.map(u => {
+                const assigned = u.projectIds.includes(teamModal.proj.id);
+                const rc = ROLE_COLOR[u.role];
+                return (
+                  <div key={u.id} onClick={() => toggleUserOnProject(u.id, teamModal.proj.id)}
+                    style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 9, border: `1px solid ${assigned ? teamModal.proj.color + '50' : '#e2e8f0'}`, background: assigned ? teamModal.proj.color + '08' : '#fff', cursor: 'pointer', transition: 'all .12s' }}>
+                    <div style={{ width: 32, height: 32, borderRadius: '50%', background: u.avatarColor + '20', color: u.avatarColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{u.initials}</div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 12, fontWeight: 500, color: '#111' }}>{u.name}</div>
+                      <div style={{ fontSize: 10, color: '#94a3b8' }}>{u.email}</div>
+                    </div>
+                    <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 5, background: rc + '20', color: rc, fontWeight: 600 }}>{ROLES.find(r => r.value === u.role)?.label}</span>
+                    <div style={{ width: 18, height: 18, borderRadius: '50%', border: `2px solid ${assigned ? teamModal.proj.color : '#d1d5db'}`, background: assigned ? teamModal.proj.color : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      {assigned && <CheckCircle size={12} color="#fff" strokeWidth={3}/>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
+              <button onClick={() => { setTeamModal(null); }} style={{ padding: '8px 18px', fontSize: 12, background: '#dc2626', color: '#fff', border: 'none', borderRadius: 7, cursor: 'pointer', fontWeight: 500 }}>Listo</button>
             </div>
           </div>
         </div>
@@ -462,17 +571,17 @@ function TabFestivos() {
 // Panel Principal
 // ═══════════════════════════════════════════════════════════════════════════════
 
-type AdminTab = 'proyectos' | 'equipo' | 'ans' | 'festivos';
+type AdminTab = 'proyectos' | 'usuarios' | 'ans' | 'festivos';
 
 const ADMIN_TABS: { id: AdminTab; label: string; icon: React.ReactNode; desc: string }[] = [
-  { id: 'proyectos', label: 'Proyectos',  icon: <Folders size={16}/>,   desc: 'CRUD proyectos activos' },
-  { id: 'equipo',    label: 'Equipo',     icon: <Users size={16}/>,     desc: 'Gestión de usuarios y roles' },
-  { id: 'ans',       label: 'Config ANS', icon: <Clock size={16}/>,     desc: 'Días máximos por prioridad y circuito' },
-  { id: 'festivos',  label: 'Festivos',   icon: <Calendar size={16}/>,  desc: 'Calendario Colombia' },
+  { id: 'proyectos', label: 'Proyectos & Equipo', icon: <Folders size={16}/>, desc: 'Proyectos con gestión de equipo integrada' },
+  { id: 'usuarios',  label: 'Usuarios',  icon: <Users size={16}/>,     desc: 'CRUD de cuentas y roles' },
+  { id: 'ans',       label: 'Config ANS', icon: <Clock size={16}/>,    desc: 'Días máximos por prioridad y circuito' },
+  { id: 'festivos',  label: 'Festivos',  icon: <Calendar size={16}/>,  desc: 'Calendario Colombia' },
 ];
 
 export default function AdminPanel() {
-  const [tab, setTab] = useState<AdminTab>('proyectos');
+  const [tab, setTab] = useState<AdminTab>('proyectos');  // default: proyectos con equipo
 
   return (
     <div style={{ padding: '28px 36px', maxWidth: 1520, margin: '0 auto' }}>
@@ -501,7 +610,7 @@ export default function AdminPanel() {
 
       {/* Content */}
       {tab === 'proyectos' && <TabProyectos/>}
-      {tab === 'equipo'    && <TabEquipo/>}
+      {tab === 'usuarios'  && <TabEquipo/>}
       {tab === 'ans'       && <TabAns/>}
       {tab === 'festivos'  && <TabFestivos/>}
     </div>
