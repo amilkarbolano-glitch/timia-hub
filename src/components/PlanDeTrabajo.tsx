@@ -1800,31 +1800,35 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
         main, .flex-1, .overflow-auto { overflow: visible !important; }
         .min-h-screen { min-height: 0 !important; }
 
-        /* CRÍTICO: resetear el padding del wrapper que App.tsx añade (padding: 28px 36px) */
-        main > div { padding: 0 !important; margin: 0 !important; }
-
-        /* El root del plan ocupa todo el ancho */
-        #timia-plan-root {
-          display: block !important;
-          width: 100% !important;
+        /* CRÍTICO: resetear padding/maxWidth de los wrappers de App.tsx y PMDashboard */
+        main > div,
+        #pm-dashboard-root {
           padding: 0 !important;
           margin: 0 !important;
+          max-width: none !important;
+          width: 100% !important;
+          box-sizing: border-box !important;
+        }
+
+        /* El root del plan y todos sus hijos directos ocupan todo el ancho */
+        #timia-plan-root,
+        #timia-plan-root > div,
+        #timia-plan-root > div > div {
+          display: block !important;
+          width: 100% !important;
+          max-width: none !important;
+          padding: 0 !important;
+          margin: 0 !important;
+          flex: none !important;
         }
         #timia-plan-sidebar { display: none !important; }
-
-        /* CRÍTICO: el div flex anónimo que contiene sidebar + contenido → volver a block */
-        #timia-plan-root > div {
-          display: block !important;
-          width: 100% !important;
-          padding: 0 !important;
-          margin: 0 !important;
-        }
 
         /* La zona de contenido ocupa el 100% del ancho */
         #timia-plan-print {
           display: block !important;
           flex: none !important;
           width: 100% !important;
+          max-width: none !important;
           min-width: 0 !important;
           padding: 0 !important;
           margin: 0 !important;
