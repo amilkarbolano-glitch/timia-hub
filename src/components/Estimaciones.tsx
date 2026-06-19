@@ -467,6 +467,15 @@ export default function Estimaciones({ onViewChange, onBack }: EstimacionesProps
     () => localStorage.getItem('timia_setup_flow') === '2'
   );
 
+  // ── Auto-limpiar flag del wizard al montar ──────────────────────────────────
+  // Si el usuario abandona el wizard por el navbar (sin usar Volver/Siguiente),
+  // el flag '2' quedaba en LS indefinidamente mostrando el stepper en cada visita.
+  useEffect(() => {
+    if (localStorage.getItem('timia_setup_flow') === '2') {
+      localStorage.removeItem('timia_setup_flow');
+    }
+  }, []);
+
   // Holiday dates set for week label computation
   const holidayDates = React.useMemo(() => {
     const holidays = adminStore.getHolidays();

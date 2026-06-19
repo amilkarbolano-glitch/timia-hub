@@ -1333,6 +1333,9 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
   // Refrescar en cada mount (puede venir de Estimaciones con nuevo plan)
   useEffect(() => { setEffectivePlans(buildEffectivePlans()); }, []);
 
+  // Limpiar error de exportación al cambiar de proyecto seleccionado
+  useEffect(() => { setExportError(''); }, [selected]);
+
   // Filtrar según rol del usuario
   const visiblePlans = role === 'pm'
     ? effectivePlans
@@ -1363,6 +1366,15 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
   const [inFlow, setInFlow] = useState<boolean>(
     () => localStorage.getItem('timia_setup_flow') === '3'
   );
+
+  // ── Auto-limpiar el flag del wizard al montar ────────────────────────────────
+  // El stepper/banner se muestra una sola vez (sesión actual).
+  // Al recargar, timia_setup_flow ya no existe → inFlow = false.
+  useEffect(() => {
+    if (localStorage.getItem('timia_setup_flow') === '3') {
+      localStorage.removeItem('timia_setup_flow');
+    }
+  }, []);
 
   // El plan activo: buscar primero en effectivePlans
   const plan = effectivePlans.find(p => p.projectId === selected);
@@ -1894,16 +1906,18 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
             <p style={{ margin: 0, fontSize: 11, color: '#15803d', fontWeight: 600 }}>
               ¡Plan generado! Revisa el Gantt y marca el avance de cada actividad.
             </p>
-            <button
-              onClick={() => {
-                localStorage.removeItem('timia_setup_flow');
-                setInFlow(false);
-                onGoEstimaciones?.();
-              }}
-              style={{ marginLeft: 'auto', fontSize: 10, padding: '4px 10px', border: '0.5px solid #86efac', borderRadius: 6, background: '#fff', color: '#15803d', cursor: 'pointer', fontWeight: 500, flexShrink: 0 }}
-            >
-              ← Ajustar estimación
-            </button>
+            {onGoEstimaciones && (
+              <button
+                onClick={() => {
+                  localStorage.removeItem('timia_setup_flow');
+                  setInFlow(false);
+                  onGoEstimaciones();
+                }}
+                style={{ marginLeft: 'auto', fontSize: 10, padding: '4px 10px', border: '0.5px solid #86efac', borderRadius: 6, background: '#fff', color: '#15803d', cursor: 'pointer', fontWeight: 500, flexShrink: 0 }}
+              >
+                ← Ajustar estimación
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -1920,9 +1934,11 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
               <button key={p.projectId} onClick={()=>setSelected(p.projectId)} style={{ display:'flex', alignItems:'center', gap:6, padding:'7px 10px', background:isActive?`${color}15`:'transparent', border:isActive?`0.5px solid ${color}50`:'0.5px solid transparent', borderRadius:8, cursor:'pointer', textAlign:'left', transition:'all .12s' }}>
                 <div style={{ width:5, height:5, borderRadius:'50%', background:color, flexShrink:0 }}/>
                 <span style={{ fontSize:11, fontWeight:isActive?600:400, color:isActive?color:'#374151', flex:1 }}>{p.projectId}</span>
-                {p.projectId==='FICO'
-                  ? <span style={{ fontSize:7, padding:'1px 4px', borderRadius:3, background:'#dcfce7', color:'#15803d', fontWeight:700, flexShrink:0 }}>✓ activo</span>
-                  : p.bloqueantes.length>0?<span style={{ fontSize:9 }}>⛔</span>:p.alertas.length>0?<span style={{ fontSize:9 }}>⚠</span>:<span style={{ fontSize:9, color:'#94a3b8' }}>{overall}%</span>
+                {p.bloqueantes.length>0
+                  ? <span style={{ fontSize:9 }}>⛔</span>
+                  : p.alertas.length>0
+                    ? <span style={{ fontSize:9 }}>⚠</span>
+                    : <span style={{ fontSize:9, color:'#94a3b8' }}>{overall}%</span>
                 }
               </button>
             );
