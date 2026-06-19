@@ -422,6 +422,32 @@ const DEFAULT_IMPUTACIONES: ImputacionEntry[] = [
   { id:'imp-1537',  projectId:'FICO', jiraId:'DECRONOS-1537',  summary:'Procesamiento FICO – integración completa y cierre',                 type:'Enabler Delivery', status:'In Progress', assigneeIds:['u-sergio','u-fabrizio','u-amilkar'], month:'Mayo', weeks:'',       q:'Q2-II-2026', phase:'Codificación',      hoursEst:120, hoursImputed:48,  context:'',                                                        createdBy:'Juan Pablo Arévalo', createdAt:'2026-05-01' },
 ];
 
+// ─── Seed desde GitHub (public/db.json) ──────────────────────────────────────
+// Se llama una vez al arrancar la app (en main.tsx).
+// Sobrescribe los datos de referencia en localStorage con los del archivo.
+// Las claves de sesión (auth, vista actual) nunca se tocan.
+
+const SEED_SKIP_KEYS = new Set(['timia_hub_user', 'timia_current_view']);
+
+export async function seedFromRemote(): Promise<void> {
+  try {
+    const base = import.meta.env.BASE_URL ?? '/';
+    const url  = base.endsWith('/') ? `${base}db.json` : `${base}/db.json`;
+    const res  = await fetch(url, { cache: 'no-store' });
+    if (!res.ok) return;
+    const data: Record<string, unknown> = await res.json();
+    Object.entries(data).forEach(([key, val]) => {
+      if (key.startsWith('_')) return;                // _version, _note → ignorar
+      if (SEED_SKIP_KEYS.has(key)) return;            // auth y nav → no tocar
+      if (key.startsWith('timia_')) {
+        try { localStorage.setItem(key, JSON.stringify(val)); } catch {}
+      }
+    });
+  } catch {
+    // Si el fetch falla (offline, etc.), el app arranca con los defaults del código
+  }
+}
+
 // ─── API pública ──────────────────────────────────────────────────────────────
 
 export const adminStore = {
