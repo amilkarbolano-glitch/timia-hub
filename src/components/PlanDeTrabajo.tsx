@@ -1783,74 +1783,80 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
       @media print {
         @page { size: A3 landscape; margin: 8mm 10mm; }
 
-        /* Colores exactos */
+        /* ── 1. Colores exactos ───────────────────────────────────────────── */
         * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
 
-        /* Reset de base */
+        /* ── 2. Reset html/body ──────────────────────────────────────────── */
         html, body {
-          width: 100% !important; margin: 0 !important; padding: 0 !important;
-          background: #fff !important; overflow: visible !important;
+          height: auto !important; min-height: 0 !important;
+          overflow: visible !important;
+          margin: 0 !important; padding: 0 !important;
+          background: #fff !important;
         }
 
-        /* Ocultar header, nav y cualquier elemento marcado */
-        header, nav, aside,
-        [data-print-hide] { display: none !important; visibility: hidden !important; }
-
-        /* Quitar overflow y padding de los contenedores del layout de la app */
-        main, .flex-1, .overflow-auto { overflow: visible !important; }
-        .min-h-screen { min-height: 0 !important; }
-
-        /* CRÍTICO: resetear padding/maxWidth de los wrappers de App.tsx y PMDashboard */
-        main > div,
-        #pm-dashboard-root {
-          padding: 0 !important;
-          margin: 0 !important;
-          max-width: none !important;
-          width: 100% !important;
-          box-sizing: border-box !important;
-        }
-
-        /* El root del plan y todos sus hijos directos ocupan todo el ancho */
-        #timia-plan-root,
-        #timia-plan-root > div,
-        #timia-plan-root > div > div {
+        /* ── 3. Convertir los wrappers flex del layout de la app a bloque   */
+        /*    Esto evita que flex-grow cree una página en blanco inicial       */
+        .min-h-screen {
           display: block !important;
-          width: 100% !important;
-          max-width: none !important;
-          padding: 0 !important;
-          margin: 0 !important;
+          height: auto !important; min-height: 0 !important;
+        }
+        .flex-1 {
+          display: block !important;
+          height: auto !important; min-height: 0 !important;
+          overflow: visible !important;
           flex: none !important;
         }
+
+        /* ── 4. Ocultar chrome de la app ─────────────────────────────────── */
+        header, nav, aside,
+        [data-print-hide] { display: none !important; }
+
+        /* ── 5. El main ocupa todo el ancho sin padding ni overflow ─────── */
+        main {
+          display: block !important;
+          width: 100% !important; height: auto !important;
+          overflow: visible !important;
+          padding: 0 !important; margin: 0 !important;
+        }
+
+        /* ── 6. Quitar padding/maxWidth de wrappers directos en main        */
+        /*    (cubre tanto App.tsx wrapper como #pm-dashboard-root)           */
+        main > div,
+        #pm-dashboard-root {
+          padding: 0 !important; margin: 0 !important;
+          max-width: none !important; width: 100% !important;
+          height: auto !important;
+        }
+
+        /* ── 7. Plan root → bloque, sidebar oculto ───────────────────────── */
+        #timia-plan-root { display: block !important; }
         #timia-plan-sidebar { display: none !important; }
 
-        /* La zona de contenido ocupa el 100% del ancho */
+        /* ── 8. El div flex anónimo (sidebar+contenido) → bloque ────────── */
+        /*    NO tocar descendientes más profundos para no romper el Gantt     */
+        #timia-plan-root > div { display: block !important; }
+
+        /* ── 9. Zona de impresión — full width ───────────────────────────── */
         #timia-plan-print {
           display: block !important;
           flex: none !important;
           width: 100% !important;
-          max-width: none !important;
           min-width: 0 !important;
-          padding: 0 !important;
-          margin: 0 !important;
+          padding: 0 !important; margin: 0 !important;
         }
 
-        /* Cada sección Gantt en su propia página, NO cortar a la mitad */
+        /* ── 10. Secciones Gantt — una por página ────────────────────────── */
         [data-gantt-section] {
           page-break-inside: avoid !important;
           break-inside: avoid !important;
-          page-break-before: auto !important;
           margin-bottom: 20px !important;
-          width: 100% !important;
         }
-        /* Primera sección: sin salto de página */
         [data-gantt-section]:first-of-type { page-break-before: avoid !important; }
-        /* Secciones 2+ empiezan en página nueva */
         [data-gantt-section] + [data-gantt-section] { page-break-before: always !important; }
 
-        /* Tablas Gantt — full width, sin scroll horizontal */
+        /* ── 11. Tablas Gantt — full width, sin scroll ───────────────────── */
         [data-gantt-table] {
-          overflow: visible !important;
-          overflow-x: visible !important;
+          overflow: visible !important; overflow-x: visible !important;
           width: 100% !important;
         }
         [data-gantt-table] table {
@@ -1859,12 +1865,12 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
           table-layout: auto !important;
         }
 
-        /* Fuentes legibles */
+        /* ── 12. Tipografía print ───────────────────────────────────────── */
         [data-gantt-section] td,
         [data-gantt-section] th { font-size: 10pt !important; }
         [data-gantt-section] h4  { font-size: 13pt !important; }
 
-        /* Ocultar modales y drawers */
+        /* ── 13. Ocultar modales/drawers ─────────────────────────────────── */
         [role="dialog"], [data-radix-dialog-overlay] { display: none !important; }
       }
     `;
