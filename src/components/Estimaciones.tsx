@@ -128,6 +128,263 @@ const FICO_DEFAULT: PlanConfig = {
   ],
 };
 
+// ─── Plantilla Procesamiento (plan completo — igual estructura que FICO) ────────
+// Se carga cuando el proyecto se crea con tipo "procesamientos" en SetupProject.
+
+const PROCESAMIENTO_TEMPLATE = (projectId: string): PlanConfig => ({
+  projectId,
+  totalWeeks: 13,
+  generatedAt: '',
+  entregables: [
+    {
+      id: 'doc', label: 'I. Documentación y gobierno',
+      activities: [
+        { label: 'Análisis y resolución de dudas',              startWeek: 1, endWeek: 2 },
+        {
+          label: 'Elaboración diccionario técnico',              startWeek: 1, endWeek: 2,
+          etapas: [
+            { id: 'dt-1', label: 'Levantamiento inicial de campos',  peso: 25 },
+            { id: 'dt-2', label: 'Envío a Gobierno de datos',        peso: 25 },
+            { id: 'dt-3', label: 'Correcciones de Gobierno',         peso: 25, optional: true },
+            { id: 'dt-4', label: 'Validación final del diccionario', peso: 25 },
+          ],
+        },
+        { label: 'Inicialización en Nebula',                    startWeek: 1, endWeek: 1, bbva: true },
+        {
+          label: 'Circuito validación Gobierno Técnico',         startWeek: 3, endWeek: 5, bbva: true,
+          etapas: [
+            { id: 'cvgt-1', label: 'Presentación al comité BBVA', peso: 25 },
+            { id: 'cvgt-2', label: 'Recepción de observaciones',  peso: 25 },
+            { id: 'cvgt-3', label: 'Aplicación de correcciones',  peso: 25, optional: true },
+            { id: 'cvgt-4', label: 'Aprobación definitiva',       peso: 25 },
+          ],
+        },
+        { label: 'Documentación técnica ETL y mapeo de campos',  startWeek: 1, endWeek: 3 },
+        { label: 'Construcción Modelo Solución del Dato (MSD)',   startWeek: 2, endWeek: 3 },
+        { label: 'Circuito validación MSD',                      startWeek: 3, endWeek: 5, bbva: true },
+        { label: 'Despliegue esquemas entorno Work',              startWeek: 4, endWeek: 5, bbva: true },
+        { label: 'Solicitud y circuito de ACLs',                 startWeek: 4, endWeek: 5, bbva: true },
+        { label: 'Solicitud despliegue Live',                    startWeek: 5, endWeek: 5, bbva: true },
+        { label: 'Acompañamiento en Definición Funcional',       startWeek: 1, endWeek: 2, bbva: true },
+        { label: 'Acompañamiento validación del Notebook',       startWeek: 1, endWeek: 1, bbva: true },
+      ],
+    },
+    {
+      id: 'ada', label: 'II. Componentes ADA',
+      activities: [
+        { label: 'Gestión repos Bitbucket · Procesamiento', startWeek: 1, endWeek: 1, bbva: true },
+        {
+          label: 'Construcción procesamiento Spark · Scala', startWeek: 2, endWeek: 7,
+          etapas: [
+            { id: 'spark-1', label: 'Ambientación del repositorio local',       peso: 10 },
+            { id: 'spark-2', label: 'Construcción clases principales',          peso: 40, subs: ['Clase getData','Clase Generate','Clase Process'] },
+            { id: 'spark-3', label: 'Config y utilitarios — context provider',  peso: 20 },
+            { id: 'spark-4', label: 'Test unitarios y de aceptación',           peso: 20 },
+            { id: 'spark-5', label: 'Escritura local — validación de salida',   peso: 10 },
+          ],
+        },
+        { label: 'Construcción Test unitarios y Aceptación',    startWeek: 6, endWeek: 8 },
+        { label: 'Construcción reglas calidad MVP (Hammurabi)', startWeek: 5, endWeek: 7 },
+        { label: 'Construcción Smart Cleaner procesamiento',    startWeek: 5, endWeek: 6 },
+        { label: 'Pruebas en entorno local',                    startWeek: 7, endWeek: 8 },
+        {
+          label: 'Despliegue y pruebas entornos Work', startWeek: 8, endWeek: 8,
+          etapas: [
+            { id: 'work-1', label: 'Generación de muestras/sandbox',        peso: 20, optional: true },
+            { id: 'work-2', label: 'Creación y ejecución job ADA en Work',  peso: 30 },
+            { id: 'work-3', label: 'Verificación de escritura en VBox',     peso: 30 },
+            { id: 'work-4', label: 'Prueba en ambiente de test',            peso: 20 },
+          ],
+        },
+        { label: 'Generación Datos Sandbox · validación',       startWeek: 8,  endWeek: 9,  bbva: true },
+        { label: 'Certificación calidad por equipo QA',          startWeek: 9,  endWeek: 10, bbva: true },
+        { label: 'Despliegue producción componentes ADA',        startWeek: 11, endWeek: 11 },
+        { label: 'Acompañamiento validación ADA Live',           startWeek: 11, endWeek: 13, bbva: true },
+      ],
+    },
+    {
+      id: 'auto', label: 'III. Automatización y orquestación',
+      activities: [
+        { label: 'Gestión acceso Control-M distribuido',       startWeek: 3,  endWeek: 4,  bbva: true },
+        { label: 'Definición de la automatización',            startWeek: 5,  endWeek: 5 },
+        { label: 'Construcción Mallas Control-M distribuido',  startWeek: 6,  endWeek: 8 },
+        { label: 'Pruebas entornos Work · Mallas Control-M',   startWeek: 7,  endWeek: 8 },
+        { label: 'Elaboración documentación Mallas ADA',       startWeek: 7,  endWeek: 8 },
+        { label: 'Certificación mallas Control-M',             startWeek: 8,  endWeek: 10, bbva: true },
+        { label: 'Instalación mallas producción',              startWeek: 10, endWeek: 10, bbva: true },
+        { label: 'Estabilización procesos en producción',      startWeek: 11, endWeek: 13 },
+      ],
+    },
+  ],
+});
+
+// ─── Plantilla Ingesta ────────────────────────────────────────────────────────
+
+const INGESTA_TEMPLATE = (projectId: string): PlanConfig => ({
+  projectId,
+  totalWeeks: 10,
+  generatedAt: '',
+  entregables: [
+    {
+      id: 'doc', label: 'I. Documentación y análisis',
+      activities: [
+        { label: 'Análisis y mapeo de fuentes',              startWeek: 1, endWeek: 2 },
+        { label: 'Diccionario de datos — campos fuente',     startWeek: 1, endWeek: 2,
+          etapas: [
+            { id: 'ing-dt-1', label: 'Levantamiento de campos origen', peso: 33 },
+            { id: 'ing-dt-2', label: 'Validación con equipo BBVA',     peso: 34 },
+            { id: 'ing-dt-3', label: 'Aprobación final',               peso: 33 },
+          ],
+        },
+        { label: 'Diseño arquitectura de ingesta',           startWeek: 2, endWeek: 3 },
+        { label: 'Circuito validación Gobierno Técnico',     startWeek: 3, endWeek: 5, bbva: true },
+        { label: 'Documentación técnica conectores',         startWeek: 2, endWeek: 4 },
+      ],
+    },
+    {
+      id: 'ing', label: 'II. Desarrollo conectores y pipeline',
+      activities: [
+        { label: 'Configuración repositorio Bitbucket',      startWeek: 1, endWeek: 1, bbva: true },
+        { label: 'Construcción conectores de extracción',    startWeek: 3, endWeek: 6,
+          etapas: [
+            { id: 'con-1', label: 'Conector fuente principal',      peso: 50 },
+            { id: 'con-2', label: 'Manejo de errores y reintentos', peso: 30 },
+            { id: 'con-3', label: 'Logging y monitoreo',            peso: 20 },
+          ],
+        },
+        { label: 'Transformaciones básicas y normalización', startWeek: 5, endWeek: 7 },
+        { label: 'Validación de calidad de datos',           startWeek: 6, endWeek: 8,
+          etapas: [
+            { id: 'val-1', label: 'Reglas de negocio básicas',   peso: 40 },
+            { id: 'val-2', label: 'Deduplicación',               peso: 30 },
+            { id: 'val-3', label: 'Validación de completitud',   peso: 30 },
+          ],
+        },
+        { label: 'Pruebas en entorno local',                 startWeek: 7, endWeek: 8 },
+        { label: 'Despliegue entorno Work',                  startWeek: 8, endWeek: 9, bbva: true },
+        { label: 'Certificación QA',                         startWeek: 9, endWeek: 10, bbva: true },
+      ],
+    },
+    {
+      id: 'ops', label: 'III. Orquestación y cierre',
+      activities: [
+        { label: 'Construcción mallas Control-M',            startWeek: 6,  endWeek: 8 },
+        { label: 'Pruebas orquestación en Work',             startWeek: 8,  endWeek: 9 },
+        { label: 'Despliegue producción',                    startWeek: 9,  endWeek: 10, bbva: true },
+        { label: 'Estabilización y monitoreo',               startWeek: 10, endWeek: 11 },
+      ],
+    },
+  ],
+});
+
+// ─── Plantilla Híbrido ────────────────────────────────────────────────────────
+
+const HIBRIDO_TEMPLATE = (projectId: string): PlanConfig => ({
+  projectId,
+  totalWeeks: 14,
+  generatedAt: '',
+  entregables: [
+    {
+      id: 'doc', label: 'I. Documentación y gobierno',
+      activities: [
+        { label: 'Análisis fuentes y mapeo end-to-end',          startWeek: 1, endWeek: 2 },
+        { label: 'Diccionario técnico unificado',                startWeek: 1, endWeek: 3,
+          etapas: [
+            { id: 'h-dt-1', label: 'Campos de ingesta',         peso: 34 },
+            { id: 'h-dt-2', label: 'Campos procesamiento',      peso: 33 },
+            { id: 'h-dt-3', label: 'Validación y aprobación',   peso: 33 },
+          ],
+        },
+        { label: 'Circuito Gobierno Técnico',                    startWeek: 3, endWeek: 5, bbva: true },
+        { label: 'Modelo Solución del Dato (MSD)',               startWeek: 2, endWeek: 4 },
+        { label: 'Circuito validación MSD',                      startWeek: 4, endWeek: 6, bbva: true },
+        { label: 'Documentación técnica ETL completa',           startWeek: 2, endWeek: 4 },
+        { label: 'Solicitud ACLs y accesos',                     startWeek: 5, endWeek: 6, bbva: true },
+      ],
+    },
+    {
+      id: 'ing', label: 'II. Pipeline de Ingesta',
+      activities: [
+        { label: 'Gestión repos Bitbucket · Ingesta',            startWeek: 1, endWeek: 1, bbva: true },
+        { label: 'Construcción conectores extracción',           startWeek: 3, endWeek: 6,
+          etapas: [
+            { id: 'h-con-1', label: 'Conector fuente principal',      peso: 50 },
+            { id: 'h-con-2', label: 'Manejo errores y reintentos',    peso: 30 },
+            { id: 'h-con-3', label: 'Logging y monitoreo',            peso: 20 },
+          ],
+        },
+        { label: 'Validación calidad en ingesta (Hammurabi)',    startWeek: 5, endWeek: 7 },
+        { label: 'Pruebas entorno local · Ingesta',             startWeek: 7, endWeek: 8 },
+      ],
+    },
+    {
+      id: 'ada', label: 'III. Componentes ADA — Procesamiento',
+      activities: [
+        { label: 'Gestión repos Bitbucket · Procesamiento',      startWeek: 1, endWeek: 1, bbva: true },
+        { label: 'Construcción Spark · Scala',                   startWeek: 4, endWeek: 9,
+          etapas: [
+            { id: 'h-spark-1', label: 'Ambientación repositorio',          peso: 10 },
+            { id: 'h-spark-2', label: 'Construcción clases principales',   peso: 40, subs: ['Clase getData','Clase Generate','Clase Process'] },
+            { id: 'h-spark-3', label: 'Config y utilitarios',              peso: 20 },
+            { id: 'h-spark-4', label: 'Test unitarios y aceptación',       peso: 20 },
+            { id: 'h-spark-5', label: 'Escritura local — validación',      peso: 10 },
+          ],
+        },
+        { label: 'Construcción Smart Cleaner',                   startWeek: 7, endWeek: 9 },
+        { label: 'Pruebas entorno local · Procesamiento',        startWeek: 9, endWeek: 10 },
+        {
+          label: 'Despliegue Work — pipeline completo',           startWeek: 10, endWeek: 11, bbva: true,
+          etapas: [
+            { id: 'h-work-1', label: 'Ingesta en Work',              peso: 25 },
+            { id: 'h-work-2', label: 'Procesamiento en Work',        peso: 25 },
+            { id: 'h-work-3', label: 'Verificación end-to-end',      peso: 25 },
+            { id: 'h-work-4', label: 'Prueba de aceptación QA',      peso: 25 },
+          ],
+        },
+        { label: 'Certificación QA pipeline completo',           startWeek: 11, endWeek: 12, bbva: true },
+        { label: 'Despliegue producción',                        startWeek: 13, endWeek: 13 },
+        { label: 'Acompañamiento validación Live',               startWeek: 13, endWeek: 14, bbva: true },
+      ],
+    },
+    {
+      id: 'auto', label: 'IV. Orquestación end-to-end',
+      activities: [
+        { label: 'Diseño mallas Control-M integradas',           startWeek: 6,  endWeek: 7 },
+        { label: 'Construcción mallas ingesta + procesamiento',  startWeek: 8,  endWeek: 10 },
+        { label: 'Pruebas orquestación en Work',                 startWeek: 10, endWeek: 11 },
+        { label: 'Certificación mallas Control-M',               startWeek: 11, endWeek: 12, bbva: true },
+        { label: 'Instalación y activación en producción',       startWeek: 13, endWeek: 13, bbva: true },
+        { label: 'Estabilización procesos en producción',        startWeek: 13, endWeek: 14 },
+      ],
+    },
+  ],
+});
+
+// ─── Template selector — elige según tipo de proyecto ─────────────────────────
+
+function getDefaultPlanConfig(projectId: string): PlanConfig {
+  if (projectId === 'FICO') return FICO_DEFAULT;
+  try {
+    // SetupProject guarda { projectId, type } para evitar contaminar otros proyectos.
+    // También soporta el formato simple string por compatibilidad.
+    const raw = localStorage.getItem('timia_setup_template_type') ?? '';
+    let type = '';
+    if (raw.startsWith('{')) {
+      const info = JSON.parse(raw) as { projectId?: string; type?: string };
+      // Solo aplica si el projectId coincide o no está especificado
+      if (!info.projectId || info.projectId === projectId) {
+        type = info.type ?? '';
+      }
+    } else {
+      type = raw;
+    }
+    if (type === 'procesamientos') return PROCESAMIENTO_TEMPLATE(projectId);
+    if (type === 'ingesta')        return INGESTA_TEMPLATE(projectId);
+    if (type === 'hibridos')       return HIBRIDO_TEMPLATE(projectId);
+  } catch {}
+  return BLANK_TEMPLATE(projectId);
+}
+
 const BLANK_TEMPLATE = (projectId: string): PlanConfig => ({
   projectId,
   totalWeeks: 10,
@@ -483,10 +740,10 @@ export default function Estimaciones({ onViewChange, onBack }: EstimacionesProps
     return new Set(holidays.map(h => h.date));
   }, []);
 
-  // Get or bootstrap the config for the selected project
-  const currentConfig: PlanConfig = configs[selectedProjectId] ?? (
-    selectedProjectId === 'FICO' ? FICO_DEFAULT : BLANK_TEMPLATE(selectedProjectId)
-  );
+  // Get or bootstrap the config for the selected project.
+  // getDefaultPlanConfig selecciona FICO_DEFAULT, PROCESAMIENTO_TEMPLATE, INGESTA_TEMPLATE,
+  // HIBRIDO_TEMPLATE o BLANK_TEMPLATE según el tipo de proyecto creado en SetupProject.
+  const currentConfig: PlanConfig = configs[selectedProjectId] ?? getDefaultPlanConfig(selectedProjectId);
 
   useEffect(() => {
     setDirty(false);
