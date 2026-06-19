@@ -140,8 +140,8 @@ export default function Layout({ children, currentView, onViewChange, userRole }
                 )}
               </div>
 
-              {/* 6. Herramientas — al final */}
-              {(canAccess(userRole as UserRole,'u_roles')||canAccess(userRole as UserRole,'view_audit')||canAccess(userRole as UserRole,'create_projects')) && (
+              {/* 6. Herramientas — solo si tiene al menos un ítem accesible */}
+              {(canAccess(userRole as UserRole,'u_roles')||canAccess(userRole as UserRole,'s_audit')||canAccess(userRole as UserRole,'create_projects')) && (
                 <div ref={herramRef} className="relative">
                   <button
                     onClick={() => setShowHerramientas(v=>!v)}
@@ -157,7 +157,7 @@ export default function Layout({ children, currentView, onViewChange, userRole }
                           <Shield size={13}/> Roles y Permisos
                         </button>
                       )}
-                      {canAccess(userRole as UserRole,'view_audit') && (
+                      {canAccess(userRole as UserRole,'s_audit') && (
                         <button onClick={()=>{setShowHerramientas(false);onViewChange('audit');}}
                           className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm text-left transition-colors ${currentView==='audit'?'bg-primary/10 text-primary font-medium':'text-slate-600 hover:bg-slate-50'}`}>
                           <Shield size={13}/> Auditoría
