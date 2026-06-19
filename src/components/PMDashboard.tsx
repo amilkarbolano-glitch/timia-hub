@@ -939,9 +939,9 @@ export default function PMDashboard({ onViewChange }: PMDashboardProps) {
   const [showStandup, setShowStandup] = useState(false);
 
   return (
-    <div style={{ padding: '28px 36px', maxWidth: 1600, margin: '0 auto' }}>
+    <div id="pm-dashboard-root" style={{ padding: '28px 36px', maxWidth: 1600, margin: '0 auto' }}>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24 }}>
+      <div data-print-hide style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24 }}>
         <div>
           <h1 style={{ margin: 0, fontSize: 22, fontWeight: 500, color: '#111' }}>Dashboard ejecutivo</h1>
           <p style={{ margin: '3px 0 0', fontSize: 13, color: '#94a3b8' }}>Vista global · BBVA CO &amp; Credicorp Capital · {new Date().toLocaleDateString('es-CO',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</p>
@@ -962,7 +962,7 @@ export default function PMDashboard({ onViewChange }: PMDashboardProps) {
       </div>
 
       {/* Tabs */}
-      <div style={{ display:'flex', gap:4, borderBottom:'0.5px solid #e2e8f0', marginBottom:20, overflowX:'auto', alignItems:'flex-end' }}>
+      <div data-print-hide style={{ display:'flex', gap:4, borderBottom:'0.5px solid #e2e8f0', marginBottom:20, overflowX:'auto', alignItems:'flex-end' }}>
         {TABS.map(t => {
           const isActive = tab === t.id;
           const isHighlight = t.highlight;
