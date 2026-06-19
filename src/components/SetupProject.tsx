@@ -98,6 +98,10 @@ export default function SetupProject({ onNext, templates, selectedTemplateId, on
       adminStore.saveProjects([...existing, newProject]);
     }
 
+    // Limpiar borradores — evita que el formulario aparezca prerelleno en futuras visitas
+    localStorage.removeItem('timia_setup_draft_name');
+    localStorage.removeItem('timia_setup_draft_desc');
+
     // Signal Estimaciones to auto-select this project
     localStorage.setItem('timia_setup_draft_id', rawId);
     localStorage.setItem('timia_setup_flow', '2');
