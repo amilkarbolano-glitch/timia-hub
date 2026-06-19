@@ -656,21 +656,65 @@ export default function Estimaciones({ onViewChange, onBack }: EstimacionesProps
 
           {/* Action buttons */}
           <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-            {/* Start date */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8 }}>
-              <CalendarDays size={12} color="#64748b"/>
-              <label style={{ fontSize: 10, color: '#64748b' }}>Inicio:</label>
-              <input
-                type="date"
-                value={startDate}
-                onChange={e => {
-                  const newStart = e.target.value;
-                  const labels = computeWeekLabels(newStart, currentConfig.totalWeeks, holidayDates);
-                  updateConfig({ startDate: newStart, weekLabels: labels });
-                }}
-                style={{ padding: '2px 6px', fontSize: 11, fontWeight: 600, border: '1px solid #e2e8f0', borderRadius: 5, outline: 'none', background: 'transparent', cursor: 'pointer' }}
-              />
-            </div>
+            {/* Start date con detección de festivos */}
+            {(() => {
+              const isHolidayDate = holidayDates.has(startDate);
+              const isDow = startDate ? [0,6].includes(new Date(startDate+'T12:00:00').getDay()) : false;
+              const isInvalid = isHolidayDate || isDow;
+              const allHolidays = adminStore.getHolidays();
+              const hitHoliday  = allHolidays.find(h=>h.date===startDate);
+              return (
+                <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px',
+                    background: isInvalid ? '#fef2f2' : '#f8fafc',
+                    border: `1px solid ${isInvalid ? '#fecaca' : '#e2e8f0'}`, borderRadius: 8 }}>
+                    <CalendarDays size={12} color={isInvalid ? '#dc2626' : '#64748b'}/>
+                    <label style={{ fontSize: 10, color: isInvalid ? '#dc2626' : '#64748b' }}>Inicio:</label>
+                    <input
+                      type="date"
+                      value={startDate}
+                      onChange={e => {
+                        const newStart = e.target.value;
+                        const labels = computeWeekLabels(newStart, currentConfig.totalWeeks, holidayDates);
+                        updateConfig({ startDate: newStart, weekLabels: labels });
+                      }}
+                      style={{ padding: '2px 6px', fontSize: 11, fontWeight: 600,
+                        border: 'none', borderRadius: 5, outline: 'none',
+                        background: 'transparent', cursor: 'pointer',
+                        color: isInvalid ? '#dc2626' : '#111' }}
+                    />
+                  </div>
+                  {/* Aviso si cae en festivo o fin de semana */}
+                  {isInvalid && (
+                    <div style={{ display:'flex', alignItems:'center', gap:5, padding:'4px 10px', background:'#fef2f2', border:'0.5px solid #fecaca', borderRadius:6 }}>
+                      <span style={{ fontSize:10, color:'#dc2626', fontWeight:500 }}>
+                        ⚠ {hitHoliday ? `Festivo: ${hitHoliday.name}` : 'Fin de semana'} — elige un día hábil
+                      </span>
+                    </div>
+                  )}
+                  {/* Mini lista de festivos cercanos */}
+                  {startDate && (() => {
+                    const base = new Date(startDate+'T12:00:00');
+                    const near = allHolidays.filter(h => {
+                      const d = new Date(h.date+'T12:00:00');
+                      const diff = (d.getTime()-base.getTime())/(1000*60*60*24);
+                      return diff >= 0 && diff <= 30;
+                    }).slice(0,3);
+                    if (!near.length) return null;
+                    return (
+                      <div style={{ padding:'5px 10px', background:'#fffbeb', border:'0.5px solid #fde68a', borderRadius:6 }}>
+                        <p style={{ margin:'0 0 3px', fontSize:9, fontWeight:600, color:'#a16207', textTransform:'uppercase', letterSpacing:'.04em' }}>Festivos próximos</p>
+                        {near.map(h=>(
+                          <p key={h.date} style={{ margin:'1px 0', fontSize:10, color:'#92400e' }}>
+                            🗓 {h.date.slice(5).replace('-','/')} · {h.name}
+                          </p>
+                        ))}
+                      </div>
+                    );
+                  })()}
+                </div>
+              );
+            })()}
 
             {/* Weeks editor */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8 }}>

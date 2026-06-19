@@ -44,6 +44,166 @@ function SaveBanner({ onSave, dirty }: { onSave: () => void; dirty: boolean }) {
   );
 }
 
+// ─── localStorage key para roles por proyecto ─────────────────────────────────
+const PROJ_ROLES_KEY = 'timia_project_roles'; // { "u-amilkar:FICO": "tech_ref", ... }
+
+function loadProjRoles(): Record<string, UserRole> {
+  try { return JSON.parse(localStorage.getItem(PROJ_ROLES_KEY) ?? '{}'); } catch { return {}; }
+}
+function saveProjRoles(r: Record<string, UserRole>) {
+  try { localStorage.setItem(PROJ_ROLES_KEY, JSON.stringify(r)); } catch {}
+}
+function projRoleKey(userId: string, projId: string) { return `${userId}:${projId}`; }
+
+// ─── Modal gestión equipo (con búsqueda + rol por proyecto) ───────────────────
+function TeamModal({
+  proj, users, onToggle, onClose, ROLE_COLOR,
+}: {
+  proj: AdminProject;
+  users: AdminUser[];
+  onToggle: (userId: string, projId: string) => void;
+  onClose: () => void;
+  ROLE_COLOR: Record<UserRole, string>;
+}) {
+  const [search,    setSearch]    = useState('');
+  const [projRoles, setProjRoles] = useState<Record<string, UserRole>>(loadProjRoles);
+
+  function setProjRole(userId: string, role: UserRole) {
+    const next = { ...projRoles, [projRoleKey(userId, proj.id)]: role };
+    setProjRoles(next);
+    saveProjRoles(next);
+  }
+
+  const filtered = users.filter(u =>
+    !search ||
+    u.name.toLowerCase().includes(search.toLowerCase()) ||
+    u.email.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const assigned  = filtered.filter(u => u.projectIds.includes(proj.id));
+  const available = filtered.filter(u => !u.projectIds.includes(proj.id));
+
+  function UserRow({ u }: { u: AdminUser }) {
+    const isAssigned = u.projectIds.includes(proj.id);
+    const pk = projRoleKey(u.id, proj.id);
+    const effectiveRole = (projRoles[pk] ?? u.role) as UserRole;
+    const rc = ROLE_COLOR[effectiveRole] ?? '#64748b';
+    return (
+      <div style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 12px', borderRadius:10,
+        border:`1px solid ${isAssigned ? proj.color+'60' : '#e2e8f0'}`,
+        background: isAssigned ? proj.color+'06' : '#fafafa' }}>
+        {/* Avatar */}
+        <div style={{ width:34, height:34, borderRadius:'50%', background:u.avatarColor+'20', color:u.avatarColor,
+          display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:700, flexShrink:0 }}>
+          {u.initials}
+        </div>
+        {/* Info */}
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ fontSize:12, fontWeight:500, color:'#111', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{u.name}</div>
+          <div style={{ fontSize:10, color:'#94a3b8', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{u.email}</div>
+        </div>
+        {/* Rol en el proyecto — editable si asignado */}
+        {isAssigned ? (
+          <select
+            value={effectiveRole}
+            onChange={e => setProjRole(u.id, e.target.value as UserRole)}
+            onClick={e => e.stopPropagation()}
+            title="Rol en este proyecto"
+            style={{ fontSize:10, padding:'3px 6px', borderRadius:6, border:`1px solid ${rc}40`,
+              background:rc+'15', color:rc, fontWeight:600, outline:'none', cursor:'pointer', flexShrink:0 }}>
+            {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+          </select>
+        ) : (
+          <span style={{ fontSize:10, padding:'2px 7px', borderRadius:6, background:ROLE_COLOR[u.role]+'15', color:ROLE_COLOR[u.role], fontWeight:500, flexShrink:0 }}>
+            {ROLES.find(r=>r.value===u.role)?.label}
+          </span>
+        )}
+        {/* Checkbox asignación */}
+        <div
+          onClick={() => onToggle(u.id, proj.id)}
+          style={{ width:22, height:22, borderRadius:6, border:`2px solid ${isAssigned ? proj.color : '#d1d5db'}`,
+            background: isAssigned ? proj.color : 'transparent', display:'flex', alignItems:'center',
+            justifyContent:'center', flexShrink:0, cursor:'pointer', transition:'all .12s' }}>
+          {isAssigned && <CheckCircle size={13} color="#fff" strokeWidth={3}/>}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:999, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }} onClick={onClose}>
+      <div style={{ background:'#fff', borderRadius:16, width:'100%', maxWidth:560, maxHeight:'85vh', display:'flex', flexDirection:'column', overflow:'hidden', boxShadow:'0 20px 60px rgba(0,0,0,.2)' }} onClick={e=>e.stopPropagation()}>
+
+        {/* Header */}
+        <div style={{ padding:'18px 22px 14px', borderBottom:'0.5px solid #f1f5f9' }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:12 }}>
+            <div>
+              <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                <div style={{ width:28, height:28, borderRadius:7, background:proj.color+'20', display:'flex', alignItems:'center', justifyContent:'center' }}>
+                  <span style={{ fontSize:10, fontWeight:700, color:proj.color }}>{proj.id.slice(0,2)}</span>
+                </div>
+                <h3 style={{ margin:0, fontSize:14, fontWeight:600, color:'#111' }}>{proj.id} · Gestionar equipo</h3>
+              </div>
+              <p style={{ margin:'3px 0 0 36px', fontSize:11, color:'#94a3b8' }}>
+                Activa/desactiva personas y asigna su rol dentro de este proyecto
+              </p>
+            </div>
+            <button onClick={onClose} style={{ border:'none', background:'none', cursor:'pointer', color:'#94a3b8', padding:4 }}><X size={16}/></button>
+          </div>
+          {/* Barra de búsqueda */}
+          <div style={{ position:'relative' }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" style={{ position:'absolute', left:10, top:'50%', transform:'translateY(-50%)' }}><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+            <input
+              value={search}
+              onChange={e=>setSearch(e.target.value)}
+              placeholder="Buscar por nombre o correo…"
+              style={{ width:'100%', padding:'8px 10px 8px 30px', fontSize:12, border:'1px solid #e2e8f0', borderRadius:8, outline:'none', boxSizing:'border-box' as const }}
+            />
+          </div>
+        </div>
+
+        {/* Body */}
+        <div style={{ overflowY:'auto', flex:1, padding:'14px 22px 18px' }}>
+          {/* Asignados */}
+          {assigned.length > 0 && (
+            <div style={{ marginBottom:16 }}>
+              <p style={{ margin:'0 0 8px', fontSize:10, fontWeight:600, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'.06em' }}>
+                Asignados ({assigned.length})
+              </p>
+              <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+                {assigned.map(u=><UserRow key={u.id} u={u}/>)}
+              </div>
+            </div>
+          )}
+
+          {/* Disponibles */}
+          {available.length > 0 && (
+            <div>
+              <p style={{ margin:'0 0 8px', fontSize:10, fontWeight:600, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'.06em' }}>
+                Disponibles ({available.length})
+              </p>
+              <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+                {available.map(u=><UserRow key={u.id} u={u}/>)}
+              </div>
+            </div>
+          )}
+
+          {filtered.length === 0 && (
+            <p style={{ textAlign:'center', color:'#94a3b8', fontSize:12, marginTop:20 }}>Sin resultados para "{search}"</p>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div style={{ padding:'12px 22px', borderTop:'0.5px solid #f1f5f9', display:'flex', justifyContent:'flex-end' }}>
+          <button onClick={onClose} style={{ padding:'8px 20px', fontSize:12, background:'#dc2626', color:'#fff', border:'none', borderRadius:8, cursor:'pointer', fontWeight:500 }}>
+            Listo
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Tab 1: Proyectos (con equipo inline)
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -239,40 +399,13 @@ function TabProyectos() {
 
       {/* Modal gestión equipo */}
       {teamModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', zIndex: 999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onClick={() => setTeamModal(null)}>
-          <div style={{ background: '#fff', borderRadius: 14, width: '100%', maxWidth: 520, padding: '22px 24px', maxHeight: '80vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <div>
-                <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>Equipo · {teamModal.proj.id}</h3>
-                <p style={{ margin: '2px 0 0', fontSize: 11, color: '#94a3b8' }}>Selecciona quién trabaja en este proyecto</p>
-              </div>
-              <button onClick={() => setTeamModal(null)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#94a3b8' }}><X size={16}/></button>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {users.map(u => {
-                const assigned = u.projectIds.includes(teamModal.proj.id);
-                const rc = ROLE_COLOR[u.role];
-                return (
-                  <div key={u.id} onClick={() => toggleUserOnProject(u.id, teamModal.proj.id)}
-                    style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 9, border: `1px solid ${assigned ? teamModal.proj.color + '50' : '#e2e8f0'}`, background: assigned ? teamModal.proj.color + '08' : '#fff', cursor: 'pointer', transition: 'all .12s' }}>
-                    <div style={{ width: 32, height: 32, borderRadius: '50%', background: u.avatarColor + '20', color: u.avatarColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{u.initials}</div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 12, fontWeight: 500, color: '#111' }}>{u.name}</div>
-                      <div style={{ fontSize: 10, color: '#94a3b8' }}>{u.email}</div>
-                    </div>
-                    <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 5, background: rc + '20', color: rc, fontWeight: 600 }}>{ROLES.find(r => r.value === u.role)?.label}</span>
-                    <div style={{ width: 18, height: 18, borderRadius: '50%', border: `2px solid ${assigned ? teamModal.proj.color : '#d1d5db'}`, background: assigned ? teamModal.proj.color : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                      {assigned && <CheckCircle size={12} color="#fff" strokeWidth={3}/>}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
-              <button onClick={() => { setTeamModal(null); }} style={{ padding: '8px 18px', fontSize: 12, background: '#dc2626', color: '#fff', border: 'none', borderRadius: 7, cursor: 'pointer', fontWeight: 500 }}>Listo</button>
-            </div>
-          </div>
-        </div>
+        <TeamModal
+          proj={teamModal.proj}
+          users={users}
+          onToggle={toggleUserOnProject}
+          onClose={() => setTeamModal(null)}
+          ROLE_COLOR={ROLE_COLOR}
+        />
       )}
     </div>
   );

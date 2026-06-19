@@ -1,169 +1,166 @@
-import React from 'react';
-import { Search, Filter, Download, ChevronLeft, ChevronRight, Eye, RefreshCw } from 'lucide-react';
+import React, { useState } from 'react';
+import { Search, Eye } from 'lucide-react';
 
 const logs = [
   {
-    timestamp: '2026-03-10 14:30:12',
-    recipient: 'Jossone (Líder)',
-    code: 'TASK-1',
-    event: 'Movimiento de Tarea',
+    timestamp: '2026-06-18 14:30:12',
+    recipient: 'Juan Pablo Arévalo',
+    code: 'DECRONOS-1997',
+    event: 'Cambio de estado',
     status: 'COMPLETADO',
-    detail: 'De "En Progreso" a "Revisión"',
+    detail: 'De "En Progreso" a "Revisión" · FICO',
     type: 'AUDIT'
   },
   {
-    timestamp: '2026-03-10 13:15:05',
-    recipient: 'Sistema',
-    code: 'ALERTA',
-    event: 'Desviación de Tiempo',
-    status: 'CRÍTICO',
-    detail: 'Retraso detectado en Tarea 2',
-    type: 'ALERT'
-  },
-  {
-    timestamp: '2026-03-10 11:05:44',
-    recipient: 'Ana García',
-    code: 'TASK-3',
-    event: 'Movimiento de Tarea',
-    status: 'COMPLETADO',
-    detail: 'De "Backlog" a "En Progreso"',
+    timestamp: '2026-06-18 13:15:05',
+    recipient: 'Fabrizio Atiquipa',
+    code: 'DECRONOS-1835',
+    event: 'Commit subido',
+    status: 'INFO',
+    detail: 't_kbrb_output_data_co_proactivo · FICO',
     type: 'AUDIT'
   },
   {
-    timestamp: '2026-03-10 09:45:22',
-    recipient: 'Sistema',
-    code: 'ALERTA',
-    event: 'Carga de Procesamiento',
-    status: 'ADVERTENCIA',
-    detail: 'Uso de CPU superior al 85%',
-    type: 'ALERT'
+    timestamp: '2026-06-18 11:05:44',
+    recipient: 'Juliana Garzón',
+    code: 'DECRONOS-1814',
+    event: 'Tarea movida',
+    status: 'COMPLETADO',
+    detail: 'De "Backlog" a "En Progreso" · CRONOS',
+    type: 'AUDIT'
   },
   {
-    timestamp: '2026-03-10 08:30:00',
-    recipient: 'Jossone (Líder)',
-    code: 'TASK-5',
-    event: 'Movimiento de Tarea',
-    status: 'COMPLETADO',
-    detail: 'De "Revisión" a "Finalizado"',
+    timestamp: '2026-06-17 16:22:00',
+    recipient: 'Sergio Rodriguez',
+    code: 'DECRONOS-1727',
+    event: 'Comentario añadido',
+    status: 'INFO',
+    detail: 'Mapeo SQL t_kbrb_output · FICO',
     type: 'AUDIT'
-  }
+  },
+  {
+    timestamp: '2026-06-17 09:45:22',
+    recipient: 'Juan Pablo Arévalo',
+    code: 'DECRONOS-1996',
+    event: 'Tarea asignada',
+    status: 'INFO',
+    detail: 'Solicitud ACLs Live FICO Q2-II',
+    type: 'AUDIT'
+  },
+  {
+    timestamp: '2026-06-16 14:00:00',
+    recipient: 'Juliana Garzón',
+    code: 'DECRONOS-1682',
+    event: 'Tarea cerrada',
+    status: 'COMPLETADO',
+    detail: 'Despliegue esquemas Work · NGA',
+    type: 'AUDIT'
+  },
+  {
+    timestamp: '2026-06-15 10:30:00',
+    recipient: 'Eric Buitrago',
+    code: 'DECRONOS-1834',
+    event: 'Tarea completada',
+    status: 'COMPLETADO',
+    detail: 'Gestión repositorios Bitbucket · CRONOS',
+    type: 'AUDIT'
+  },
 ];
 
+const STATUS_STYLE: Record<string, { bg: string; text: string }> = {
+  COMPLETADO: { bg: '#dcfce7', text: '#15803d' },
+  INFO:       { bg: '#eff6ff', text: '#1d4ed8' },
+  ADVERTENCIA:{ bg: '#fef9c3', text: '#a16207' },
+  CRÍTICO:    { bg: '#fef2f2', text: '#dc2626' },
+};
+
 export default function AuditLog() {
+  const [search, setSearch] = useState('');
+
+  const filtered = logs.filter(l =>
+    !search ||
+    l.recipient.toLowerCase().includes(search.toLowerCase()) ||
+    l.code.toLowerCase().includes(search.toLowerCase()) ||
+    l.event.toLowerCase().includes(search.toLowerCase()) ||
+    l.detail.toLowerCase().includes(search.toLowerCase())
+  );
+
   return (
     <div className="p-8 max-w-[1400px] mx-auto space-y-6">
+      {/* Header */}
       <div className="flex flex-wrap justify-between items-end gap-4">
-        <div className="space-y-2">
-          <h1 className="text-4xl font-black text-slate-900 tracking-tight">Registro de Auditoría</h1>
-          <p className="text-slate-500">Monitorea los movimientos de tareas y alertas críticas del sistema.</p>
+        <div className="space-y-1">
+          <h1 className="text-2xl font-semibold text-slate-900 tracking-tight">Registro de Auditoría</h1>
+          <p className="text-sm text-slate-500">Historial de movimientos y cambios en el sistema.</p>
         </div>
-        <div className="flex gap-3">
-          <button className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors">
-            <Filter size={16} />
-            Filtrar Logs
-          </button>
-          <button className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm font-bold hover:bg-primary/90 transition-all shadow-lg shadow-primary/20">
-            <Download size={16} />
-            Exportar CSV
-          </button>
-        </div>
-      </div>
-
-      {/* Tabs */}
-      <div className="border-b border-slate-200">
-        <div className="flex gap-8">
-          <button className="border-b-2 border-primary text-primary pb-3 pt-2 text-sm font-bold tracking-wide">
-            Historial de Movimientos
-          </button>
-          <button className="border-b-2 border-transparent text-slate-500 hover:text-slate-800 pb-3 pt-2 text-sm font-bold tracking-wide">
-            Alertas del Sistema
-          </button>
-          <button className="border-b-2 border-transparent text-slate-500 hover:text-slate-800 pb-3 pt-2 text-sm font-bold tracking-wide">
-            Historial de Correos
-          </button>
+        {/* Solo barra de búsqueda */}
+        <div className="relative w-72">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"/>
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Buscar por usuario, código, evento…"
+            className="w-full pl-9 pr-4 py-2 text-sm bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
+          />
         </div>
       </div>
 
-      {/* Table */}
+      {/* Contador */}
+      <p className="text-xs text-slate-400">
+        {filtered.length} registro{filtered.length !== 1 ? 's' : ''} encontrado{filtered.length !== 1 ? 's' : ''}
+        {search && <button onClick={() => setSearch('')} className="ml-2 text-primary hover:underline">Limpiar</button>}
+      </p>
+
+      {/* Tabla */}
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead className="bg-slate-50 border-b border-slate-200">
               <tr>
-                <th className="px-6 py-4 text-xs font-bold text-slate-700 uppercase tracking-wider">Fecha y Hora</th>
-                <th className="px-6 py-4 text-xs font-bold text-slate-700 uppercase tracking-wider">Responsable</th>
-                <th className="px-6 py-4 text-xs font-bold text-slate-700 uppercase tracking-wider">Evento / Detalle</th>
-                <th className="px-6 py-4 text-xs font-bold text-slate-700 uppercase tracking-wider text-center">Tipo</th>
-                <th className="px-6 py-4 text-xs font-bold text-slate-700 uppercase tracking-wider">Acciones</th>
+                <th className="px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Fecha y hora</th>
+                <th className="px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Usuario</th>
+                <th className="px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Código</th>
+                <th className="px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Evento</th>
+                <th className="px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Detalle</th>
+                <th className="px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider text-center">Estado</th>
+                <th className="px-5 py-3"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {logs.map((log, i) => (
-                <tr key={i} className={`hover:bg-slate-50 transition-colors ${log.type === 'ALERT' ? 'bg-primary/5' : ''}`}>
-                  <td className="px-6 py-4 whitespace-nowrap text-slate-500 text-sm font-medium">{log.timestamp}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-slate-600 text-sm">{log.recipient}</td>
-                  <td className="px-6 py-4 text-sm font-mono">
-                    <span className="text-primary font-bold">【{log.code}】</span>
-                    {' - '}{log.event}{' - '}
-                    <span className={
-                      log.status === 'COMPLETADO' ? 'text-emerald-600' : 
-                      log.status === 'CRÍTICO' ? 'text-primary' : 
-                      log.status === 'ADVERTENCIA' ? 'text-amber-600' : 'text-blue-600'
-                    }>
-                      {log.status}
-                    </span>
-                    {' - '}{log.detail}
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex justify-center">
-                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
-                        log.type === 'AUDIT' 
-                          ? 'bg-emerald-100 text-emerald-700 border-emerald-200' 
-                          : 'bg-primary/10 text-primary border-primary/30'
-                      }`}>
-                        {log.type === 'AUDIT' ? 'AUDITORÍA' : 'ALERTA'}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <button className="text-slate-400 hover:text-primary transition-colors">
-                      <Eye size={18} />
-                    </button>
+              {filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-5 py-12 text-center text-sm text-slate-400">
+                    No hay registros que coincidan con la búsqueda.
                   </td>
                 </tr>
-              ))}
+              ) : filtered.map((log, i) => {
+                const ss = STATUS_STYLE[log.status] ?? STATUS_STYLE.INFO;
+                return (
+                  <tr key={i} className="hover:bg-slate-50 transition-colors">
+                    <td className="px-5 py-3.5 whitespace-nowrap text-xs text-slate-400 font-mono">{log.timestamp}</td>
+                    <td className="px-5 py-3.5 whitespace-nowrap text-sm text-slate-700 font-medium">{log.recipient}</td>
+                    <td className="px-5 py-3.5 whitespace-nowrap">
+                      <span className="text-xs font-mono text-primary font-semibold">{log.code}</span>
+                    </td>
+                    <td className="px-5 py-3.5 whitespace-nowrap text-sm text-slate-600">{log.event}</td>
+                    <td className="px-5 py-3.5 text-sm text-slate-500 max-w-xs truncate">{log.detail}</td>
+                    <td className="px-5 py-3.5 text-center">
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-semibold"
+                        style={{ background: ss.bg, color: ss.text }}>
+                        {log.status}
+                      </span>
+                    </td>
+                    <td className="px-5 py-3.5">
+                      <button className="text-slate-300 hover:text-primary transition-colors">
+                        <Eye size={15}/>
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
-        </div>
-      </div>
-
-      {/* Pagination */}
-      <div className="flex items-center justify-between pt-4">
-        <p className="text-sm text-slate-500">Showing 1-5 of 1,284 results</p>
-        <div className="flex items-center gap-2">
-          <button className="flex size-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50">
-            <ChevronLeft size={18} />
-          </button>
-          <button className="text-sm font-bold flex size-10 items-center justify-center text-white rounded-lg bg-primary">1</button>
-          <button className="text-sm font-medium flex size-10 items-center justify-center text-slate-600 rounded-lg hover:bg-slate-100">2</button>
-          <button className="text-sm font-medium flex size-10 items-center justify-center text-slate-600 rounded-lg hover:bg-slate-100">3</button>
-          <span className="text-slate-400">...</span>
-          <button className="text-sm font-medium flex size-10 items-center justify-center text-slate-600 rounded-lg hover:bg-slate-100">257</button>
-          <button className="flex size-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50">
-            <ChevronRight size={18} />
-          </button>
-        </div>
-      </div>
-
-      {/* Footer Status */}
-      <div className="flex items-center gap-6 text-[10px] text-slate-400 font-bold uppercase tracking-widest pt-4">
-        <div className="flex items-center gap-2">
-          <div className="size-2 rounded-full bg-emerald-500"></div>
-          SMTP Provider: Connected
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="size-2 rounded-full bg-emerald-500"></div>
-          Log Sink: Healthy
         </div>
       </div>
     </div>
