@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, FileDown, Search, Link2, Package, BookOpen, X, ExternalLink, Copy, Check, TicketCheck } from 'lucide-react';
+import { Plus, Trash2, Search, Link2, Package, BookOpen, X, ExternalLink, Copy, Check, TicketCheck, ClipboardList } from 'lucide-react';
 import { adminStore, BitacoraEntry } from '../lib/adminStore';
 import { PROJECTS, useAuth, canAccess } from '../contexts/AuthContext';
 import ImputacionesJira from './ImputacionesJira';
@@ -135,12 +135,43 @@ function TabCambios({ user }: { user: any }) {
     return true;
   });
 
-  function exportCsv() {
-    const hdr = 'Fecha,Proyecto,Tipo,Descripción,Motivo,Tablas,Jira,Registrado por';
-    const rows = filtered.map(e => [e.fecha,e.projectId,e.tipo,`"${e.descripcion}"`,`"${e.motivo}"`,`"${e.tablasAfectadas}"`,e.jira,e.quien].join(','));
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([hdr+'\n'+rows.join('\n')],{type:'text/csv'}));
-    a.download = `cambios_${new Date().toISOString().slice(0,10)}.csv`; a.click();
+  const [standup, setStandup] = useState(false);
+
+  function copyStandup() {
+    const today = new Date().toLocaleDateString('es-CO', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
+    const projLabel = filterProj
+      ? PROJECTS.find((p: any) => p.id === filterProj)?.name ?? filterProj
+      : accessibleProjects.map((p: any) => p.name).join(' · ');
+
+    const lines: string[] = [
+      `📋 STATUS SEMANAL — ${projLabel.toUpperCase()}`,
+      `📅 ${today.charAt(0).toUpperCase() + today.slice(1)}`,
+      `${'─'.repeat(40)}`,
+      ``,
+      `📝 CAMBIOS FUNCIONALES (${filtered.length})`,
+      ``,
+    ];
+
+    // Agrupar por tipo
+    const byTipo: Record<string, typeof filtered> = {};
+    filtered.forEach(e => { (byTipo[e.tipo] ??= []).push(e); });
+
+    const tipoEmoji: Record<string,string> = { Campo:'🔷', Regla:'📐', Modelo:'🧠', ETL:'⚙️', Otro:'📌' };
+    Object.entries(byTipo).forEach(([tipo, items]) => {
+      lines.push(`${tipoEmoji[tipo] ?? '▫️'} ${tipo.toUpperCase()} (${items.length})`);
+      items.forEach(e => {
+        lines.push(`   • ${e.descripcion}${e.motivo ? ` — ${e.motivo}` : ''}${e.jira ? ` [${e.jira}]` : ''}`);
+        if (e.tablasAfectadas) lines.push(`     Tablas: ${e.tablasAfectadas}`);
+      });
+      lines.push('');
+    });
+
+    lines.push(`${'─'.repeat(40)}`);
+    lines.push(`🔗 Registrado en Timia Hub · ${today}`);
+
+    navigator.clipboard?.writeText(lines.join('\n')).catch(() => {});
+    setStandup(true);
+    setTimeout(() => setStandup(false), 2500);
   }
 
   // Stats por tipo
@@ -197,8 +228,19 @@ function TabCambios({ user }: { user: any }) {
         </div>
         {/* Acciones */}
         <div style={{ marginLeft:'auto', display:'flex', gap:6 }}>
-          <button onClick={exportCsv} style={{ display:'flex', alignItems:'center', gap:5, padding:'7px 12px', fontSize:11, border:'0.5px solid #e2e8f0', borderRadius:7, background:'#fff', cursor:'pointer', color:'#374151' }}>
-            <FileDown size={12}/> CSV
+          <button
+            onClick={copyStandup}
+            title="Copiar como status semanal (WhatsApp / correo / Slack)"
+            style={{
+              display:'flex', alignItems:'center', gap:5, padding:'7px 12px', fontSize:11,
+              border:`0.5px solid ${standup ? '#86efac' : '#e2e8f0'}`,
+              borderRadius:7, background: standup ? '#f0fdf4' : '#fff',
+              cursor:'pointer', color: standup ? '#15803d' : '#374151',
+              transition:'all .2s', fontWeight: standup ? 600 : 400,
+            }}
+          >
+            {standup ? <Check size={12}/> : <ClipboardList size={12}/>}
+            {standup ? '¡Copiado!' : 'Copiar status'}
           </button>
           {canAccess(user?.role, 'write_bitacora') && (
             <button onClick={()=>setShow(v=>!v)} style={{ display:'flex', alignItems:'center', gap:5, padding:'7px 14px', fontSize:12, background:'#dc2626', color:'#fff', border:'none', borderRadius:7, cursor:'pointer', fontWeight:600 }}>

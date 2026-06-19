@@ -94,13 +94,13 @@ export default function Layout({ children, currentView, onViewChange, userRole }
                 Alcances
               </button>
 
-              {/* Repositorio — Imputaciones · Inventario · Links */}
+              {/* Recursos — Imputaciones · Inventario · Links */}
               <div ref={repoRef} className="relative">
                 <button
                   onClick={() => setShowRepo(v => !v)}
                   className={`text-sm font-medium transition-colors flex items-center gap-1 ${repoActive ? 'text-primary' : 'text-slate-600 hover:text-primary'}`}
                 >
-                  Repositorio
+                  Recursos
                   <ChevronDown size={12} style={{ transition: 'transform .15s', transform: showRepo ? 'rotate(180deg)' : 'rotate(0deg)' }}/>
                 </button>
                 {showRepo && (
