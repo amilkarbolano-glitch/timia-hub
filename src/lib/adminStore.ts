@@ -7,6 +7,32 @@ import { PROJECTS as BASE_PROJECTS } from '../contexts/AuthContext';
 export type Priority = 'Baja' | 'Media' | 'Alta' | 'Crítica';
 export type UserRole  = 'pm' | 'tech_lead' | 'project_lead' | 'tech_ref' | 'developer';
 
+// ─── Imputaciones Jira ────────────────────────────────────────────────────────
+
+export type JiraStatus =
+  | 'New' | 'Analysing' | 'In Progress' | 'Ready'
+  | 'Ready to Verify' | 'Ready to Deploy' | 'Deployed'
+  | 'Blocked' | 'Discarded' | 'Test' | 'Accepted';
+
+export interface ImputacionEntry {
+  id: string;
+  projectId: string;
+  jiraId: string;       // e.g. DECRONOS-1450
+  summary: string;
+  type: string;         // Enabler Delivery | Deployment | Bug | Story | Task
+  status: JiraStatus;
+  assigneeIds: string[]; // user IDs from MOCK_ACCOUNTS, or ['todos']
+  month: string;
+  weeks: string;
+  q: string;            // Q1-2026 | Q2-2026 | Q2-II-2026 | …
+  phase: string;
+  hoursEst: number;
+  hoursImputed: number;
+  context: string;
+  createdBy: string;
+  createdAt: string;    // YYYY-MM-DD
+}
+
 export interface AdminProject {
   id: string; name: string; area: string; color: string;
   priority: Priority; client: string; startDate: string; active: boolean;
@@ -450,6 +476,11 @@ export const adminStore = {
     return stored;
   },
   saveKanbanTasks: (t: KanbanTask[]) => save('kanban_tasks', t),
+
+  // Imputaciones Jira
+  getImputaciones:  (): ImputacionEntry[]       => load('imputaciones', []),
+  saveImputaciones: (i: ImputacionEntry[])      => save('imputaciones', i),
+
   // Sync a specific plan-activity assignee to its kanban card
   syncKanbanAssignees: (projectId: string, entregableId: string, actIdx: number, assigneeIds: string[]) => {
     const tasks = load<KanbanTask[]>('kanban_tasks', DEFAULT_KANBAN_TASKS);
