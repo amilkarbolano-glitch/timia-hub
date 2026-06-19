@@ -115,12 +115,13 @@ function UserRow({ u, proj, projRoles, onSetProjRole, onToggle, ROLE_COLOR }: Us
 
 // ─── Modal gestión equipo (con búsqueda + rol por proyecto) ───────────────────
 function TeamModal({
-  proj, users, onToggle, onClose, ROLE_COLOR,
+  proj, users, onToggle, onClose, onGoToPlan, ROLE_COLOR,
 }: {
   proj: AdminProject;
   users: AdminUser[];
   onToggle: (userId: string, projId: string) => void;
   onClose: () => void;
+  onGoToPlan?: () => void;
   ROLE_COLOR: Record<UserRole, string>;
 }) {
   const [search,    setSearch]    = useState('');
@@ -206,7 +207,28 @@ function TeamModal({
         </div>
 
         {/* Footer */}
-        <div style={{ padding:'12px 22px', borderTop:'0.5px solid #f1f5f9', display:'flex', justifyContent:'flex-end' }}>
+        <div style={{ padding:'12px 22px', borderTop:'0.5px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', gap:10 }}>
+          {/* Botón Plan de trabajo — solo si existe */}
+          {onGoToPlan ? (
+            <button
+              onClick={onGoToPlan}
+              style={{
+                display:'flex', alignItems:'center', gap:6,
+                padding:'8px 16px', fontSize:12, fontWeight:500,
+                background:'#0f172a', color:'#fff',
+                border:'none', borderRadius:8, cursor:'pointer',
+                transition:'opacity .15s',
+              }}
+              onMouseEnter={e=>(e.currentTarget.style.opacity='.8')}
+              onMouseLeave={e=>(e.currentTarget.style.opacity='1')}
+            >
+              {/* ícono Gantt inline */}
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="3" y="4" width="6" height="3" rx="1"/><rect x="7" y="10" width="10" height="3" rx="1"/><rect x="5" y="16" width="8" height="3" rx="1"/>
+              </svg>
+              Ver Plan de Trabajo
+            </button>
+          ) : <span/>}
           <button onClick={onClose} style={{ padding:'8px 20px', fontSize:12, background:'#dc2626', color:'#fff', border:'none', borderRadius:8, cursor:'pointer', fontWeight:500 }}>
             Listo
           </button>
@@ -220,7 +242,7 @@ function TeamModal({
 // Tab 1: Proyectos (con equipo inline)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function TabProyectos() {
+function TabProyectos({ onViewChange }: { onViewChange?: (view: string) => void }) {
   const [projects, setProjects]   = useState<AdminProject[]>(() => adminStore.getProjects());
   const [users, setUsers]         = useState<AdminUser[]>(() => adminStore.getUsers());
   const [editing, setEditing]     = useState<AdminProject | null>(null);
@@ -424,6 +446,11 @@ function TabProyectos() {
           users={users}
           onToggle={toggleUserOnProject}
           onClose={() => { setTeamModal(null); setProjRolesDisplay(loadProjRoles()); }}
+          onGoToPlan={onViewChange ? () => {
+            localStorage.setItem('timia_last_plan_project', teamModal.proj.id);
+            setTeamModal(null);
+            onViewChange('plan-trabajo');
+          } : undefined}
           ROLE_COLOR={ROLE_COLOR}
         />
       )}
@@ -733,7 +760,7 @@ const ADMIN_TABS: { id: AdminTab; label: string; icon: React.ReactNode; desc: st
   { id: 'festivos',  label: 'Festivos',  icon: <Calendar size={16}/>,  desc: 'Calendario Colombia' },
 ];
 
-export default function AdminPanel() {
+export default function AdminPanel({ onViewChange }: { onViewChange?: (view: string) => void } = {}) {
   const [tab, setTab] = useState<AdminTab>('proyectos');  // default: proyectos con equipo
 
   return (
@@ -762,7 +789,7 @@ export default function AdminPanel() {
       </div>
 
       {/* Content */}
-      {tab === 'proyectos' && <TabProyectos/>}
+      {tab === 'proyectos' && <TabProyectos onViewChange={onViewChange}/>}
       {tab === 'usuarios'  && <TabEquipo/>}
       {tab === 'ans'       && <TabAns/>}
       {tab === 'festivos'  && <TabFestivos/>}
