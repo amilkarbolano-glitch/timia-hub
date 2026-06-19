@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, FileDown, Search, Link2, Package, BookOpen, X, ExternalLink, Copy, Check } from 'lucide-react';
+import { Plus, Trash2, FileDown, Search, Link2, Package, BookOpen, X, ExternalLink, Copy, Check, TicketCheck } from 'lucide-react';
 import { adminStore, BitacoraEntry } from '../lib/adminStore';
 import { PROJECTS, useAuth, canAccess } from '../contexts/AuthContext';
+import ImputacionesJira from './ImputacionesJira';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -749,12 +750,13 @@ function emptyBox(): React.CSSProperties { return { background:'#fff', border:'0
 
 // ─── Main export ──────────────────────────────────────────────────────────────
 
-type Tab = 'cambios' | 'links' | 'inventario';
+type Tab = 'cambios' | 'links' | 'inventario' | 'imputaciones';
 
 const TABS: { id: Tab; label: string; icon: React.ReactNode; desc: string }[] = [
-  { id:'cambios',    label:'Cambios funcionales', icon:<BookOpen size={14}/>,  desc:'Redefiniciones de campos, reglas, modelos y ETL' },
-  { id:'links',      label:'Links importantes',   icon:<Link2 size={14}/>,     desc:'Jira, Confluence, Bitbucket, documentación de referencia' },
-  { id:'inventario', label:'Inventario',           icon:<Package size={14}/>,   desc:'Tablas, objetos, jobs y modelos del proyecto' },
+  { id:'cambios',      label:'Cambios funcionales', icon:<BookOpen size={14}/>,     desc:'Redefiniciones de campos, reglas, modelos y ETL' },
+  { id:'imputaciones', label:'Imputaciones Jira',   icon:<TicketCheck size={14}/>,  desc:'Tickets Jira por Q y proyecto — seguimiento de imputación de horas' },
+  { id:'links',        label:'Links importantes',   icon:<Link2 size={14}/>,         desc:'Jira, Confluence, Bitbucket, documentación de referencia' },
+  { id:'inventario',   label:'Inventario',           icon:<Package size={14}/>,       desc:'Tablas, objetos, jobs y modelos del proyecto' },
 ];
 
 export default function Bitacora() {
@@ -790,9 +792,10 @@ export default function Bitacora() {
       <p style={{ margin:'0 0 16px', fontSize:12, color:'#94a3b8' }}>{active.desc}</p>
 
       {/* Content */}
-      {tab === 'cambios'    && <TabCambios    user={user}/>}
-      {tab === 'links'      && <TabLinks      user={user}/>}
-      {tab === 'inventario' && <TabInventario user={user}/>}
+      {tab === 'cambios'      && <TabCambios      user={user}/>}
+      {tab === 'imputaciones' && <ImputacionesJira user={user}/>}
+      {tab === 'links'        && <TabLinks         user={user}/>}
+      {tab === 'inventario'   && <TabInventario    user={user}/>}
     </div>
   );
 }
