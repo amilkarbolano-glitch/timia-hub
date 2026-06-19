@@ -49,16 +49,22 @@ function AppInner() {
   const { user } = useAuth();
   const role = (user?.role ?? 'developer') as UserRole;
 
-  // Redirige automáticamente a la vista correcta según el rol al iniciar sesión
-  const [currentView, setCurrentView] = useState<View>(
-    (ROLE_LANDING[role] as View) ?? 'dashboard'
-  );
+  // Restaura la vista guardada en localStorage; si no hay, usa la landing del rol
+  const [currentView, setCurrentView] = useState<View>(() => {
+    try {
+      const saved = localStorage.getItem('timia_current_view') as View | null;
+      const setupViews: View[] = ['setup-project', 'setup-team', 'setup-tasks'];
+      if (saved && !setupViews.includes(saved)) return saved;
+    } catch {}
+    return (ROLE_LANDING[role] as View) ?? 'dashboard';
+  });
   const currentViewRef = useRef<View>(currentView);
   currentViewRef.current = currentView;
 
   // Navegación con historial del navegador para que el botón "Atrás" funcione dentro de la app
   const navigate = useCallback((view: View) => {
     setCurrentView(view);
+    try { localStorage.setItem('timia_current_view', view); } catch {}
     window.history.pushState({ view }, '', window.location.href);
   }, []);
 
@@ -68,14 +74,16 @@ function AppInner() {
     const handlePop = (e: PopStateEvent) => {
       const v = (e.state?.view as View | undefined) ?? (ROLE_LANDING[role] as View) ?? 'dashboard';
       setCurrentView(v);
+      try { localStorage.setItem('timia_current_view', v); } catch {}
     };
     window.addEventListener('popstate', handlePop);
     return () => window.removeEventListener('popstate', handlePop);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Si el rol cambia (ej: cambio de cuenta), vuelve a la vista correcta
+  // Si el rol cambia (ej: cambio de cuenta), limpia vista guardada y va a la landing
   useEffect(() => {
+    try { localStorage.removeItem('timia_current_view'); } catch {}
     navigate((ROLE_LANDING[role] as View) ?? 'dashboard');
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [role]);
