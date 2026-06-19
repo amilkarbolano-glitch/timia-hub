@@ -1770,112 +1770,102 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
     }
   }
 
-  // ── Imprimir como PDF — print CSS ────────────────────────────────────────────
+  // ── Imprimir como PDF — ventana limpia (window.open) ─────────────────────────
   function handlePrint() {
-    const styleId = 'timia-print-style';
-    let style = document.getElementById(styleId) as HTMLStyleElement | null;
-    if (!style) {
-      style = document.createElement('style');
-      style.id = styleId;
-      document.head.appendChild(style);
+    const printEl = document.getElementById('timia-plan-print');
+    if (!printEl) { alert('No se encontró el contenido del plan.'); return; }
+
+    // Clonar el nodo con todos sus estilos inline
+    const clone = printEl.cloneNode(true) as HTMLElement;
+
+    // Quitar elementos marcados como data-print-hide dentro del clon
+    clone.querySelectorAll<HTMLElement>('[data-print-hide]').forEach(el => el.remove());
+    // Ocultar botones que no sean parte del Gantt (Imprimir, Configurar, etc.)
+    clone.querySelectorAll<HTMLButtonElement>('button').forEach(btn => {
+      if (!btn.closest('[data-gantt-section]')) btn.style.display = 'none';
+    });
+
+    const projectLabel = plan?.projectId ?? 'Timia';
+    const html = `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Plan de Trabajo · ${projectLabel}</title>
+  <style>
+    @page { size: A3 landscape; margin: 10mm 12mm; }
+
+    *, *::before, *::after {
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+      box-sizing: border-box;
     }
-    style.textContent = `
-      @media print {
-        @page { size: A3 landscape; margin: 8mm 10mm; }
 
-        /* ── 1. Colores exactos ───────────────────────────────────────────── */
-        * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+    html, body {
+      margin: 0; padding: 0;
+      width: 100%; height: auto;
+      background: #fff;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 12px;
+      color: #111;
+    }
 
-        /* ── 2. Reset html/body ──────────────────────────────────────────── */
-        html, body {
-          height: auto !important; min-height: 0 !important;
-          overflow: visible !important;
-          margin: 0 !important; padding: 0 !important;
-          background: #fff !important;
-        }
+    /* El contenedor del plan ocupa todo el ancho — sin padres que restrinjan */
+    #timia-plan-print {
+      display: block;
+      width: 100%;
+    }
 
-        /* ── 3. Convertir los wrappers flex del layout de la app a bloque   */
-        /*    Esto evita que flex-grow cree una página en blanco inicial       */
-        .min-h-screen {
-          display: block !important;
-          height: auto !important; min-height: 0 !important;
-        }
-        .flex-1 {
-          display: block !important;
-          height: auto !important; min-height: 0 !important;
-          overflow: visible !important;
-          flex: none !important;
-        }
+    /* ── Secciones Gantt ─────────────────────────────────────────────── */
+    [data-gantt-section] {
+      margin-bottom: 20px;
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+    [data-gantt-section]:first-of-type { page-break-before: avoid; }
+    [data-gantt-section] + [data-gantt-section] { page-break-before: always; }
 
-        /* ── 4. Ocultar chrome de la app ─────────────────────────────────── */
-        header, nav, aside,
-        [data-print-hide] { display: none !important; }
+    /* ── Tablas full width ───────────────────────────────────────────── */
+    [data-gantt-table] {
+      overflow: visible;
+      width: 100%;
+    }
+    [data-gantt-table] table {
+      width: 100%;
+      min-width: unset !important;
+      table-layout: fixed;
+      border-collapse: collapse;
+    }
 
-        /* ── 5. El main ocupa todo el ancho sin padding ni overflow ─────── */
-        main {
-          display: block !important;
-          width: 100% !important; height: auto !important;
-          overflow: visible !important;
-          padding: 0 !important; margin: 0 !important;
-        }
+    /* ── Tipografía ─────────────────────────────────────────────────── */
+    [data-gantt-section] td,
+    [data-gantt-section] th { font-size: 10pt; }
+    [data-gantt-section] h4  { font-size: 13pt; }
 
-        /* ── 6. Quitar padding/maxWidth de wrappers directos en main        */
-        /*    (cubre tanto App.tsx wrapper como #pm-dashboard-root)           */
-        main > div,
-        #pm-dashboard-root {
-          padding: 0 !important; margin: 0 !important;
-          max-width: none !important; width: 100% !important;
-          height: auto !important;
-        }
+    /* ── Ocultar botones y controles interactivos ───────────────────── */
+    button { display: none !important; }
+  </style>
+</head>
+<body>
+  ${clone.outerHTML}
+</body>
+</html>`;
 
-        /* ── 7. Plan root → bloque, sidebar oculto ───────────────────────── */
-        #timia-plan-root { display: block !important; }
-        #timia-plan-sidebar { display: none !important; }
+    const win = window.open('', '_blank', 'width=1400,height=900');
+    if (!win) {
+      alert('Activa las ventanas emergentes para este sitio y vuelve a intentarlo.');
+      return;
+    }
+    win.document.open();
+    win.document.write(html);
+    win.document.close();
 
-        /* ── 8. El div flex anónimo (sidebar+contenido) → bloque ────────── */
-        /*    NO tocar descendientes más profundos para no romper el Gantt     */
-        #timia-plan-root > div { display: block !important; }
-
-        /* ── 9. Zona de impresión — full width ───────────────────────────── */
-        #timia-plan-print {
-          display: block !important;
-          flex: none !important;
-          width: 100% !important;
-          min-width: 0 !important;
-          padding: 0 !important; margin: 0 !important;
-        }
-
-        /* ── 10. Secciones Gantt — una por página ────────────────────────── */
-        [data-gantt-section] {
-          page-break-inside: avoid !important;
-          break-inside: avoid !important;
-          margin-bottom: 20px !important;
-        }
-        [data-gantt-section]:first-of-type { page-break-before: avoid !important; }
-        [data-gantt-section] + [data-gantt-section] { page-break-before: always !important; }
-
-        /* ── 11. Tablas Gantt — full width, sin scroll ───────────────────── */
-        [data-gantt-table] {
-          overflow: visible !important; overflow-x: visible !important;
-          width: 100% !important;
-        }
-        [data-gantt-table] table {
-          width: 100% !important;
-          min-width: unset !important;
-          table-layout: auto !important;
-        }
-
-        /* ── 12. Tipografía print ───────────────────────────────────────── */
-        [data-gantt-section] td,
-        [data-gantt-section] th { font-size: 10pt !important; }
-        [data-gantt-section] h4  { font-size: 13pt !important; }
-
-        /* ── 13. Ocultar modales/drawers ─────────────────────────────────── */
-        [role="dialog"], [data-radix-dialog-overlay] { display: none !important; }
-      }
-    `;
-    window.print();
-    window.addEventListener('afterprint', () => { style?.remove(); }, { once: true });
+    // Dar tiempo a que cargue el DOM antes de imprimir
+    setTimeout(() => {
+      win.focus();
+      win.print();
+      win.addEventListener('afterprint', () => win.close(), { once: true });
+    }, 300);
   }
 
   function handleJiraSave(jiraId: string) {
