@@ -920,21 +920,18 @@ Generado por Timia Hub · ${hour} · ${today}`;
 
 // ─── Dashboard principal ──────────────────────────────────────────────────────
 
-type Tab = 'resumen'|'proyectos'|'equipos'|'plan';
+type Tab = 'proyectos'|'plan';
 
 const TABS: { id:Tab; label:string; icon:React.ReactNode; highlight?:boolean }[] = [
-  { id:'resumen',    label:'Dashboard',       icon:<TrendingUp size={13}/> },
   { id:'proyectos',  label:'Proyectos',       icon:<Activity size={13}/> },
-  { id:'equipos',    label:'Equipos',         icon:<Users size={13}/> },
   { id:'plan',       label:'Plan de trabajo', icon:<FileText size={13}/>, highlight: true },
-  // Risk Score oculto temporalmente (solicitud jefe)
 ];
 
 type PMView = 'setup-project' | 'estimaciones' | 'plan-trabajo' | 'admin' | 'bitacora' | 'analytics';
 interface PMDashboardProps { onViewChange?: (v: PMView) => void; }
 
 export default function PMDashboard({ onViewChange }: PMDashboardProps) {
-  const [tab, setTab] = useState<Tab>('resumen');
+  const [tab, setTab] = useState<Tab>('proyectos');
   const [projModal, setProjModal] = useState<typeof PROJ_DATA[0]|null>(null);
   const [showStandup, setShowStandup] = useState(false);
 
@@ -986,10 +983,11 @@ export default function PMDashboard({ onViewChange }: PMDashboardProps) {
         })}
       </div>
 
-      {/* Contenido */}
-      {tab==='resumen'   && <ViewResumen/>}
+      {/* KPIs + áreas técnicas — siempre visibles */}
+      <ViewResumen/>
+
+      {/* Contenido de pestañas */}
       {tab==='proyectos' && <ViewProyectos onSelect={setProjModal}/>}
-      {tab==='equipos'   && <ViewEquipos/>}
       {tab==='plan'      && <PlanDeTrabajo onGoEstimaciones={onViewChange ? () => onViewChange('estimaciones') : undefined}/>}
 
       {/* Modales */}

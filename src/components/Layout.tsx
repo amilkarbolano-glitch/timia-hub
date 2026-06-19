@@ -64,15 +64,14 @@ export default function Layout({ children, currentView, onViewChange, userRole }
             </div>
             
             <nav className="hidden md:flex items-center gap-5">
-              {/* Tablero — solo roles no-PM */}
+
+              {/* 1. Vista principal por rol */}
               {userRole !== 'pm' && (
                 <button onClick={() => onViewChange('dashboard')}
                   className={`text-sm font-medium transition-colors ${currentView==='dashboard'?'text-primary':'text-slate-600 hover:text-primary'}`}>
                   Tablero
                 </button>
               )}
-
-              {/* Dashboard (PM ve su dashboard ejecutivo) */}
               {canAccess(userRole as UserRole,'view_analytics') && (
                 <button onClick={() => onViewChange('analytics')}
                   className={`text-sm font-medium transition-colors ${currentView==='analytics'?'text-primary':'text-slate-600 hover:text-primary'}`}>
@@ -80,21 +79,29 @@ export default function Layout({ children, currentView, onViewChange, userRole }
                 </button>
               )}
 
-              {/* Circuitos BBVA — OCULTO TEMPORALMENTE (no borrar) */}
-              {/* {canAccess(userRole as UserRole, 'view_circuitos') && (
-                <button onClick={() => onViewChange('circuitos-bbva')}
-                  className={`text-sm font-medium transition-colors ${currentView==='circuitos-bbva'?'text-primary':'text-slate-600 hover:text-primary'}`}>
-                  Circuitos BBVA
+              {/* 2. Plan de Trabajo */}
+              {canAccess(userRole as UserRole,'view_plan_trabajo') && (
+                <button onClick={() => onViewChange('plan-trabajo')}
+                  className={`text-sm font-medium transition-colors flex items-center gap-1 ${currentView==='plan-trabajo'?'text-primary':'text-slate-600 hover:text-primary'}`}>
+                  <CalendarRange size={13}/> Plan de Trabajo
                 </button>
-              )} */}
+              )}
 
-              {/* Alcances */}
+              {/* 3. Estimaciones */}
+              {canAccess(userRole as UserRole,'view_estimaciones') && (
+                <button onClick={() => onViewChange('estimaciones')}
+                  className={`text-sm font-medium transition-colors flex items-center gap-1 ${currentView==='estimaciones'?'text-primary':'text-slate-600 hover:text-primary'}`}>
+                  <BarChart3 size={13}/> Estimaciones
+                </button>
+              )}
+
+              {/* 4. Alcances */}
               <button onClick={() => onViewChange('bitacora')}
                 className={`text-sm font-medium transition-colors ${currentView==='bitacora'?'text-primary':'text-slate-600 hover:text-primary'}`}>
                 Alcances
               </button>
 
-              {/* Recursos — Imputaciones · Inventario · Links */}
+              {/* 5. Recursos — Imputaciones · Inventario · Links */}
               <div ref={repoRef} className="relative">
                 <button
                   onClick={() => setShowRepo(v => !v)}
@@ -105,7 +112,6 @@ export default function Layout({ children, currentView, onViewChange, userRole }
                 </button>
                 {showRepo && (
                   <div className="absolute top-full left-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-50 overflow-hidden" style={{ minWidth: 196 }}>
-                    {/* Cabecera del dropdown */}
                     <div style={{ padding: '8px 14px 6px', borderBottom: '0.5px solid #f1f5f9' }}>
                       <p style={{ margin: 0, fontSize: 9, color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em' }}>Recursos del equipo</p>
                     </div>
@@ -125,23 +131,7 @@ export default function Layout({ children, currentView, onViewChange, userRole }
                 )}
               </div>
 
-              {/* Estimaciones */}
-              {canAccess(userRole as UserRole,'view_estimaciones') && (
-                <button onClick={() => onViewChange('estimaciones')}
-                  className={`text-sm font-medium transition-colors flex items-center gap-1 ${currentView==='estimaciones'?'text-primary':'text-slate-600 hover:text-primary'}`}>
-                  <BarChart3 size={13}/> Estimaciones
-                </button>
-              )}
-
-              {/* Plan de Trabajo — vista principal para todos los roles con acceso */}
-              {canAccess(userRole as UserRole,'view_plan_trabajo') && (
-                <button onClick={() => onViewChange('plan-trabajo')}
-                  className={`text-sm font-medium transition-colors flex items-center gap-1 ${currentView==='plan-trabajo'?'text-primary':'text-slate-600 hover:text-primary'}`}>
-                  <CalendarRange size={13}/> Plan de Trabajo
-                </button>
-              )}
-
-              {/* Herramientas dropdown — Roles, Auditoría, Plantillas */}
+              {/* 6. Herramientas — al final */}
               {(canAccess(userRole as UserRole,'u_roles')||canAccess(userRole as UserRole,'view_audit')||canAccess(userRole as UserRole,'create_projects')) && (
                 <div ref={herramRef} className="relative">
                   <button
@@ -175,13 +165,16 @@ export default function Layout({ children, currentView, onViewChange, userRole }
                 </div>
               )}
 
-              {/* Admin — solo PM */}
+              {/* 7. Admin — solo PM, al final */}
               {userRole === 'pm' && (
                 <button onClick={() => onViewChange('admin')}
                   className={`text-sm font-medium transition-colors flex items-center gap-1 ${currentView==='admin'?'text-primary':'text-slate-600 hover:text-primary'}`}>
                   <Building2 size={13}/> Admin
                 </button>
               )}
+
+              {/* Circuitos BBVA — OCULTO TEMPORALMENTE (no borrar) */}
+              {/* {canAccess(userRole as UserRole, 'view_circuitos') && (...)} */}
             </nav>
         </div>
 
