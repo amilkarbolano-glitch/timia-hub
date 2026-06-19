@@ -3,10 +3,11 @@ import {
   GitBranch, Plus, Edit2, Trash2, ChevronRight, Cloud, Cpu, Database, Layout,
   CheckCircle2, X, Save, PlusCircle, GripVertical, BarChart3, FileText, Shield,
   Layers, Settings, Activity, Box, Zap, Globe, Code2, HardDrive, Network,
-  AlertTriangle, ClipboardList,
+  AlertTriangle, ClipboardList, ChevronDown, CalendarDays,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ProjectTemplate, TemplateTask } from '../types';
+import { PLAN_PREVIEWS, countActivities, type PlanTemplatePreview } from '../lib/planTemplates';
 
 interface ProjectTemplatesProps {
   templates: ProjectTemplate[];
@@ -87,6 +88,72 @@ const PREDEFINED_SETS: { label: string; icon: string; tasks: TemplateTask[] }[] 
     tasks: [],
   },
 ];
+
+// ─── Plan preview accordion ───────────────────────────────────────────────────
+
+function PlanPreviewAccordion({ preview }: { preview: PlanTemplatePreview }) {
+  const [openIdx, setOpenIdx] = useState<number | null>(null);
+  const total = countActivities(preview);
+
+  return (
+    <div style={{ marginTop: 16, borderTop: '1px solid #f1f5f9', paddingTop: 14 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+        <span style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '.06em' }}>
+          Plan de Estimaciones
+        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 10, color: '#64748b', fontWeight: 600 }}>{total} actividades</span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 10, color: '#94a3b8' }}>
+            <CalendarDays size={10}/>{preview.totalWeeks} sem.
+          </span>
+        </div>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {preview.entregables.map((ent, idx) => {
+          const isOpen = openIdx === idx;
+          return (
+            <div key={idx} style={{ border: `1px solid ${ent.color}22`, borderRadius: 8, overflow: 'hidden' }}>
+              <button
+                onClick={() => setOpenIdx(isOpen ? null : idx)}
+                style={{
+                  width: '100%', display: 'flex', alignItems: 'center', gap: 8,
+                  padding: '6px 10px', background: isOpen ? `${ent.color}10` : '#f8fafc',
+                  cursor: 'pointer', border: 'none', textAlign: 'left',
+                }}
+              >
+                <span style={{
+                  width: 8, height: 8, borderRadius: '50%', background: ent.color,
+                  flexShrink: 0, boxShadow: `0 0 0 2px ${ent.color}22`,
+                }}/>
+                <span style={{ flex: 1, fontSize: 11, fontWeight: 600, color: '#334155', lineHeight: 1.3 }}>
+                  {ent.label}
+                </span>
+                <span style={{ fontSize: 10, color: '#94a3b8', flexShrink: 0, marginRight: 4 }}>
+                  {ent.activities.length}
+                </span>
+                <ChevronDown size={12} style={{
+                  color: '#94a3b8', flexShrink: 0,
+                  transform: isOpen ? 'rotate(180deg)' : 'none',
+                  transition: 'transform .15s',
+                }}/>
+              </button>
+              {isOpen && (
+                <div style={{ padding: '6px 10px 8px 26px', background: '#fff', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {ent.activities.map((act, aIdx) => (
+                    <div key={aIdx} style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+                      <span style={{ width: 4, height: 4, borderRadius: '50%', background: ent.color, flexShrink: 0, marginTop: 5 }}/>
+                      <span style={{ fontSize: 11, color: '#475569', lineHeight: 1.4 }}>{act}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
@@ -213,6 +280,10 @@ export default function ProjectTemplates({ templates, setTemplates }: ProjectTem
                 ))}
                 {template.tasks.length > 3 && <p className="text-xs text-slate-400 font-medium pl-6">+{template.tasks.length-3} tareas más…</p>}
               </div>
+              {/* Plan de Estimaciones — vista previa del plan que se generará */}
+              {PLAN_PREVIEWS[template.id] && (
+                <PlanPreviewAccordion preview={PLAN_PREVIEWS[template.id]}/>
+              )}
             </div>
           );
         })}
