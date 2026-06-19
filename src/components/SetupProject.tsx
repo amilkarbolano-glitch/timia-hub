@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Rocket, ArrowRight, Database, Cloud, Cpu, Layout as LayoutIcon, Building2, CheckCircle2 } from 'lucide-react';
 import { ProjectTemplate } from '../types';
+import { adminStore, AdminProject } from '../lib/adminStore';
 
 // ─── Flow Stepper ─────────────────────────────────────────────────────────────
 const FLOW_STEPS = [
@@ -58,6 +59,50 @@ interface SetupProjectProps {
 
 export default function SetupProject({ onNext, templates, selectedTemplateId, onSelectTemplate }: SetupProjectProps) {
   const [banco, setBanco] = useState('bbva-co');
+  const [name, setName]   = useState(() => localStorage.getItem('timia_setup_draft_name') ?? '');
+  const [desc, setDesc]   = useState(() => localStorage.getItem('timia_setup_draft_desc') ?? '');
+
+  function handleNext() {
+    // Persist form state so Back → Next doesn't lose it
+    localStorage.setItem('timia_setup_draft_name', name);
+    localStorage.setItem('timia_setup_draft_desc', desc);
+
+    // Generate a clean project ID from the name
+    const rawId = name.trim()
+      .normalize('NFD').replace(/[̀-ͯ]/g, '')  // strip accents
+      .replace(/[^a-zA-Z0-9\s-]/g, '')
+      .trim().replace(/\s+/g, '-').toUpperCase()
+      .slice(0, 10) || ('PROJ' + Date.now().toString().slice(-4));
+
+    const today = new Date().toISOString().slice(0, 10);
+    const clientLabel = banco === 'bbva-co' ? 'BBVA CO' : banco === 'bbva-ar' ? 'BBVA AR' : 'Credicorp';
+
+    // Colors cycle: pick one based on existing project count
+    const palette = ['#dc2626','#7c3aed','#2563eb','#0891b2','#059669','#d97706','#be185d'];
+    const existing = adminStore.getProjects();
+    const projectColor = palette[existing.length % palette.length];
+
+    const newProject: AdminProject = {
+      id: rawId,
+      name: name.trim() || 'Nuevo Proyecto',
+      area: '',
+      color: projectColor,
+      priority: 'Media',
+      client: clientLabel,
+      startDate: today,
+      active: true,
+    };
+
+    // Only add if not already saved (idempotent if user clicks Next twice)
+    if (!existing.find(p => p.id === rawId)) {
+      adminStore.saveProjects([...existing, newProject]);
+    }
+
+    // Signal Estimaciones to auto-select this project
+    localStorage.setItem('timia_setup_draft_id', rawId);
+    localStorage.setItem('timia_setup_flow', '2');
+    onNext();
+  }
 
   const getIcon = (iconName: string) => {
     switch (iconName) {
@@ -110,6 +155,8 @@ export default function SetupProject({ onNext, templates, selectedTemplateId, on
             <label className="text-sm font-bold text-slate-700 uppercase tracking-wider">Nombre del Proyecto</label>
             <input
               type="text"
+              value={name}
+              onChange={e => setName(e.target.value)}
               placeholder="Ej: Campaña pre-aprobados FICO"
               className="w-full h-12 px-4 rounded-xl border border-slate-200 focus:ring-2 focus:ring-primary/20 outline-none transition-all"
             />
@@ -119,6 +166,8 @@ export default function SetupProject({ onNext, templates, selectedTemplateId, on
             <label className="text-sm font-bold text-slate-700 uppercase tracking-wider">Descripción</label>
             <textarea
               rows={4}
+              value={desc}
+              onChange={e => setDesc(e.target.value)}
               placeholder="Describe el objetivo principal..."
               className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-primary/20 outline-none transition-all resize-none"
             />
@@ -144,12 +193,9 @@ export default function SetupProject({ onNext, templates, selectedTemplateId, on
 
       <div className="mt-12 flex justify-end">
         <button
-          onClick={() => {
-            // Señaliza que venimos del flujo de creación para que Estimaciones muestre el stepper
-            localStorage.setItem('timia_setup_flow', '2');
-            onNext();
-          }}
-          className="flex items-center gap-2 px-8 h-14 bg-primary text-white rounded-2xl font-bold text-lg shadow-lg shadow-primary/20 hover:opacity-90 transition-all group"
+          onClick={handleNext}
+          disabled={!name.trim()}
+          className="flex items-center gap-2 px-8 h-14 bg-primary text-white rounded-2xl font-bold text-lg shadow-lg shadow-primary/20 hover:opacity-90 transition-all group disabled:opacity-40 disabled:cursor-not-allowed"
         >
           Siguiente: Estimar plan
           <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" />

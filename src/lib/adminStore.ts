@@ -244,6 +244,7 @@ export interface PlanConfig {
   projectId: string;
   totalWeeks: number;
   weekLabels?: string[];
+  startDate?: string;   // ISO date — anchor for week label computation
   entregables: PlanEntregableConfig[];
   generatedAt: string;  // ISO
 }

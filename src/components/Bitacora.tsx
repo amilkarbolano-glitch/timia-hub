@@ -28,7 +28,7 @@ interface InvStage { id: string; label: string; type?: 'check' | 'percent'; }
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const TIPOS_CAMBIO  = ['Campo', 'Regla', 'Modelo', 'ETL', 'Otro'] as const;
-const LINK_CATS     = ['Jira', 'Confluence', 'Bitbucket', 'Documentación', 'Otro'];
+const LINK_CATS     = ['Jira', 'Ticket', 'Bitbucket', 'Documentación', 'Otro'];
 
 // Etapas por defecto del inventario (basado en el tracking real del equipo)
 const DEFAULT_INV_STAGES: InvStage[] = [
@@ -305,7 +305,7 @@ export function TabLinks({ user }: { user: any }) {
   const [showForm, setShow]     = useState(false);
   const [filterProj, setFP]     = useState('');
   const [filterCat, setFC]      = useState('');
-  const [form, setForm]         = useState({ projectId:'', title:'', url:'', category:'Confluence', descripcion:'' });
+  const [form, setForm]         = useState({ projectId:'', title:'', url:'', category:'Ticket', descripcion:'' });
 
   const accessibleIds: string[] = user?.role === 'pm' ? PROJECTS.map((p: any) => p.id) : (user?.projectIds ?? []);
   const accessibleProjects = PROJECTS.filter((p: any) => accessibleIds.includes(p.id));
@@ -313,7 +313,7 @@ export function TabLinks({ user }: { user: any }) {
   function add() {
     if (!form.projectId || !form.title.trim() || !form.url.trim()) return;
     const next = [{ id:'l'+Date.now(), fecha:new Date().toISOString().slice(0,10), quien:user?.name??'Sistema', ...form }, ...links];
-    setLinks(next); saveLinks(next); setForm({ projectId:'', title:'', url:'', category:'Confluence', descripcion:'' }); setShow(false);
+    setLinks(next); saveLinks(next); setForm({ projectId:'', title:'', url:'', category:'Ticket', descripcion:'' }); setShow(false);
   }
   function del(id: string) { if(confirm('¿Eliminar link?')){ const n=links.filter(l=>l.id!==id); setLinks(n); saveLinks(n); } }
 
@@ -321,7 +321,7 @@ export function TabLinks({ user }: { user: any }) {
 
   const CAT_COLORS: Record<string,{bg:string;text:string}> = {
     Jira:          {bg:'#dbeafe',text:'#1d4ed8'},
-    Confluence:    {bg:'#ede9fe',text:'#6d28d9'},
+    Ticket:        {bg:'#ede9fe',text:'#6d28d9'},
     Bitbucket:     {bg:'#d1fae5',text:'#065f46'},
     Documentación: {bg:'#fef3c7',text:'#92400e'},
     Otro:          {bg:'#f1f5f9',text:'#475569'},
@@ -368,7 +368,7 @@ export function TabLinks({ user }: { user: any }) {
       {filtered.length===0 ? (
         <div style={emptyBox()}>
           <Link2 size={24} color="#cbd5e1" style={{ marginBottom:8 }}/>
-          <p style={{ margin:0, fontSize:13, color:'#94a3b8' }}>No hay links registrados. Agrega Jira, Confluence, Bitbucket, docs importantes…</p>
+          <p style={{ margin:0, fontSize:13, color:'#94a3b8' }}>No hay links registrados. Agrega Jira, Tickets, Bitbucket, docs importantes…</p>
         </div>
       ) : (
         <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(340px, 1fr))', gap:10 }}>
