@@ -133,8 +133,8 @@ export default function Layout({ children, currentView, onViewChange, userRole }
                 </button>
               )}
 
-              {/* Plan de Trabajo — visible para roles con acceso, excepto PM que lo ve en su Dashboard */}
-              {canAccess(userRole as UserRole,'view_plan_trabajo') && userRole !== 'pm' && (
+              {/* Plan de Trabajo — vista principal para todos los roles con acceso */}
+              {canAccess(userRole as UserRole,'view_plan_trabajo') && (
                 <button onClick={() => onViewChange('plan-trabajo')}
                   className={`text-sm font-medium transition-colors flex items-center gap-1 ${currentView==='plan-trabajo'?'text-primary':'text-slate-600 hover:text-primary'}`}>
                   <CalendarRange size={13}/> Plan de Trabajo

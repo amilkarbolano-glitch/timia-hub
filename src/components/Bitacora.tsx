@@ -597,17 +597,19 @@ export function TabInventario({ user }: { user: any }) {
         </select>
         <span style={{ fontSize:11, color:'#94a3b8' }}>{visible.length} fila{visible.length!==1?'s':''}</span>
         <div style={{ marginLeft:'auto', display:'flex', gap:6 }}>
+          {/* Gestionar columnas: solo líderes/referentes/PM */}
           {canAccess(user?.role, 'write_bitacora') && (
-            <>
-              <button onClick={()=>setDelMode(v=>!v)}
-                style={{ padding:'6px 11px', fontSize:11, border:`0.5px solid ${delMode?'#dc2626':'#e2e8f0'}`,
-                  borderRadius:7, background: delMode?'#fef2f2':'#fff', color: delMode?'#dc2626':'#64748b', cursor:'pointer' }}>
-                {delMode ? 'Listo' : 'Gestionar columnas'}
-              </button>
-              <button onClick={addRow} style={{ display:'flex', alignItems:'center', gap:5, padding:'6px 12px', fontSize:12, background:'#dc2626', color:'#fff', border:'none', borderRadius:7, cursor:'pointer', fontWeight:500 }}>
-                <Plus size={13}/> Agregar objeto
-              </button>
-            </>
+            <button onClick={()=>setDelMode(v=>!v)}
+              style={{ padding:'6px 11px', fontSize:11, border:`0.5px solid ${delMode?'#dc2626':'#e2e8f0'}`,
+                borderRadius:7, background: delMode?'#fef2f2':'#fff', color: delMode?'#dc2626':'#64748b', cursor:'pointer' }}>
+              {delMode ? 'Listo' : 'Gestionar columnas'}
+            </button>
+          )}
+          {/* Agregar objeto: developers también pueden */}
+          {(canAccess(user?.role, 'write_bitacora') || canAccess(user?.role, 'add_inv_row')) && (
+            <button onClick={addRow} style={{ display:'flex', alignItems:'center', gap:5, padding:'6px 12px', fontSize:12, background:'#dc2626', color:'#fff', border:'none', borderRadius:7, cursor:'pointer', fontWeight:500 }}>
+              <Plus size={13}/> Agregar objeto
+            </button>
           )}
         </div>
       </div>
@@ -643,11 +645,13 @@ export function TabInventario({ user }: { user: any }) {
                   </div>
                 </th>
               ))}
-              {/* Add stage column */}
+              {/* Add stage column — solo líderes/referentes/PM */}
               <th style={{ ...TH, width:36, minWidth:32 }}>
-                <button onClick={()=>setAddSt(true)}
-                  style={{ border:'none', background:'none', cursor:'pointer', color:'#94a3b8', fontSize:16, lineHeight:1, padding:'0 4px' }}
-                  title="Agregar columna">＋</button>
+                {canAccess(user?.role, 'write_bitacora') && (
+                  <button onClick={()=>setAddSt(true)}
+                    style={{ border:'none', background:'none', cursor:'pointer', color:'#94a3b8', fontSize:16, lineHeight:1, padding:'0 4px' }}
+                    title="Agregar columna">＋</button>
+                )}
               </th>
               <th style={{ ...TH, width:28 }}/>
             </tr>
@@ -718,11 +722,13 @@ export function TabInventario({ user }: { user: any }) {
                         : pctNum >= 75  ? '#059669'
                         : pctNum >= 50  ? '#a16207'
                         : '#d97706';
+                      const canEditStage = canAccess(user?.role, 'write_bitacora');
                       return (
-                        <td key={s.id} style={{ ...TD, width:52, padding:0, cursor:'pointer', background: pctBg, position:'relative' }}
-                          onClick={() => cycleStage(row.id, s.id)}
-                          title={`${s.label}: clic para cambiar · clic derecho para valor exacto`}
+                        <td key={s.id} style={{ ...TD, width:52, padding:0, cursor: canEditStage ? 'pointer' : 'default', background: pctBg, position:'relative' }}
+                          onClick={() => canEditStage && cycleStage(row.id, s.id)}
+                          title={canEditStage ? `${s.label}: clic para cambiar · clic derecho para valor exacto` : s.label}
                           onContextMenu={e => {
+                            if (!canEditStage) return;
                             e.preventDefault();
                             const v = prompt(`% para "${s.label}" (0-100):`, val || '0');
                             if (v !== null) { const n = Math.min(100,Math.max(0,Number(v)||0)); setStageVal(row.id, s.id, String(n)); }
@@ -741,13 +747,15 @@ export function TabInventario({ user }: { user: any }) {
 
                     // Check cell
                     const isCustom = val !== '' && val !== 'Sí' && val !== 'N/A';
+                    const canEditCheck = canAccess(user?.role, 'write_bitacora');
                     return (
                       <td key={s.id} style={{ ...TD, width:52, textAlign:'center', padding:0,
                         background: isCustom ? '#fef9c3' : (CELL_BG[val] ?? '#fff'),
-                        cursor:'pointer' }}
-                        onClick={() => cycleStage(row.id, s.id)}
-                        title={`${s.label}: clic para cambiar · clic derecho para valor personalizado`}
+                        cursor: canEditCheck ? 'pointer' : 'default' }}
+                        onClick={() => canEditCheck && cycleStage(row.id, s.id)}
+                        title={canEditCheck ? `${s.label}: clic para cambiar · clic derecho para valor personalizado` : s.label}
                         onContextMenu={e => {
+                          if (!canEditCheck) return;
                           e.preventDefault();
                           const v = prompt(`Valor para "${s.label}" (Sí / N/A / texto):`, val);
                           if (v !== null) setStageVal(row.id, s.id, v.trim());
@@ -760,13 +768,15 @@ export function TabInventario({ user }: { user: any }) {
                   })}
                   {/* Empty add-col placeholder */}
                   <td style={{ ...TD, width:36 }}/>
-                  {/* Delete row */}
+                  {/* Delete row — solo líderes/referentes/PM */}
                   <td style={{ ...TD, width:28 }}>
-                    <button onClick={()=>delRow(row.id)}
-                      style={{ border:'none', background:'none', cursor:'pointer', color:'#cbd5e1', padding:2,
-                        display:'flex', lineHeight:1 }}>
-                      <Trash2 size={12}/>
-                    </button>
+                    {canAccess(user?.role, 'write_bitacora') && (
+                      <button onClick={()=>delRow(row.id)}
+                        style={{ border:'none', background:'none', cursor:'pointer', color:'#cbd5e1', padding:2,
+                          display:'flex', lineHeight:1 }}>
+                        <Trash2 size={12}/>
+                      </button>
+                    )}
                   </td>
                 </tr>
               );

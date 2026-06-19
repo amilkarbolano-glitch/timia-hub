@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   ChevronDown, ChevronRight, Plus, Trash2, Save, ArrowRight, ArrowLeft,
-  LayoutList, Clock, CalendarDays, Settings2, CheckSquare,
+  LayoutList, Clock, CalendarDays, Settings2, CheckSquare, Users,
 } from 'lucide-react';
 import { PROJECTS, useAuth } from '../contexts/AuthContext';
 import { adminStore, type PlanEtapa, type PlanActivityConfig, type PlanEntregableConfig, type PlanConfig } from '../lib/adminStore';
@@ -466,6 +466,7 @@ export default function Estimaciones({ onViewChange, onBack }: EstimacionesProps
   const [inFlow, setInFlow]   = useState<boolean>(
     () => localStorage.getItem('timia_setup_flow') === '2'
   );
+  const [teamOpen, setTeamOpen] = useState(false);
 
   // ── Auto-limpiar flag del wizard al montar ──────────────────────────────────
   // Si el usuario abandona el wizard por el navbar (sin usar Volver/Siguiente),
@@ -705,6 +706,110 @@ export default function Estimaciones({ onViewChange, onBack }: EstimacionesProps
             </button>
           </div>
         </div>
+
+        {/* ── Panel Gestionar Equipo — visible para pm / tech_lead / project_lead ── */}
+        {(role === 'pm' || role === 'tech_lead' || role === 'project_lead') && (() => {
+          const allUsers  = adminStore.getUsers().filter(u => u.active && u.role !== 'pm');
+          const inProject = (u: { projectIds: string[] }) => u.projectIds.includes(selectedProjectId);
+
+          function toggleMember(userId: string) {
+            const users = adminStore.getUsers();
+            const updated = users.map(u => {
+              if (u.id !== userId) return u;
+              return {
+                ...u,
+                projectIds: inProject(u)
+                  ? u.projectIds.filter(id => id !== selectedProjectId)
+                  : [...u.projectIds, selectedProjectId],
+              };
+            });
+            adminStore.saveUsers(updated);
+          }
+
+          const ROLE_LABEL_SHORT: Record<string, string> = {
+            tech_lead: 'Líder Téc.', project_lead: 'Líder Proy.',
+            tech_ref: 'Ref. Téc.', developer: 'Developer',
+          };
+          const ROLE_COLOR: Record<string, string> = {
+            tech_lead: '#7c3aed', project_lead: '#0369a1',
+            tech_ref: '#0d9488', developer: '#374151',
+          };
+
+          const memberCount = allUsers.filter(inProject).length;
+
+          return (
+            <div style={{ marginBottom: 14, border: '0.5px solid #e2e8f0', borderRadius: 10, overflow: 'hidden' }}>
+              {/* Header del panel */}
+              <button
+                onClick={() => setTeamOpen(v => !v)}
+                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px',
+                  background: teamOpen ? '#f8fafc' : '#fff', border: 'none', cursor: 'pointer', textAlign: 'left' }}>
+                <Users size={14} color="#64748b"/>
+                <span style={{ fontSize: 12, fontWeight: 600, color: '#374151', flex: 1 }}>
+                  Equipo del proyecto
+                </span>
+                {/* Avatares resumen */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 3, marginRight: 8 }}>
+                  {allUsers.filter(inProject).slice(0, 5).map(u => (
+                    <div key={u.id} style={{ width: 22, height: 22, borderRadius: '50%', background: u.avatarColor,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 8, fontWeight: 700, color: '#fff', border: '1.5px solid #fff', marginLeft: -4 }}
+                      title={u.name}>
+                      {u.initials}
+                    </div>
+                  ))}
+                  {memberCount > 5 && (
+                    <span style={{ fontSize: 9, color: '#64748b', marginLeft: 2 }}>+{memberCount - 5}</span>
+                  )}
+                  {memberCount === 0 && (
+                    <span style={{ fontSize: 10, color: '#94a3b8' }}>Sin equipo asignado</span>
+                  )}
+                </div>
+                {teamOpen ? <ChevronDown size={13} color="#94a3b8"/> : <ChevronRight size={13} color="#94a3b8"/>}
+              </button>
+
+              {/* Cuerpo del panel */}
+              {teamOpen && (
+                <div style={{ padding: '12px 16px', borderTop: '0.5px solid #f1f5f9', background: '#fafafe' }}>
+                  <p style={{ margin: '0 0 10px', fontSize: 10, color: '#64748b' }}>
+                    Selecciona los miembros que trabajarán en <strong>{selectedProjectId}</strong>.
+                    Esto define quién ve el proyecto en el Tablero y el Plan de Trabajo.
+                  </p>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 6 }}>
+                    {allUsers.map(u => {
+                      const active = inProject(u);
+                      return (
+                        <button key={u.id} onClick={() => { toggleMember(u.id); setTeamOpen(true); }}
+                          style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px',
+                            border: `1.5px solid ${active ? u.avatarColor + '60' : '#e2e8f0'}`,
+                            borderRadius: 8, background: active ? u.avatarColor + '0e' : '#fff',
+                            cursor: 'pointer', textAlign: 'left', transition: 'all .12s' }}>
+                          <div style={{ width: 28, height: 28, borderRadius: '50%', background: u.avatarColor,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            fontSize: 9, fontWeight: 700, color: '#fff', flexShrink: 0 }}>
+                            {u.initials}
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 11, fontWeight: 600, color: '#111', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {u.name}
+                            </div>
+                            <div style={{ fontSize: 9, color: ROLE_COLOR[u.role] ?? '#64748b', fontWeight: 500 }}>
+                              {ROLE_LABEL_SHORT[u.role] ?? u.role}
+                            </div>
+                          </div>
+                          <div style={{ width: 16, height: 16, borderRadius: 4, border: `1.5px solid ${active ? u.avatarColor : '#d1d5db'}`,
+                            background: active ? u.avatarColor : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                            {active && <span style={{ fontSize: 9, color: '#fff', fontWeight: 700 }}>✓</span>}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         {/* Stats row */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8, marginBottom: 18 }}>
