@@ -14,7 +14,8 @@ import ProjectTemplates from './components/ProjectTemplates';
 import PMDashboard from './components/PMDashboard';
 import AdminPanel from './components/AdminPanel';
 import CircuitosBBVA from './components/CircuitosBBVA';
-import Bitacora from './components/Bitacora';
+import Bitacora, { TabLinks, TabInventario } from './components/Bitacora';
+import ImputacionesJira from './components/ImputacionesJira';
 import Estimaciones from './components/Estimaciones';
 import PlanDeTrabajo from './components/PlanDeTrabajo';
 import { INITIAL_TEMPLATES } from './lib/templates';
@@ -130,6 +131,54 @@ function AppInner() {
 
       case 'bitacora':
         return <Bitacora />;
+
+      case 'imputaciones':
+        return (
+          <div style={{ padding: '28px 36px', maxWidth: 1400, margin: '0 auto' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 22 }}>
+              <div style={{ width: 34, height: 34, borderRadius: 10, background: '#eff6ff', border: '0.5px solid #bfdbfe', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1d4ed8" strokeWidth="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+              </div>
+              <div>
+                <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#111', letterSpacing: '-.3px' }}>Imputaciones Jira</h2>
+                <p style={{ margin: 0, fontSize: 12, color: '#94a3b8', marginTop: 1 }}>Tickets Jira por Q y proyecto — seguimiento de imputación de horas del equipo</p>
+              </div>
+            </div>
+            <ImputacionesJira user={user}/>
+          </div>
+        );
+
+      case 'links':
+        return (
+          <div style={{ padding: '28px 36px', maxWidth: 1400, margin: '0 auto' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 22 }}>
+              <div style={{ width: 34, height: 34, borderRadius: 10, background: '#f0fdf4', border: '0.5px solid #bbf7d0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#15803d" strokeWidth="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+              </div>
+              <div>
+                <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#111', letterSpacing: '-.3px' }}>Links importantes</h2>
+                <p style={{ margin: 0, fontSize: 12, color: '#94a3b8', marginTop: 1 }}>Jira, Confluence, Bitbucket y documentación clave del equipo</p>
+              </div>
+            </div>
+            <TabLinks user={user}/>
+          </div>
+        );
+
+      case 'inventario':
+        return (
+          <div style={{ padding: '28px 36px', maxWidth: 1600, margin: '0 auto' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 22 }}>
+              <div style={{ width: 34, height: 34, borderRadius: 10, background: '#faf5ff', border: '0.5px solid #e9d5ff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" strokeWidth="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+              </div>
+              <div>
+                <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#111', letterSpacing: '-.3px' }}>Inventario</h2>
+                <p style={{ margin: 0, fontSize: 12, color: '#94a3b8', marginTop: 1 }}>Tablas, objetos, jobs y modelos — estado de entrega por etapa de procesamiento</p>
+              </div>
+            </div>
+            <TabInventario user={user}/>
+          </div>
+        );
 
       case 'analytics':
         // PM tiene su propio dashboard ejecutivo
