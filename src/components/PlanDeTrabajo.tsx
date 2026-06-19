@@ -1785,27 +1785,49 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
 
         /* Colores exactos */
         * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-        body { background: #fff !important; margin: 0 !important; padding: 0 !important; }
 
-        /* Ocultar header de la app, nav, sidebar de proyectos, botones de export */
-        header,
-        nav,
-        aside,
+        /* Reset de base */
+        html, body {
+          width: 100% !important; margin: 0 !important; padding: 0 !important;
+          background: #fff !important; overflow: visible !important;
+        }
+
+        /* Ocultar header, nav y cualquier elemento marcado */
+        header, nav, aside,
         [data-print-hide] { display: none !important; visibility: hidden !important; }
 
-        /* El contenedor principal ocupa toda la página */
-        main, .flex-1 { overflow: visible !important; }
+        /* Quitar overflow y padding de los contenedores del layout de la app */
+        main, .flex-1, .overflow-auto { overflow: visible !important; }
+        .min-h-screen { min-height: 0 !important; }
 
-        /* El wrapper flex del Plan de Trabajo — solo mostrar la zona de detalle */
-        #timia-plan-root { display: block !important; }
+        /* CRÍTICO: resetear el padding del wrapper que App.tsx añade (padding: 28px 36px) */
+        main > div { padding: 0 !important; margin: 0 !important; }
+
+        /* El root del plan ocupa todo el ancho */
+        #timia-plan-root {
+          display: block !important;
+          width: 100% !important;
+          padding: 0 !important;
+          margin: 0 !important;
+        }
         #timia-plan-sidebar { display: none !important; }
+
+        /* CRÍTICO: el div flex anónimo que contiene sidebar + contenido → volver a block */
+        #timia-plan-root > div {
+          display: block !important;
+          width: 100% !important;
+          padding: 0 !important;
+          margin: 0 !important;
+        }
 
         /* La zona de contenido ocupa el 100% del ancho */
         #timia-plan-print {
+          display: block !important;
           flex: none !important;
           width: 100% !important;
           min-width: 0 !important;
-          display: block !important;
+          padding: 0 !important;
+          margin: 0 !important;
         }
 
         /* Cada sección Gantt en su propia página, NO cortar a la mitad */
@@ -1814,13 +1836,14 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
           break-inside: avoid !important;
           page-break-before: auto !important;
           margin-bottom: 20px !important;
+          width: 100% !important;
         }
-        /* Primera sección continúa en la misma página que el header */
+        /* Primera sección: sin salto de página */
         [data-gantt-section]:first-of-type { page-break-before: avoid !important; }
-        /* Secciones 2+ comienzan en página nueva */
+        /* Secciones 2+ empiezan en página nueva */
         [data-gantt-section] + [data-gantt-section] { page-break-before: always !important; }
 
-        /* Tablas Gantt — full width, sin scroll */
+        /* Tablas Gantt — full width, sin scroll horizontal */
         [data-gantt-table] {
           overflow: visible !important;
           overflow-x: visible !important;
@@ -1832,12 +1855,12 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
           table-layout: auto !important;
         }
 
-        /* Agrandar fuentes ligeramente para mejor lectura */
+        /* Fuentes legibles */
         [data-gantt-section] td,
         [data-gantt-section] th { font-size: 10pt !important; }
-        [data-gantt-section] h4 { font-size: 13pt !important; }
+        [data-gantt-section] h4  { font-size: 13pt !important; }
 
-        /* No mostrar ActionDrawer ni modales */
+        /* Ocultar modales y drawers */
         [role="dialog"], [data-radix-dialog-overlay] { display: none !important; }
       }
     `;
