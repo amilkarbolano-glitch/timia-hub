@@ -275,6 +275,8 @@ function AnsModal({ task, onClose }: { task:typeof ANS_TASKS[0]; onClose:()=>voi
 // ─── Vistas ───────────────────────────────────────────────────────────────────
 
 function ViewResumen() {
+  const [expanded, setExpanded] = useState<string|null>(null);
+
   const totalPct = Math.round(PROJ_DATA.reduce((a,p)=>a+p.pct,0)/PROJ_DATA.length);
   const conRiesgo = PROJ_DATA.filter(p=>p.risk>0).length;
   const criticos  = PROJ_DATA.filter(p=>p.risk>1).length;
@@ -315,14 +317,19 @@ function ViewResumen() {
         ))}
       </div>
 
-      {/* Avance por equipo */}
+      {/* Avance por área técnica — expandible por proyecto */}
       <p style={{ fontSize:11, fontWeight:500, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'.05em', margin:'0 0 10px' }}>Avance por área técnica</p>
       {teams.map(t => {
         const pct = t.projs.length > 0 ? Math.round(t.projs.reduce((a,p)=>a+p.pct,0)/t.projs.length) : 0;
         const personas = t.projs.reduce((a,p)=>a+p.members.length,0);
+        const isOpen = expanded === t.lead;
         return (
-          <div key={t.lead} style={{ background:'#fff', border:'0.5px solid #e2e8f0', borderRadius:12, padding:'14px 16px', marginBottom:8 }}>
-            <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+          <div key={t.lead} style={{ background:'#fff', border:`0.5px solid ${isOpen?'#e0e7ff':'#e2e8f0'}`, borderRadius:12, marginBottom:8, overflow:'hidden', transition:'border-color .15s' }}>
+            {/* Cabecera del área — clickeable */}
+            <div
+              onClick={() => setExpanded(isOpen ? null : t.lead)}
+              style={{ display:'flex', alignItems:'center', gap:12, padding:'14px 16px', cursor:'pointer', userSelect:'none' }}
+            >
               <Avatar initials={t.initials} color={t.color} size={36}/>
               <div style={{ flex:1, minWidth:0 }}>
                 <p style={{ margin:'0 0 2px', fontSize:13, fontWeight:500, color:'#111' }}>{t.lead}</p>
@@ -335,14 +342,58 @@ function ViewResumen() {
                   ))}
                 </div>
               </div>
-              <div style={{ textAlign:'right', flexShrink:0, minWidth:90 }}>
-                <p style={{ margin:'0 0 5px', fontSize:15, fontWeight:500, color:pct>=80?'#059669':pct>=65?'#d97706':'#dc2626' }}>{pct}% prom.</p>
-                <div style={{ width:90, height:5, background:'#f1f5f9', borderRadius:5, overflow:'hidden' }}>
-                  <div style={{ width:`${pct}%`, height:'100%', background:pct>=80?'#059669':pct>=65?'#d97706':'#dc2626', borderRadius:5 }}/>
+              <div style={{ display:'flex', alignItems:'center', gap:14, flexShrink:0 }}>
+                <div style={{ textAlign:'right' }}>
+                  <p style={{ margin:'0 0 5px', fontSize:15, fontWeight:500, color:pct>=80?'#059669':pct>=65?'#d97706':'#dc2626' }}>{pct}% prom.</p>
+                  <div style={{ width:90, height:5, background:'#f1f5f9', borderRadius:5, overflow:'hidden' }}>
+                    <div style={{ width:`${pct}%`, height:'100%', background:pct>=80?'#059669':pct>=65?'#d97706':'#dc2626', borderRadius:5 }}/>
+                  </div>
+                  <p style={{ margin:'4px 0 0', fontSize:10, color:'#94a3b8' }}>% tareas completadas</p>
                 </div>
-                <p style={{ margin:'4px 0 0', fontSize:10, color:'#94a3b8' }}>% tareas completadas</p>
+                <ChevronDown size={16} color="#94a3b8" style={{ transition:'transform .2s', transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)', flexShrink:0 }}/>
               </div>
             </div>
+
+            {/* Detalle por proyecto — expandible */}
+            {isOpen && (
+              <div style={{ borderTop:'0.5px solid #f1f5f9', padding:'10px 16px 14px', background:'#fafbfd' }}>
+                <p style={{ margin:'0 0 8px', fontSize:10, fontWeight:600, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'.06em' }}>Detalle por proyecto</p>
+                {t.projs.map((p, i) => {
+                  const color = getProjectColor(p.id);
+                  const ps = PRIORITY_STYLE[p.priority] ?? PRIORITY_STYLE.Media;
+                  return (
+                    <div key={p.id} style={{ display:'grid', gridTemplateColumns:'70px 1fr 110px 80px 50px', gap:10, alignItems:'center', padding:'8px 10px', borderRadius:8, background:'#fff', border:'0.5px solid #e2e8f0', marginBottom: i < t.projs.length-1 ? 6 : 0 }}>
+                      {/* ID */}
+                      <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                        <div style={{ width:26, height:26, borderRadius:6, background:color+'18', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                          <span style={{ fontSize:9, fontWeight:700, color }}>{p.id.slice(0,2)}</span>
+                        </div>
+                        <span style={{ fontSize:12, fontWeight:600, color:'#111' }}>{p.id}</span>
+                      </div>
+                      {/* Descripción */}
+                      <span style={{ fontSize:11, color:'#64748b', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{p.desc}</span>
+                      {/* Líder */}
+                      <span style={{ fontSize:10, color:'#64748b' }}>
+                        <span style={{ color:'#94a3b8' }}>Líder: </span>{p.lead.split(' ')[0]}
+                        {p.ref && <span> · <span style={{ color:'#94a3b8' }}>Ref: </span>{p.ref.split(' ')[0]}</span>}
+                      </span>
+                      {/* Barra avance */}
+                      <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                        <div style={{ flex:1, height:4, background:'#f1f5f9', borderRadius:4, overflow:'hidden' }}>
+                          <div style={{ width:`${p.pct}%`, height:'100%', background:color, borderRadius:4 }}/>
+                        </div>
+                        <span style={{ fontSize:11, fontWeight:600, color, minWidth:30, textAlign:'right' }}>{p.pct}%</span>
+                      </div>
+                      {/* Prioridad / riesgo */}
+                      <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:3 }}>
+                        <span style={{ fontSize:9, padding:'1px 5px', borderRadius:5, background:ps.bg, color:ps.color, fontWeight:600 }}>{p.priority}</span>
+                        {p.risk > 0 && <AlertTriangle size={11} color={p.risk>1?'#dc2626':'#d97706'}/>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         );
       })}
@@ -918,21 +969,30 @@ Generado por Timia Hub · ${hour} · ${today}`;
   );
 }
 
-// ─── Dashboard principal ──────────────────────────────────────────────────────
+// ─── Vista independiente: Proyectos ──────────────────────────────────────────
 
-type Tab = 'proyectos'|'plan';
+export function ProyectosPage() {
+  const [projModal, setProjModal] = useState<typeof PROJ_DATA[0]|null>(null);
+  return (
+    <div style={{ padding:'28px 36px', maxWidth:1600, margin:'0 auto' }}>
+      <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:24 }}>
+        <div>
+          <h1 style={{ margin:0, fontSize:22, fontWeight:500, color:'#111' }}>Proyectos</h1>
+          <p style={{ margin:'3px 0 0', fontSize:13, color:'#94a3b8' }}>Vista completa · {PROJ_DATA.length} proyectos activos · BBVA CO &amp; Credicorp Capital</p>
+        </div>
+      </div>
+      <ViewProyectos onSelect={setProjModal}/>
+      {projModal && <ProjectModal proj={projModal} onClose={()=>setProjModal(null)}/>}
+    </div>
+  );
+}
 
-const TABS: { id:Tab; label:string; icon:React.ReactNode; highlight?:boolean }[] = [
-  { id:'proyectos',  label:'Proyectos',       icon:<Activity size={13}/> },
-  { id:'plan',       label:'Plan de trabajo', icon:<FileText size={13}/>, highlight: true },
-];
+// ─── Dashboard ejecutivo principal ───────────────────────────────────────────
 
 type PMView = 'setup-project' | 'estimaciones' | 'plan-trabajo' | 'admin' | 'bitacora' | 'analytics';
 interface PMDashboardProps { onViewChange?: (v: PMView) => void; }
 
 export default function PMDashboard({ onViewChange }: PMDashboardProps) {
-  const [tab, setTab] = useState<Tab>('proyectos');
-  const [projModal, setProjModal] = useState<typeof PROJ_DATA[0]|null>(null);
   const [showStandup, setShowStandup] = useState(false);
 
   return (
@@ -958,41 +1018,11 @@ export default function PMDashboard({ onViewChange }: PMDashboardProps) {
         </div>
       </div>
 
-      {/* Tabs */}
-      <div data-print-hide style={{ display:'flex', gap:4, borderBottom:'0.5px solid #e2e8f0', marginBottom:20, overflowX:'auto', alignItems:'flex-end' }}>
-        {TABS.map(t => {
-          const isActive = tab === t.id;
-          const isHighlight = t.highlight;
-          return (
-            <button key={t.id} onClick={()=>setTab(t.id)} style={{
-              display:'flex', alignItems:'center', gap:5,
-              padding: isHighlight ? '9px 18px' : '8px 14px',
-              fontSize: isHighlight ? 13 : 12,
-              fontWeight: isActive ? 600 : isHighlight ? 500 : 400,
-              color: isActive ? '#dc2626' : isHighlight ? '#0d9488' : '#64748b',
-              background: isHighlight && !isActive ? '#f0fdfa' : 'none',
-              border: 'none',
-              borderBottom: isActive ? '2px solid #dc2626' : isHighlight ? '2px solid #0d9488' : '2px solid transparent',
-              borderRadius: isHighlight && !isActive ? '6px 6px 0 0' : undefined,
-              cursor:'pointer', whiteSpace:'nowrap', transition:'all .15s',
-            }}>
-              {t.icon}{t.label}
-              {isHighlight && !isActive && <span style={{ fontSize:9, padding:'1px 5px', borderRadius:8, background:'#0d948820', color:'#0d9488', fontWeight:600, marginLeft:2 }}>FICO listo</span>}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* KPIs + áreas técnicas — siempre visibles */}
+      {/* KPIs + áreas técnicas expandibles — sin pestañas */}
       <ViewResumen/>
 
-      {/* Contenido de pestañas */}
-      {tab==='proyectos' && <ViewProyectos onSelect={setProjModal}/>}
-      {tab==='plan'      && <PlanDeTrabajo onGoEstimaciones={onViewChange ? () => onViewChange('estimaciones') : undefined}/>}
-
-      {/* Modales */}
-      {projModal    && <ProjectModal proj={projModal} onClose={()=>setProjModal(null)}/>}
-      {showStandup  && <StandupModal onClose={() => setShowStandup(false)}/>}
+      {/* Standup modal */}
+      {showStandup && <StandupModal onClose={() => setShowStandup(false)}/>}
     </div>
   );
 }

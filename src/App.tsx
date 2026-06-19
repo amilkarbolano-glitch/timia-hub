@@ -11,7 +11,7 @@ import SetupProject from './components/SetupProject';
 import BankStatus from './components/BankStatus';
 import RolesPermissions from './components/RolesPermissions';
 import ProjectTemplates from './components/ProjectTemplates';
-import PMDashboard from './components/PMDashboard';
+import PMDashboard, { ProyectosPage } from './components/PMDashboard';
 import AdminPanel from './components/AdminPanel';
 import CircuitosBBVA from './components/CircuitosBBVA';
 import Bitacora, { TabLinks, TabInventario } from './components/Bitacora';
@@ -187,6 +187,9 @@ function AppInner() {
             <TabInventario user={user}/>
           </div>
         );
+
+      case 'proyectos':
+        return role === 'pm' ? <ProyectosPage /> : <AccessDenied onBack={goHome}/>;
 
       case 'analytics':
         // PM tiene su propio dashboard ejecutivo

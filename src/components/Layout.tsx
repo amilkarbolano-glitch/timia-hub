@@ -13,10 +13,11 @@ import {
   Link2,
   Package,
   Layers,
+  Activity,
 } from 'lucide-react';
 import { TimiaMark, TimiaWordmark } from './TimiaLogo';
 
-export type View = 'setup-project' | 'setup-team' | 'setup-tasks' | 'dashboard' | 'standards' | 'analytics' | 'audit' | 'bank-status' | 'notifications' | 'roles-permissions' | 'project-templates' | 'admin' | 'circuitos-bbva' | 'bitacora' | 'estimaciones' | 'plan-trabajo' | 'imputaciones' | 'inventario' | 'links';
+export type View = 'setup-project' | 'setup-team' | 'setup-tasks' | 'dashboard' | 'standards' | 'analytics' | 'audit' | 'bank-status' | 'notifications' | 'roles-permissions' | 'project-templates' | 'admin' | 'circuitos-bbva' | 'bitacora' | 'estimaciones' | 'plan-trabajo' | 'imputaciones' | 'inventario' | 'links' | 'proyectos';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -79,7 +80,15 @@ export default function Layout({ children, currentView, onViewChange, userRole }
                 </button>
               )}
 
-              {/* 2. Plan de Trabajo */}
+              {/* 2. Proyectos — solo PM, vista independiente */}
+              {canAccess(userRole as UserRole,'view_analytics') && (
+                <button onClick={() => onViewChange('proyectos')}
+                  className={`text-sm font-medium transition-colors flex items-center gap-1 ${currentView==='proyectos'?'text-primary':'text-slate-600 hover:text-primary'}`}>
+                  <Activity size={13}/> Proyectos
+                </button>
+              )}
+
+              {/* 3. Plan de Trabajo */}
               {canAccess(userRole as UserRole,'view_plan_trabajo') && (
                 <button onClick={() => onViewChange('plan-trabajo')}
                   className={`text-sm font-medium transition-colors flex items-center gap-1 ${currentView==='plan-trabajo'?'text-primary':'text-slate-600 hover:text-primary'}`}>
