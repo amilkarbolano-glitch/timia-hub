@@ -143,80 +143,152 @@ function TabCambios({ user }: { user: any }) {
     a.download = `cambios_${new Date().toISOString().slice(0,10)}.csv`; a.click();
   }
 
+  // Stats por tipo
+  const statsByTipo = TIPOS_CAMBIO.reduce((acc, t) => {
+    acc[t] = entries.filter(e => accessibleIds.includes(e.projectId) && e.tipo === t).length;
+    return acc;
+  }, {} as Record<string, number>);
+  const totalAll = entries.filter(e => accessibleIds.includes(e.projectId)).length;
+
   return (
     <div>
-      <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginBottom:16 }}>
-        <button onClick={exportCsv} style={{ display:'flex', alignItems:'center', gap:5, padding:'7px 12px', fontSize:12, border:'0.5px solid #e2e8f0', borderRadius:7, background:'#fff', cursor:'pointer', color:'#374151' }}>
-          <FileDown size={13}/> CSV
-        </button>
-        {canAccess(user?.role, 'write_bitacora') && (
-          <button onClick={()=>setShow(v=>!v)} style={{ display:'flex', alignItems:'center', gap:5, padding:'7px 14px', fontSize:12, background:'#dc2626', color:'#fff', border:'none', borderRadius:7, cursor:'pointer', fontWeight:500 }}>
-            <Plus size={13}/> Nuevo cambio
-          </button>
-        )}
+      {/* ── Stats strip ─────────────────────────────────────────────────────── */}
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(6,1fr)', gap:8, marginBottom:18 }}>
+        {[
+          { label:'Total', value:totalAll, bg:'#f8fafc', color:'#374151', border:'#e2e8f0' },
+          ...TIPOS_CAMBIO.map(t => ({
+            label: t, value: statsByTipo[t] ?? 0,
+            bg: TIPO_COLORS[t].bg, color: TIPO_COLORS[t].text, border: TIPO_COLORS[t].text + '30',
+          })),
+        ].map(s => (
+          <div key={s.label} style={{ background:s.bg, border:`0.5px solid ${s.border}`, borderRadius:10, padding:'10px 14px', textAlign:'center' }}>
+            <div style={{ fontSize:22, fontWeight:700, color:s.color, lineHeight:1 }}>{s.value}</div>
+            <div style={{ fontSize:9, color:s.color, marginTop:3, fontWeight:600, textTransform:'uppercase', letterSpacing:'.04em', opacity:.75 }}>{s.label}</div>
+          </div>
+        ))}
       </div>
 
+      {/* ── Toolbar ─────────────────────────────────────────────────────────── */}
+      <div style={{ display:'flex', gap:8, marginBottom:16, flexWrap:'wrap', alignItems:'center' }}>
+        {/* Búsqueda */}
+        <div style={{ position:'relative', flex:'1 1 200px', maxWidth:260 }}>
+          <Search size={12} style={{ position:'absolute', left:9, top:'50%', transform:'translateY(-50%)', color:'#94a3b8', pointerEvents:'none' }}/>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar descripción…" style={{...inp(), paddingLeft:28}}/>
+        </div>
+        {/* Filtro proyecto */}
+        <select value={filterProj} onChange={e=>setFP(e.target.value)} style={{ ...inp(), maxWidth:170 }}>
+          <option value="">Todos los proyectos</option>
+          {accessibleProjects.map((p: any)=><option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+        {/* Pills por tipo */}
+        <div style={{ display:'flex', gap:4, flexWrap:'wrap' }}>
+          {TIPOS_CAMBIO.map(t => {
+            const tc = TIPO_COLORS[t];
+            const active = filterTipo === t;
+            return (
+              <button key={t} onClick={()=>setFT(active?'':t)} style={{
+                padding:'4px 10px', fontSize:10, borderRadius:20, fontWeight:active?700:500,
+                border:`0.5px solid ${active?tc.text:tc.text+'40'}`,
+                background: active ? tc.bg : '#fff', color: tc.text, cursor:'pointer', transition:'all .12s',
+              }}>{t}</button>
+            );
+          })}
+          {filterTipo && <button onClick={()=>setFT('')} style={{ padding:'4px 8px', fontSize:10, borderRadius:20, border:'0.5px solid #e2e8f0', background:'#fff', color:'#94a3b8', cursor:'pointer' }}>× Limpiar</button>}
+        </div>
+        {/* Acciones */}
+        <div style={{ marginLeft:'auto', display:'flex', gap:6 }}>
+          <button onClick={exportCsv} style={{ display:'flex', alignItems:'center', gap:5, padding:'7px 12px', fontSize:11, border:'0.5px solid #e2e8f0', borderRadius:7, background:'#fff', cursor:'pointer', color:'#374151' }}>
+            <FileDown size={12}/> CSV
+          </button>
+          {canAccess(user?.role, 'write_bitacora') && (
+            <button onClick={()=>setShow(v=>!v)} style={{ display:'flex', alignItems:'center', gap:5, padding:'7px 14px', fontSize:12, background:'#dc2626', color:'#fff', border:'none', borderRadius:7, cursor:'pointer', fontWeight:600 }}>
+              <Plus size={13}/> {showForm ? 'Cerrar' : 'Nuevo cambio'}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* ── Formulario ──────────────────────────────────────────────────────── */}
       {showForm && (
-        <div style={{ background:'#fff', border:'0.5px solid #e2e8f0', borderRadius:12, padding:'18px 20px', marginBottom:18 }}>
+        <div style={{ background:'linear-gradient(135deg,#fef2f2,#fff5f5)', border:'0.5px solid #fecaca', borderRadius:14, padding:'20px 22px', marginBottom:20, boxShadow:'0 2px 12px rgba(220,38,38,.06)' }}>
+          <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:16 }}>
+            <div style={{ width:28, height:28, borderRadius:8, background:'#dc2626', display:'flex', alignItems:'center', justifyContent:'center' }}>
+              <BookOpen size={14} color="#fff"/>
+            </div>
+            <span style={{ fontSize:13, fontWeight:700, color:'#111' }}>Registrar cambio funcional</span>
+          </div>
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:10, marginBottom:10 }}>
             {[
               { label:'Proyecto *', node:<select value={form.projectId} onChange={e=>setForm(f=>({...f,projectId:e.target.value}))} style={inp()}><option value="">Seleccionar…</option>{accessibleProjects.map((p: any)=><option key={p.id} value={p.id}>{p.name}</option>)}</select> },
-              { label:'Tipo *', node:<select value={form.tipo} onChange={e=>setForm(f=>({...f,tipo:e.target.value as any}))} style={inp()}>{TIPOS_CAMBIO.map(t=><option key={t}>{t}</option>)}</select> },
-              { label:'Ticket Jira', node:<input value={form.jira} onChange={e=>setForm(f=>({...f,jira:e.target.value}))} placeholder="DECRONOS-xxxx" style={inp()}/> },
+              { label:'Tipo *',     node:<select value={form.tipo} onChange={e=>setForm(f=>({...f,tipo:e.target.value as any}))} style={inp()}>{TIPOS_CAMBIO.map(t=><option key={t}>{t}</option>)}</select> },
+              { label:'Ticket Jira',node:<input value={form.jira} onChange={e=>setForm(f=>({...f,jira:e.target.value}))} placeholder="DECRONOS-xxxx" style={inp()}/> },
             ].map(({label,node})=><div key={label}><label style={lbl()}>{label}</label>{node}</div>)}
           </div>
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:10 }}>
             <div><label style={lbl()}>Descripción del cambio *</label><textarea value={form.descripcion} onChange={e=>setForm(f=>({...f,descripcion:e.target.value}))} rows={3} placeholder="Ej: Campo PAN_CUST_ID cambió de VARCHAR a NUMERIC…" style={{...inp(),resize:'vertical'}}/></div>
             <div><label style={lbl()}>Motivo / Solicitado por</label><textarea value={form.motivo} onChange={e=>setForm(f=>({...f,motivo:e.target.value}))} rows={3} placeholder="Ej: BBVA solicitó cambio el 2026-06-03…" style={{...inp(),resize:'vertical'}}/></div>
           </div>
-          <div style={{ marginBottom:12 }}><label style={lbl()}>Tablas afectadas</label><input value={form.tablasAfectadas} onChange={e=>setForm(f=>({...f,tablasAfectadas:e.target.value}))} placeholder="t_kfca_input, t_kbrb_output, …" style={inp()}/></div>
+          <div style={{ marginBottom:14 }}><label style={lbl()}>Tablas afectadas</label><input value={form.tablasAfectadas} onChange={e=>setForm(f=>({...f,tablasAfectadas:e.target.value}))} placeholder="t_kfca_input, t_kbrb_output, …" style={inp()}/></div>
           <div style={{ display:'flex', gap:8, justifyContent:'flex-end' }}>
             <button onClick={()=>setShow(false)} style={btnSec()}>Cancelar</button>
-            <button onClick={add} style={btnPrimary()}>Guardar</button>
+            <button onClick={add} disabled={!form.projectId||!form.descripcion.trim()} style={{ ...btnPrimary(), opacity:!form.projectId||!form.descripcion.trim()?0.5:1 }}>Guardar cambio</button>
           </div>
         </div>
       )}
 
-      {/* Filtros */}
-      <div style={{ display:'flex', gap:8, marginBottom:14, flexWrap:'wrap', alignItems:'center' }}>
-        <div style={{ position:'relative', flex:'1 1 200px', maxWidth:260 }}>
-          <Search size={12} style={{ position:'absolute', left:9, top:'50%', transform:'translateY(-50%)', color:'#94a3b8', pointerEvents:'none' }}/>
-          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar descripción…" style={{...inp(), paddingLeft:28}}/>
-        </div>
-        <select value={filterProj} onChange={e=>setFP(e.target.value)} style={inp()}>
-          <option value="">Todos los proyectos</option>
-          {accessibleProjects.map((p: any)=><option key={p.id} value={p.id}>{p.name}</option>)}
-        </select>
-        <select value={filterTipo} onChange={e=>setFT(e.target.value)} style={inp()}>
-          <option value="">Todos los tipos</option>
-          {TIPOS_CAMBIO.map(t=><option key={t}>{t}</option>)}
-        </select>
-        <span style={{ fontSize:11, color:'#94a3b8', marginLeft:'auto' }}>{filtered.length} registro{filtered.length!==1?'s':''}</span>
-      </div>
+      {/* ── Tabla de cambios ────────────────────────────────────────────────── */}
+      <span style={{ fontSize:11, color:'#94a3b8', display:'block', marginBottom:10 }}>
+        {filtered.length} registro{filtered.length!==1?'s':''} encontrado{filtered.length!==1?'s':''}
+      </span>
 
       {filtered.length===0 ? (
         <div style={emptyBox()}>
-          <BookOpen size={24} color="#cbd5e1" style={{ marginBottom:8 }}/>
-          <p style={{ margin:0, fontSize:13, color:'#94a3b8' }}>No hay cambios registrados. {entries.length===0?'Agrega el primero.':''}</p>
+          <BookOpen size={28} color="#cbd5e1" style={{ marginBottom:10 }}/>
+          <p style={{ margin:0, fontSize:13, color:'#94a3b8' }}>No hay cambios registrados. {entries.length===0?'Agrega el primero con el botón "Nuevo cambio".':''}</p>
         </div>
       ) : (
-        <div style={{ background:'#fff', border:'0.5px solid #e2e8f0', borderRadius:12, overflow:'hidden' }}>
-          <div style={{ display:'grid', gridTemplateColumns:'80px 80px 70px 1fr 1fr 140px 80px 32px', gap:8, padding:'8px 14px', background:'#f8fafc', borderBottom:'0.5px solid #e2e8f0', fontSize:10, color:'#94a3b8', fontWeight:600, textTransform:'uppercase', letterSpacing:'.04em' }}>
-            <span>Fecha</span><span>Proyecto</span><span>Tipo</span><span>Descripción</span><span>Motivo</span><span>Tablas</span><span>Jira</span><span/>
+        <div style={{ background:'#fff', border:'0.5px solid #e2e8f0', borderRadius:14, overflow:'hidden', boxShadow:'0 1px 6px rgba(0,0,0,.04)' }}>
+          {/* Cabecera */}
+          <div style={{ display:'grid', gridTemplateColumns:'92px 80px 72px 1fr 1fr 150px 90px 32px', gap:8, padding:'9px 16px', background:'#fafafa', borderBottom:'0.5px solid #e2e8f0', fontSize:9, color:'#94a3b8', fontWeight:700, textTransform:'uppercase', letterSpacing:'.06em' }}>
+            <span>Fecha</span><span>Proyecto</span><span>Tipo</span><span>Descripción</span><span>Motivo</span><span>Tablas afectadas</span><span>Jira</span><span/>
           </div>
+          {/* Filas */}
           {filtered.map((e,i)=>{
-            const tc = TIPO_COLORS[e.tipo]??TIPO_COLORS.Otro;
+            const tc   = TIPO_COLORS[e.tipo]??TIPO_COLORS.Otro;
             const proj = PROJECTS.find(p=>p.id===e.projectId);
             return (
-              <div key={e.id} style={{ display:'grid', gridTemplateColumns:'80px 80px 70px 1fr 1fr 140px 80px 32px', gap:8, alignItems:'start', padding:'10px 14px', borderBottom:i<filtered.length-1?'0.5px solid #f1f5f9':'none', background:i%2===0?'#fff':'#fafafe' }}>
-                <span style={{ fontSize:10, color:'#64748b' }}>{e.fecha}</span>
-                <span style={{ fontSize:11, fontWeight:500, color:proj?.color??'#64748b' }}>{e.projectId}</span>
-                <span><span style={{ fontSize:9, padding:'2px 6px', borderRadius:8, background:tc.bg, color:tc.text, fontWeight:500 }}>{e.tipo}</span></span>
-                <span style={{ fontSize:11, color:'#374151', lineHeight:1.5 }}>{e.descripcion}</span>
-                <span style={{ fontSize:11, color:'#64748b', lineHeight:1.5 }}>{e.motivo||'—'}</span>
-                <span style={{ fontSize:10, color:'#64748b', fontFamily:'monospace', lineHeight:1.4 }}>{e.tablasAfectadas||'—'}</span>
-                <span style={{ fontSize:10, color:'#2563eb' }}>{e.jira||'—'}</span>
-                <button onClick={()=>{ if(confirm('¿Eliminar?')) save(entries.filter(x=>x.id!==e.id)); }} style={{ border:'none', background:'none', cursor:'pointer', color:'#94a3b8', padding:2, display:'flex', alignItems:'center' }}><Trash2 size={12}/></button>
+              <div key={e.id} style={{
+                display:'grid', gridTemplateColumns:'92px 80px 72px 1fr 1fr 150px 90px 32px',
+                gap:8, alignItems:'start', padding:'11px 16px',
+                borderBottom: i<filtered.length-1 ? '0.5px solid #f1f5f9' : 'none',
+                borderLeft: `3px solid ${tc.text}50`,
+                background: i%2===0 ? '#fff' : '#fafafe',
+                transition: 'background .1s',
+              }}
+              onMouseEnter={ev=>(ev.currentTarget.style.background='#faf5ff')}
+              onMouseLeave={ev=>(ev.currentTarget.style.background=i%2===0?'#fff':'#fafafe')}
+              >
+                <span style={{ fontSize:10, color:'#64748b', fontVariantNumeric:'tabular-nums' }}>{e.fecha}</span>
+                <div style={{ display:'flex', alignItems:'center', gap:5 }}>
+                  <div style={{ width:6, height:6, borderRadius:'50%', background:proj?.color??'#64748b', flexShrink:0 }}/>
+                  <span style={{ fontSize:11, fontWeight:600, color:proj?.color??'#64748b' }}>{e.projectId}</span>
+                </div>
+                <span>
+                  <span style={{ display:'inline-block', fontSize:9, padding:'3px 7px', borderRadius:6, background:tc.bg, color:tc.text, fontWeight:700 }}>{e.tipo}</span>
+                </span>
+                <span style={{ fontSize:11, color:'#1e293b', lineHeight:1.5 }}>{e.descripcion}</span>
+                <span style={{ fontSize:11, color:'#64748b', lineHeight:1.5 }}>{e.motivo||<em style={{color:'#cbd5e1'}}>—</em>}</span>
+                <span style={{ fontSize:10, color:'#64748b', fontFamily:'monospace', lineHeight:1.5, wordBreak:'break-all' }}>{e.tablasAfectadas||<em style={{color:'#cbd5e1'}}>—</em>}</span>
+                <span>
+                  {e.jira
+                    ? <a href={`https://jira.bbva.com/browse/${e.jira}`} target="_blank" rel="noreferrer" style={{ fontSize:10, color:'#1d4ed8', fontWeight:600, textDecoration:'none', display:'inline-flex', alignItems:'center', gap:3, background:'#eff6ff', padding:'2px 6px', borderRadius:4, border:'0.5px solid #bfdbfe' }}>
+                        <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                        {e.jira}
+                      </a>
+                    : <em style={{fontSize:10,color:'#cbd5e1'}}>—</em>
+                  }
+                </span>
+                <button onClick={()=>{ if(confirm('¿Eliminar este cambio?')) save(entries.filter(x=>x.id!==e.id)); }} style={{ border:'none', background:'none', cursor:'pointer', color:'#94a3b8', padding:2, display:'flex', alignItems:'center' }}><Trash2 size={12}/></button>
               </div>
             );
           })}
@@ -228,7 +300,7 @@ function TabCambios({ user }: { user: any }) {
 
 // ─── Tab: Links importantes ────────────────────────────────────────────────────
 
-function TabLinks({ user }: { user: any }) {
+export function TabLinks({ user }: { user: any }) {
   const [links, setLinks]       = useState<LinkEntry[]>(loadLinks);
   const [showForm, setShow]     = useState(false);
   const [filterProj, setFP]     = useState('');
@@ -427,7 +499,7 @@ function LinkCell({ value, onSave }: { value: string; onSave: (v:string)=>void; 
   );
 }
 
-function TabInventario({ user }: { user: any }) {
+export function TabInventario({ user }: { user: any }) {
   const [rows,    setRows]    = useState<InvRow[]>(loadInvRows);
   const [stages,  setStages]  = useState<InvStage[]>(loadInvStages);
   const [filterProj, setFP]   = useState('');
@@ -748,54 +820,31 @@ function btnPrimary(): React.CSSProperties { return { padding:'8px 16px', fontSi
 function btnSec(): React.CSSProperties { return { padding:'8px 14px', fontSize:12, border:'0.5px solid #e2e8f0', borderRadius:7, background:'#fff', cursor:'pointer', color:'#374151' }; }
 function emptyBox(): React.CSSProperties { return { background:'#fff', border:'0.5px solid #e2e8f0', borderRadius:12, padding:'48px 0', textAlign:'center', display:'flex', flexDirection:'column', alignItems:'center' }; }
 
-// ─── Main export ──────────────────────────────────────────────────────────────
-
-type Tab = 'cambios' | 'links' | 'inventario' | 'imputaciones';
-
-const TABS: { id: Tab; label: string; icon: React.ReactNode; desc: string }[] = [
-  { id:'cambios',      label:'Cambios funcionales', icon:<BookOpen size={14}/>,     desc:'Redefiniciones de campos, reglas, modelos y ETL' },
-  { id:'imputaciones', label:'Imputaciones Jira',   icon:<TicketCheck size={14}/>,  desc:'Tickets Jira por Q y proyecto — seguimiento de imputación de horas' },
-  { id:'links',        label:'Links importantes',   icon:<Link2 size={14}/>,         desc:'Jira, Confluence, Bitbucket, documentación de referencia' },
-  { id:'inventario',   label:'Inventario',           icon:<Package size={14}/>,       desc:'Tablas, objetos, jobs y modelos del proyecto' },
-];
+// ─── Main export — solo Cambios funcionales ───────────────────────────────────
 
 export default function Bitacora() {
-  const { user }        = useAuth();
-  const [tab, setTab]   = useState<Tab>('cambios');
-  const active          = TABS.find(t=>t.id===tab)!;
+  const { user } = useAuth();
 
   return (
-    <div style={{ padding:'28px 36px', maxWidth:1500, margin:'0 auto' }}>
+    <div style={{ padding:'28px 36px', maxWidth:1400, margin:'0 auto' }}>
       {/* Header */}
-      <div style={{ marginBottom:24 }}>
-        <h2 style={{ margin:'0 0 4px', fontSize:20, fontWeight:500, color:'#111' }}>Alcances del proyecto</h2>
-        <p style={{ margin:0, fontSize:13, color:'#94a3b8' }}>Gestión de cambios · links clave · inventario de objetos y tablas</p>
+      <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:24, gap:16 }}>
+        <div>
+          <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:6 }}>
+            <div style={{ width:34, height:34, borderRadius:10, background:'#fef2f2', border:'0.5px solid #fecaca', display:'flex', alignItems:'center', justifyContent:'center' }}>
+              <BookOpen size={16} color="#dc2626"/>
+            </div>
+            <div>
+              <h2 style={{ margin:0, fontSize:18, fontWeight:700, color:'#111', letterSpacing:'-.3px' }}>Alcances del Proyecto</h2>
+              <p style={{ margin:0, fontSize:12, color:'#94a3b8', marginTop:1 }}>
+                Registro de cambios funcionales — redefiniciones de campos, reglas, modelos y ETL
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* Tabs */}
-      <div style={{ display:'flex', gap:4, borderBottom:'0.5px solid #e2e8f0', marginBottom:20 }}>
-        {TABS.map(t => (
-          <button key={t.id} onClick={()=>setTab(t.id)} style={{
-            display:'flex', alignItems:'center', gap:6,
-            padding:'9px 16px', fontSize:13, fontWeight:tab===t.id?600:400,
-            color:tab===t.id?'#dc2626':'#64748b',
-            background:'none', border:'none',
-            borderBottom:tab===t.id?'2px solid #dc2626':'2px solid transparent',
-            cursor:'pointer', whiteSpace:'nowrap', transition:'all .15s',
-          }}>
-            {t.icon} {t.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Subtitle */}
-      <p style={{ margin:'0 0 16px', fontSize:12, color:'#94a3b8' }}>{active.desc}</p>
-
-      {/* Content */}
-      {tab === 'cambios'      && <TabCambios      user={user}/>}
-      {tab === 'imputaciones' && <ImputacionesJira user={user}/>}
-      {tab === 'links'        && <TabLinks         user={user}/>}
-      {tab === 'inventario'   && <TabInventario    user={user}/>}
+      <TabCambios user={user}/>
     </div>
   );
 }

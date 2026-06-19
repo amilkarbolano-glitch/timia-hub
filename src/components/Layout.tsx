@@ -10,10 +10,13 @@ import {
   Building2,
   ChevronDown,
   CalendarRange,
+  Link2,
+  Package,
+  Layers,
 } from 'lucide-react';
 import { TimiaMark, TimiaWordmark } from './TimiaLogo';
 
-export type View = 'setup-project' | 'setup-team' | 'setup-tasks' | 'dashboard' | 'standards' | 'analytics' | 'audit' | 'bank-status' | 'notifications' | 'roles-permissions' | 'project-templates' | 'admin' | 'circuitos-bbva' | 'bitacora' | 'estimaciones' | 'plan-trabajo';
+export type View = 'setup-project' | 'setup-team' | 'setup-tasks' | 'dashboard' | 'standards' | 'analytics' | 'audit' | 'bank-status' | 'notifications' | 'roles-permissions' | 'project-templates' | 'admin' | 'circuitos-bbva' | 'bitacora' | 'estimaciones' | 'plan-trabajo' | 'imputaciones' | 'inventario' | 'links';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -24,15 +27,18 @@ interface LayoutProps {
 
 export default function Layout({ children, currentView, onViewChange, userRole }: LayoutProps) {
   const { user, logout } = useAuth();
-  const [showUserMenu,   setShowUserMenu]   = useState(false);
-  const [showHerramientas, setShowHerramientas] = useState(false);
-  const [showProfile,    setShowProfile]    = useState(false);
+  const [showUserMenu,      setShowUserMenu]      = useState(false);
+  const [showHerramientas,  setShowHerramientas]  = useState(false);
+  const [showRepo,          setShowRepo]          = useState(false);
+  const [showProfile,       setShowProfile]       = useState(false);
   const herramRef = useRef<HTMLDivElement>(null);
+  const repoRef   = useRef<HTMLDivElement>(null);
 
-  // Close Herramientas dropdown on outside click
+  // Close dropdowns on outside click
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       if (herramRef.current && !herramRef.current.contains(e.target as Node)) setShowHerramientas(false);
+      if (repoRef.current   && !repoRef.current.contains(e.target as Node))   setShowRepo(false);
     }
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
@@ -40,6 +46,9 @@ export default function Layout({ children, currentView, onViewChange, userRole }
 
   const herramientasViews: View[] = ['roles-permissions','audit','project-templates'];
   const herramientasActive = herramientasViews.includes(currentView);
+
+  const repoViews: View[] = ['imputaciones','inventario','links'];
+  const repoActive = repoViews.includes(currentView);
 
   return (
     <div className="flex flex-col min-h-screen bg-slate-50">
@@ -84,6 +93,37 @@ export default function Layout({ children, currentView, onViewChange, userRole }
                 className={`text-sm font-medium transition-colors ${currentView==='bitacora'?'text-primary':'text-slate-600 hover:text-primary'}`}>
                 Alcances
               </button>
+
+              {/* Repositorio — Imputaciones · Inventario · Links */}
+              <div ref={repoRef} className="relative">
+                <button
+                  onClick={() => setShowRepo(v => !v)}
+                  className={`text-sm font-medium transition-colors flex items-center gap-1 ${repoActive ? 'text-primary' : 'text-slate-600 hover:text-primary'}`}
+                >
+                  Repositorio
+                  <ChevronDown size={12} style={{ transition: 'transform .15s', transform: showRepo ? 'rotate(180deg)' : 'rotate(0deg)' }}/>
+                </button>
+                {showRepo && (
+                  <div className="absolute top-full left-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-50 overflow-hidden" style={{ minWidth: 196 }}>
+                    {/* Cabecera del dropdown */}
+                    <div style={{ padding: '8px 14px 6px', borderBottom: '0.5px solid #f1f5f9' }}>
+                      <p style={{ margin: 0, fontSize: 9, color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em' }}>Recursos del equipo</p>
+                    </div>
+                    <button onClick={() => { setShowRepo(false); onViewChange('imputaciones'); }}
+                      className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm text-left transition-colors ${currentView==='imputaciones'?'bg-primary/10 text-primary font-semibold':'text-slate-600 hover:bg-slate-50'}`}>
+                      <Layers size={13}/> Imputaciones Jira
+                    </button>
+                    <button onClick={() => { setShowRepo(false); onViewChange('inventario'); }}
+                      className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm text-left transition-colors ${currentView==='inventario'?'bg-primary/10 text-primary font-semibold':'text-slate-600 hover:bg-slate-50'}`}>
+                      <Package size={13}/> Inventario
+                    </button>
+                    <button onClick={() => { setShowRepo(false); onViewChange('links'); }}
+                      className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm text-left transition-colors ${currentView==='links'?'bg-primary/10 text-primary font-semibold':'text-slate-600 hover:bg-slate-50'}`}>
+                      <Link2 size={13}/> Links importantes
+                    </button>
+                  </div>
+                )}
+              </div>
 
               {/* Estimaciones */}
               {canAccess(userRole as UserRole,'view_estimaciones') && (
