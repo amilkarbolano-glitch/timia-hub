@@ -102,8 +102,10 @@ export default function SetupProject({ onNext, templates, selectedTemplateId, on
     localStorage.removeItem('timia_setup_draft_name');
     localStorage.removeItem('timia_setup_draft_desc');
 
-    // Signal Estimaciones to auto-select this project
+    // Signal Estimaciones to auto-select this project and use the right plan template.
+    // Guardamos { projectId, type } para que solo este proyecto reciba la plantilla.
     localStorage.setItem('timia_setup_draft_id', rawId);
+    localStorage.setItem('timia_setup_template_type', JSON.stringify({ projectId: rawId, type: selectedTemplateId }));
     localStorage.setItem('timia_setup_flow', '2');
     onNext();
   }
