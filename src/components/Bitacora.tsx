@@ -342,12 +342,22 @@ function TabCambios({ user }: { user: any }) {
 
 // ─── Tab: Links importantes ────────────────────────────────────────────────────
 
+// ─── Iconos por categoría ─────────────────────────────────────────────────────
+const CAT_META: Record<string, { bg:string; text:string; icon:string }> = {
+  Jira:          { bg:'#dbeafe', text:'#1d4ed8', icon:'J' },
+  Ticket:        { bg:'#ede9fe', text:'#6d28d9', icon:'T' },
+  Bitbucket:     { bg:'#d1fae5', text:'#065f46', icon:'B' },
+  Documentación: { bg:'#fef3c7', text:'#92400e', icon:'D' },
+  Otro:          { bg:'#f1f5f9', text:'#475569', icon:'•' },
+};
+
 export function TabLinks({ user }: { user: any }) {
-  const [links, setLinks]       = useState<LinkEntry[]>(loadLinks);
-  const [showForm, setShow]     = useState(false);
-  const [filterProj, setFP]     = useState('');
-  const [filterCat, setFC]      = useState('');
-  const [form, setForm]         = useState({ projectId:'', title:'', url:'', category:'Ticket', descripcion:'' });
+  const [links, setLinks]   = useState<LinkEntry[]>(loadLinks);
+  const [showForm, setShow] = useState(false);
+  const [filterProj, setFP] = useState('');
+  const [filterCat, setFC]  = useState('');
+  const [search, setSearch] = useState('');
+  const [form, setForm]     = useState({ projectId:'', title:'', url:'', category:'Ticket', descripcion:'' });
 
   const accessibleIds: string[] = user?.role === 'pm' ? PROJECTS.map((p: any) => p.id) : (user?.projectIds ?? []);
   const accessibleProjects = PROJECTS.filter((p: any) => accessibleIds.includes(p.id));
@@ -359,89 +369,191 @@ export function TabLinks({ user }: { user: any }) {
   }
   function del(id: string) { if(confirm('¿Eliminar link?')){ const n=links.filter(l=>l.id!==id); setLinks(n); saveLinks(n); } }
 
-  const filtered = links.filter(l => accessibleIds.includes(l.projectId) && (!filterProj||l.projectId===filterProj) && (!filterCat||l.category===filterCat));
+  const filtered = links.filter(l =>
+    accessibleIds.includes(l.projectId) &&
+    (!filterProj || l.projectId === filterProj) &&
+    (!filterCat  || l.category  === filterCat) &&
+    (!search     || l.title.toLowerCase().includes(search.toLowerCase()) || l.descripcion.toLowerCase().includes(search.toLowerCase()) || l.url.toLowerCase().includes(search.toLowerCase()))
+  );
 
-  const CAT_COLORS: Record<string,{bg:string;text:string}> = {
-    Jira:          {bg:'#dbeafe',text:'#1d4ed8'},
-    Ticket:        {bg:'#ede9fe',text:'#6d28d9'},
-    Bitbucket:     {bg:'#d1fae5',text:'#065f46'},
-    Documentación: {bg:'#fef3c7',text:'#92400e'},
-    Otro:          {bg:'#f1f5f9',text:'#475569'},
-  };
+  // Agrupar por categoría para mostrar mejor
+  const byCat: Record<string, typeof filtered> = {};
+  filtered.forEach(l => { (byCat[l.category] ??= []).push(l); });
+  const cats = LINK_CATS.filter(c => byCat[c]?.length);
 
   return (
     <div>
-      <div style={{ display:'flex', justifyContent:'flex-end', marginBottom:16 }}>
-        <button onClick={()=>setShow(v=>!v)} style={{ display:'flex', alignItems:'center', gap:5, padding:'7px 14px', fontSize:12, background:'#dc2626', color:'#fff', border:'none', borderRadius:7, cursor:'pointer', fontWeight:500 }}>
+      {/* Top bar: búsqueda + nuevo link */}
+      <div style={{ display:'flex', gap:10, alignItems:'center', marginBottom:16, flexWrap:'wrap' }}>
+        {/* Barra de búsqueda */}
+        <div style={{ position:'relative', flex:'1 1 220px', maxWidth:320 }}>
+          <Search size={13} style={{ position:'absolute', left:10, top:'50%', transform:'translateY(-50%)', color:'#94a3b8', pointerEvents:'none' }}/>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar por nombre, URL, descripción…"
+            style={{ ...inp(), paddingLeft:30, width:'100%', boxSizing:'border-box' as const }}/>
+        </div>
+
+        {/* Filtro por proyecto — pills */}
+        <div style={{ display:'flex', gap:5, flexWrap:'wrap', flex:1 }}>
+          {['', ...accessibleProjects.map((p: any)=>p.id)].map(id => {
+            const proj = PROJECTS.find(p=>p.id===id);
+            const active = filterProj === id;
+            return (
+              <button key={id||'all'} onClick={()=>setFP(id)}
+                style={{ fontSize:11, padding:'4px 10px', borderRadius:20, border:`1px solid ${active?(proj?.color??'#94a3b8'):'#e2e8f0'}`,
+                  background: active ? (proj?.color??'#94a3b8')+'15' : '#fff',
+                  color: active ? (proj?.color??'#dc2626') : '#64748b',
+                  fontWeight: active ? 600 : 400, cursor:'pointer', whiteSpace:'nowrap' as const, transition:'all .12s' }}>
+                {id || 'Todos'}
+              </button>
+            );
+          })}
+        </div>
+
+        <button onClick={()=>setShow(v=>!v)}
+          style={{ display:'flex', alignItems:'center', gap:5, padding:'7px 14px', fontSize:12, background:'#dc2626', color:'#fff', border:'none', borderRadius:8, cursor:'pointer', fontWeight:500, flexShrink:0 }}>
           <Plus size={13}/> Nuevo link
         </button>
       </div>
 
-      {showForm && (
-        <div style={{ background:'#fff', border:'0.5px solid #e2e8f0', borderRadius:12, padding:'18px 20px', marginBottom:18 }}>
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:10, marginBottom:10 }}>
-            <div><label style={lbl()}>Proyecto *</label><select value={form.projectId} onChange={e=>setForm(f=>({...f,projectId:e.target.value}))} style={inp()}><option value="">Seleccionar…</option>{accessibleProjects.map((p: any)=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
-            <div><label style={lbl()}>Título / Nombre *</label><input value={form.title} onChange={e=>setForm(f=>({...f,title:e.target.value}))} placeholder="Ej: Confluence FICO Q2" style={inp()}/></div>
-            <div><label style={lbl()}>Categoría</label><select value={form.category} onChange={e=>setForm(f=>({...f,category:e.target.value}))} style={inp()}>{LINK_CATS.map(c=><option key={c}>{c}</option>)}</select></div>
-          </div>
-          <div style={{ marginBottom:10 }}><label style={lbl()}>URL *</label><input value={form.url} onChange={e=>setForm(f=>({...f,url:e.target.value}))} placeholder="https://…" style={inp()}/></div>
-          <div style={{ marginBottom:12 }}><label style={lbl()}>Descripción</label><input value={form.descripcion} onChange={e=>setForm(f=>({...f,descripcion:e.target.value}))} placeholder="Qué contiene o para qué sirve este link…" style={inp()}/></div>
-
-          <div style={{ display:'flex', gap:8, justifyContent:'flex-end' }}>
-            <button onClick={()=>setShow(false)} style={btnSec()}>Cancelar</button>
-            <button onClick={add} style={btnPrimary()}>Guardar</button>
-          </div>
-        </div>
-      )}
-
-      {/* Filtros */}
-      <div style={{ display:'flex', gap:8, marginBottom:14, flexWrap:'wrap' }}>
-        <select value={filterProj} onChange={e=>setFP(e.target.value)} style={inp()}>
-          <option value="">Todos los proyectos</option>
-          {accessibleProjects.map((p: any)=><option key={p.id} value={p.id}>{p.name}</option>)}
-        </select>
-        <select value={filterCat} onChange={e=>setFC(e.target.value)} style={inp()}>
-          <option value="">Todas las categorías</option>
-          {LINK_CATS.map(c=><option key={c}>{c}</option>)}
-        </select>
-        <span style={{ fontSize:11, color:'#94a3b8', marginLeft:'auto', alignSelf:'center' }}>{filtered.length} link{filtered.length!==1?'s':''}</span>
+      {/* Pills de categoría */}
+      <div style={{ display:'flex', gap:6, marginBottom:16, flexWrap:'wrap' }}>
+        <button onClick={()=>setFC('')}
+          style={{ fontSize:11, padding:'4px 12px', borderRadius:20, border:`1px solid ${!filterCat?'#dc2626':'#e2e8f0'}`,
+            background:!filterCat?'#fef2f2':'#fff', color:!filterCat?'#dc2626':'#64748b', fontWeight:!filterCat?600:400, cursor:'pointer', transition:'all .12s' }}>
+          Todas ({filtered.length})
+        </button>
+        {LINK_CATS.map(c => {
+          const meta = CAT_META[c] ?? CAT_META.Otro;
+          const count = links.filter(l => accessibleIds.includes(l.projectId) && l.category===c && (!filterProj||l.projectId===filterProj) && (!search||l.title.toLowerCase().includes(search.toLowerCase()))).length;
+          if (count === 0) return null;
+          const active = filterCat === c;
+          return (
+            <button key={c} onClick={()=>setFC(active?'':c)}
+              style={{ display:'flex', alignItems:'center', gap:5, fontSize:11, padding:'4px 12px', borderRadius:20, border:`1px solid ${active?meta.text:'#e2e8f0'}`,
+                background:active?meta.bg:'#fff', color:active?meta.text:'#64748b', fontWeight:active?600:400, cursor:'pointer', transition:'all .12s' }}>
+              <span style={{ width:16, height:16, borderRadius:4, background:meta.bg, color:meta.text, fontSize:9, fontWeight:700, display:'inline-flex', alignItems:'center', justifyContent:'center' }}>{meta.icon}</span>
+              {c} <span style={{ opacity:.6 }}>({count})</span>
+            </button>
+          );
+        })}
       </div>
 
-      {filtered.length===0 ? (
-        <div style={emptyBox()}>
-          <Link2 size={24} color="#cbd5e1" style={{ marginBottom:8 }}/>
-          <p style={{ margin:0, fontSize:13, color:'#94a3b8' }}>No hay links registrados. Agrega Jira, Tickets, Bitbucket, docs importantes…</p>
-        </div>
-      ) : (
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(340px, 1fr))', gap:10 }}>
-          {filtered.map(l => {
-            const cc = CAT_COLORS[l.category]??CAT_COLORS.Otro;
-            const proj = PROJECTS.find(p=>p.id===l.projectId);
-            return (
-              <div key={l.id} style={{ background:'#fff', border:'0.5px solid #e2e8f0', borderRadius:12, padding:'14px 16px' }}>
-                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:6 }}>
-                  <div style={{ flex:1, minWidth:0 }}>
-                    <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:4 }}>
-                      <span style={{ fontSize:9, padding:'2px 7px', borderRadius:6, background:cc.bg, color:cc.text, fontWeight:600 }}>{l.category}</span>
-                      <span style={{ fontSize:10, fontWeight:500, color:proj?.color??'#64748b' }}>{l.projectId}</span>
-                    </div>
-                    <p style={{ margin:0, fontSize:13, fontWeight:600, color:'#111', lineHeight:1.3, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{l.title}</p>
-                  </div>
-                  <button onClick={()=>del(l.id)} style={{ border:'none', background:'none', cursor:'pointer', color:'#94a3b8', padding:2, flexShrink:0, display:'flex' }}><Trash2 size={12}/></button>
-                </div>
-                {l.descripcion && <p style={{ margin:'0 0 8px', fontSize:11, color:'#64748b', lineHeight:1.5 }}>{l.descripcion}</p>}
-                <div style={{ display:'flex', alignItems:'center', gap:5, padding:'6px 8px', background:'#f8fafc', borderRadius:7 }}>
-                  <Link2 size={11} color="#94a3b8"/>
-                  <a href={l.url} target="_blank" rel="noreferrer" style={{ fontSize:10, color:'#2563eb', textDecoration:'none', flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{l.url}</a>
-                  <CopyBtn text={l.url}/>
-                  <a href={l.url} target="_blank" rel="noreferrer" style={{ color:'#94a3b8', display:'flex' }}><ExternalLink size={11}/></a>
-                </div>
-                <p style={{ margin:'6px 0 0', fontSize:9, color:'#cbd5e1' }}>Agregado por {l.quien} · {l.fecha}</p>
+      {/* Formulario */}
+      {showForm && (
+        <div style={{ background:'#fff', border:'0.5px solid #e2e8f0', borderRadius:12, padding:'18px 20px', marginBottom:18 }}>
+          <p style={{ margin:'0 0 12px', fontSize:13, fontWeight:600, color:'#111' }}>Nuevo link</p>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:10, marginBottom:10 }}>
+            <div>
+              <label style={lbl()}>Proyecto *</label>
+              <select value={form.projectId} onChange={e=>setForm(f=>({...f,projectId:e.target.value}))} style={inp()}>
+                <option value="">Seleccionar…</option>
+                {accessibleProjects.map((p: any)=><option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={lbl()}>Título / Nombre *</label>
+              <input value={form.title} onChange={e=>setForm(f=>({...f,title:e.target.value}))} placeholder="Ej: Confluence FICO Q2" style={inp()}/>
+            </div>
+            <div>
+              <label style={lbl()}>Categoría</label>
+              <div style={{ display:'flex', gap:5, flexWrap:'wrap' as const, marginTop:4 }}>
+                {LINK_CATS.map(c => {
+                  const meta = CAT_META[c] ?? CAT_META.Otro;
+                  return (
+                    <button key={c} type="button" onClick={()=>setForm(f=>({...f,category:c}))}
+                      style={{ fontSize:10, padding:'3px 9px', borderRadius:16, border:`1px solid ${form.category===c?meta.text:'#e2e8f0'}`,
+                        background:form.category===c?meta.bg:'#fff', color:form.category===c?meta.text:'#64748b',
+                        fontWeight:form.category===c?600:400, cursor:'pointer' }}>
+                      {c}
+                    </button>
+                  );
+                })}
               </div>
-            );
-          })}
+            </div>
+          </div>
+          <div style={{ marginBottom:10 }}>
+            <label style={lbl()}>URL *</label>
+            <input value={form.url} onChange={e=>setForm(f=>({...f,url:e.target.value}))} placeholder="https://…" style={inp()}/>
+          </div>
+          <div style={{ marginBottom:14 }}>
+            <label style={lbl()}>Descripción</label>
+            <input value={form.descripcion} onChange={e=>setForm(f=>({...f,descripcion:e.target.value}))} placeholder="Qué contiene o para qué sirve…" style={inp()}/>
+          </div>
+          <div style={{ display:'flex', gap:8, justifyContent:'flex-end' }}>
+            <button onClick={()=>setShow(false)} style={btnSec()}>Cancelar</button>
+            <button onClick={add} style={btnPrimary()}>Guardar link</button>
+          </div>
         </div>
       )}
+
+      {/* Contenido: agrupado por categoría si no hay filtro activo */}
+      {filtered.length === 0 ? (
+        <div style={emptyBox()}>
+          <Link2 size={24} color="#cbd5e1" style={{ marginBottom:8 }}/>
+          <p style={{ margin:0, fontSize:13, color:'#94a3b8' }}>No hay links que coincidan. Agrega Jira, Tickets, Bitbucket, documentación…</p>
+        </div>
+      ) : filterCat ? (
+        // Filtro activo: grid plano
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(320px, 1fr))', gap:10 }}>
+          {filtered.map(l => <LinkCard key={l.id} l={l} onDelete={del}/>)}
+        </div>
+      ) : (
+        // Sin filtro: agrupar por categoría
+        <div style={{ display:'flex', flexDirection:'column', gap:20 }}>
+          {cats.map(cat => (
+            <div key={cat}>
+              <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:10 }}>
+                <span style={{ fontSize:9, padding:'2px 8px', borderRadius:6, background:CAT_META[cat]?.bg??'#f1f5f9', color:CAT_META[cat]?.text??'#475569', fontWeight:700, textTransform:'uppercase' as const, letterSpacing:'.06em' }}>{cat}</span>
+                <div style={{ flex:1, height:'0.5px', background:'#e2e8f0' }}/>
+                <span style={{ fontSize:10, color:'#94a3b8' }}>{byCat[cat].length}</span>
+              </div>
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(320px, 1fr))', gap:8 }}>
+                {byCat[cat].map(l => <LinkCard key={l.id} l={l} onDelete={del}/>)}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LinkCard({ l, onDelete }: { l: any; onDelete:(id:string)=>void }) {
+  const meta = CAT_META[l.category] ?? CAT_META.Otro;
+  const proj = PROJECTS.find(p => p.id === l.projectId);
+  return (
+    <div style={{ background:'#fff', border:'0.5px solid #e2e8f0', borderRadius:12, padding:'14px 16px', display:'flex', flexDirection:'column', gap:8, transition:'box-shadow .15s' }}>
+      {/* Header */}
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
+        <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+          {/* Icono de categoría */}
+          <div style={{ width:32, height:32, borderRadius:8, background:meta.bg, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+            <span style={{ fontSize:11, fontWeight:700, color:meta.text }}>{meta.icon}</span>
+          </div>
+          <div>
+            <p style={{ margin:0, fontSize:12, fontWeight:600, color:'#111', lineHeight:1.3, maxWidth:200, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' as const }}>{l.title}</p>
+            <span style={{ fontSize:10, fontWeight:500, color:proj?.color??'#64748b' }}>{l.projectId}</span>
+          </div>
+        </div>
+        <button onClick={()=>onDelete(l.id)} style={{ border:'none', background:'none', cursor:'pointer', color:'#cbd5e1', padding:2, flexShrink:0, display:'flex' }}><Trash2 size={12}/></button>
+      </div>
+
+      {/* Descripción */}
+      {l.descripcion && <p style={{ margin:0, fontSize:11, color:'#64748b', lineHeight:1.5 }}>{l.descripcion}</p>}
+
+      {/* URL row */}
+      <div style={{ display:'flex', alignItems:'center', gap:6, padding:'7px 10px', background:'#f8fafc', borderRadius:8, border:'0.5px solid #f1f5f9' }}>
+        <Link2 size={11} color="#94a3b8" style={{ flexShrink:0 }}/>
+        <a href={l.url} target="_blank" rel="noreferrer"
+          style={{ fontSize:10, color:'#2563eb', textDecoration:'none', flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' as const }}>
+          {l.url}
+        </a>
+        <CopyBtn text={l.url}/>
+        <a href={l.url} target="_blank" rel="noreferrer" style={{ color:'#94a3b8', display:'flex', flexShrink:0 }}><ExternalLink size={11}/></a>
+      </div>
+
+      {/* Footer */}
+      <p style={{ margin:0, fontSize:9, color:'#cbd5e1' }}>{l.quien} · {l.fecha}</p>
     </div>
   );
 }
