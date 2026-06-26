@@ -1496,6 +1496,14 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
   // Si existe un plan generado para un proyecto estático, lo sobreescribe (permite generar NGA, CRONOS, etc.)
   function buildEffectivePlans(): WorkPlan[] {
     const storedConfigs = adminStore.getPlanConfigs();
+    // Fechas de inicio overrides desde db.json → localStorage
+    // Permite cambiar startDate sin recompilar el código
+    let startDateOverrides: Record<string, string> = {};
+    try {
+      const raw = localStorage.getItem('timia_plan_startdates');
+      if (raw) startDateOverrides = JSON.parse(raw);
+    } catch { /* ignorar */ }
+
     // Mapa de planes generados (projectId → WorkPlan)
     const generatedMap: Record<string, WorkPlan> = {};
     Object.values(storedConfigs).forEach(c => {
@@ -1503,8 +1511,12 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
         generatedMap[c.projectId] = planConfigToWorkPlan(c);
       }
     });
-    // Prioridad: generated sobre static para el mismo projectId
-    const merged = WORK_PLANS.map(p => generatedMap[p.projectId] ?? p);
+    // Prioridad: generated sobre static; aplica startDate override si existe
+    const merged = WORK_PLANS.map(p => {
+      const base = generatedMap[p.projectId] ?? p;
+      const override = startDateOverrides[p.projectId];
+      return override ? { ...base, startDate: override } : base;
+    });
     // Agregar planes generados para proyectos sin plan estático
     const staticIds = new Set(WORK_PLANS.map(p => p.projectId));
     const extra = Object.values(generatedMap).filter(g => !staticIds.has(g.projectId));
