@@ -7,20 +7,20 @@ import { PROJECTS, useAuth } from '../contexts/AuthContext';
 import { adminStore, type PlanEtapa, type PlanActivityConfig, type PlanEntregableConfig, type PlanConfig } from '../lib/adminStore';
 import type { View } from './Layout';
 import { FlowStepper } from './SetupProject';
+import { snapToBusinessDay, addBusinessDays } from '../lib/businessDays';
 
-// ─── Week label computation (date-based + holiday awareness) ──────────────────
+// ─── Week label computation (días hábiles reales) ─────────────────────────────
+// Cada semana = 5 días hábiles. S1 empieza en startDate (snapped a día hábil),
+// S2 empieza 5 días hábiles después, etc. Fines de semana y festivos se omiten.
 
 function computeWeekLabels(startDate: string, totalWeeks: number, holidayDates: Set<string>): string[] {
   if (!startDate) return Array.from({ length: totalWeeks }, (_, i) => `S${i + 1}`);
-  const base = new Date(startDate + 'T12:00:00');
+  const s1 = snapToBusinessDay(new Date(startDate + 'T12:00:00'), holidayDates);
   return Array.from({ length: totalWeeks }, (_, i) => {
-    const d = new Date(base);
-    d.setDate(base.getDate() + i * 7);
-    const iso  = d.toISOString().slice(0, 10);
-    const day  = d.getDate();
-    const mon  = d.toLocaleDateString('es-CO', { month: 'short' });
-    const flag = holidayDates.has(iso) ? ' 🗓' : '';
-    return `S${i + 1} · ${day} ${mon}${flag}`;
+    const d   = addBusinessDays(s1, i * 5, holidayDates);
+    const day = d.getDate();
+    const mon = d.toLocaleDateString('es-CO', { month: 'short' });
+    return `S${i + 1} · ${day} ${mon}`;
   });
 }
 
