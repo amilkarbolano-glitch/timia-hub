@@ -132,7 +132,9 @@ function AppInner() {
           : <AccessDenied onBack={goHome}/>;
 
       case 'admin':
-        return role === 'pm' ? <AdminPanel onViewChange={navigate} /> : <AccessDenied onBack={goHome}/>;
+        return canAccess(role, 'view_admin')
+          ? <AdminPanel onViewChange={navigate} />
+          : <AccessDenied onBack={goHome}/>;
 
       case 'circuitos-bbva':
         return <CircuitosBBVA />;
