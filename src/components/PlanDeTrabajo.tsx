@@ -466,7 +466,7 @@ function ActivityDrawer({ projectId, entregableId, actIdx, act, effectivePct, et
 
 // ─── EntregableSection ────────────────────────────────────────────────────────
 
-function EntregableSection({ block, projectId, sectionIdx, getActivityPct, setActivityPct, onActivityClick, onGoEstimaciones, todayWeekIdx, getDoneDate }: {
+function EntregableSection({ block, projectId, sectionIdx, getActivityPct, setActivityPct, onActivityClick, onGoEstimaciones, todayWeekIdx, getDoneDate, planStartDate, holidays, weekLabels }: {
   block: PlanEntregable; projectId: string; sectionIdx: number;
   getActivityPct: (i: number) => number;
   setActivityPct: (i: number, pct: number) => void;
@@ -474,6 +474,9 @@ function EntregableSection({ block, projectId, sectionIdx, getActivityPct, setAc
   onGoEstimaciones?: () => void;
   todayWeekIdx?: number;
   getDoneDate?: (i: number) => string | undefined;
+  planStartDate?: string;
+  holidays?: Set<string>;
+  weekLabels?: string[];
 }) {
   const effectiveActivities = block.activities.map((a, i) => ({ ...a, pct: getActivityPct(i) }));
   const effectivePctReal = block.activities.length > 0
@@ -512,11 +515,20 @@ function EntregableSection({ block, projectId, sectionIdx, getActivityPct, setAc
                 <th style={{ padding:'6px', textAlign:'center', fontSize:10, color:'#fff', fontWeight:600, width:50 }}>%</th>
                 {WEEKS.map((w, i) => {
                   const isToday = todayWeekIdx !== undefined && todayWeekIdx >= 0 && i === todayWeekIdx;
+                  // Fecha dinámica: si tenemos startDate la calculamos; si no, fallback a WEEKS[i].d
+                  let dateLabel = w.d;
+                  if (weekLabels && weekLabels[i]) {
+                    // weekLabel formato "S1 · 2 jun" → extraer "2 jun"
+                    dateLabel = weekLabels[i].replace(/^S\d+\s*[··]\s*/, '');
+                  } else if (planStartDate && holidays) {
+                    const d = weekToActualDate(planStartDate, i + 1, holidays);
+                    if (d) dateLabel = `${d.getDate()}/${d.getMonth() + 1}`;
+                  }
                   return (
                     <th key={i} style={{ width:CELL_W, padding:'4px 2px', textAlign:'center', borderLeft: isToday ? '2px solid #16a34a' : '0.5px solid rgba(255,255,255,0.15)', background: isToday ? 'rgba(22,163,74,0.25)' : undefined }}>
                       {isToday && <div style={{ fontSize:6, fontWeight:800, color:'#86efac', letterSpacing:'.05em', lineHeight:1.2 }}>HOY</div>}
                       <div style={{ fontSize:9, fontWeight:700, color: isToday ? '#fff' : '#fce7f3' }}>{w.l}</div>
-                      <div style={{ fontSize:7, color: isToday ? '#bbf7d0' : '#fbcfe8' }}>{w.d}</div>
+                      <div style={{ fontSize:7, color: isToday ? '#bbf7d0' : '#fbcfe8' }}>{dateLabel}</div>
                     </th>
                   );
                 })}
@@ -775,6 +787,9 @@ function PlanDetail({ plan, getActivityPct, setActivityPct, onActivityClick, onG
             onGoEstimaciones={onGoEstimaciones}
             todayWeekIdx={todayWeekIdx}
             getDoneDate={getDoneDate ? (i => getDoneDate(e.id, i)) : undefined}
+            planStartDate={plan.startDate}
+            holidays={holidays}
+            weekLabels={plan.weekLabels}
           />
         ));
       })()}
@@ -1232,13 +1247,21 @@ async function exportPlanPPTX(plan: WorkPlan, getActivityPct: (eid: string, ai: 
   const BORDER_D = '334155';
   const ENT_COLORS = [RED,'0D9488','7C3AED','0891B2','BE185D'];
 
-  // ── Semanas (reutiliza las mismas del Gantt de la app) ────────────────────
-  const WKS = [
-    {l:'S1',d:'26/01'},{l:'S2',d:'02/02'},{l:'S3',d:'09/02'},
-    {l:'S4',d:'16/02'},{l:'S5',d:'23/02'},{l:'S6',d:'02/03'},
-    {l:'S7',d:'09/03'},{l:'S8',d:'16/03'},{l:'S9',d:'24/03'},
-    {l:'S10',d:'31/03'},{l:'S11',d:'09/04'},{l:'S12',d:'16/04'},{l:'S13',d:'23/04'},
-  ];
+  // ── Semanas — dinámico basado en startDate del plan ──────────────────────
+  const _holidays = new Set(adminStore.getHolidays().map(h => h.date));
+  const WKS: { l: string; d: string }[] = Array.from({ length: TOTAL_WEEKS }, (_, i) => {
+    let d = '';
+    if (plan.weekLabels && plan.weekLabels[i]) {
+      d = plan.weekLabels[i].replace(/^S\d+\s*[··]\s*/, '');
+    } else if (plan.startDate) {
+      const dt = weekToActualDate(plan.startDate, i + 1, _holidays);
+      d = dt ? `${dt.getDate()}/${dt.getMonth() + 1}` : `S${i + 1}`;
+    } else {
+      const fallback = ['26/01','02/02','09/02','16/02','23/02','02/03','09/03','16/03','24/03','31/03','09/04','16/04','23/04'];
+      d = fallback[i] ?? `S${i + 1}`;
+    }
+    return { l: `S${i + 1}`, d };
+  });
 
   // ── Layout de la tabla ────────────────────────────────────────────────────
   const LM      = 0.18;       // left margin
