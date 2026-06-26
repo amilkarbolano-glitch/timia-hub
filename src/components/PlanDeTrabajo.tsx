@@ -53,6 +53,21 @@ function getWeekDate(weekLabels: string[] | undefined, weekIdx: number, weeks: t
   }
   return weeks[weekIdx - 1]?.d ?? `S${weekIdx}`;
 }
+
+// Calcula la Date real del inicio de una semana dado el startDate del plan
+function weekToActualDate(planStartDate: string | undefined, weekIdx: number): Date | null {
+  if (!planStartDate) return null;
+  const base = new Date(planStartDate + 'T12:00:00');
+  base.setDate(base.getDate() + (weekIdx - 1) * 7);
+  return base;
+}
+
+// Formatea un Date como "lun 2 jun 2026"
+function fmtCalDate(d: Date): string {
+  const DIAS  = ['dom','lun','mar','mié','jue','vie','sáb'];
+  const MESES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  return `${DIAS[d.getDay()]} ${d.getDate()} ${MESES[d.getMonth()]} ${d.getFullYear()}`;
+}
 function hexToRgb(hex: string): [number, number, number] {
   const c = hex.replace('#', '');
   const n = parseInt(c.length === 3 ? c.split('').map(x => x+x).join('') : c, 16);
@@ -152,6 +167,7 @@ interface ActivityDrawerProps {
   assigneeIds: string[]; allUsers: AdminUser[]; canMark: boolean;
   jiraId?: string;
   weekLabels?: string[];
+  planStartDate?: string;
   onEtapaToggle: (etapaId: string) => void;
   onAssigneeAdd: (userId: string) => void;
   onAssigneeRemove: (userId: string) => void;
@@ -159,7 +175,7 @@ interface ActivityDrawerProps {
   onClose: () => void;
 }
 
-function ActivityDrawer({ projectId, entregableId, actIdx, act, effectivePct, etapaStates, historial, assigneeIds, allUsers, canMark, jiraId, weekLabels, onEtapaToggle, onAssigneeAdd, onAssigneeRemove, onJiraSave, onClose }: ActivityDrawerProps) {
+function ActivityDrawer({ projectId, entregableId, actIdx, act, effectivePct, etapaStates, historial, assigneeIds, allUsers, canMark, jiraId, weekLabels, planStartDate, onEtapaToggle, onAssigneeAdd, onAssigneeRemove, onJiraSave, onClose }: ActivityDrawerProps) {
   const [search, setSearch]         = useState('');
   const [searchFocused, setFocused] = useState(false);
   const [editJira, setEditJira]     = useState(false);
@@ -221,32 +237,34 @@ function ActivityDrawer({ projectId, entregableId, actIdx, act, effectivePct, et
               <div style={{ width: `${effectivePct}%`, height: '100%', borderRadius: 4, background: effectivePct >= 100 ? '#15803d' : '#0d9488', transition: 'width .35s ease' }}/>
             </div>
             {(() => {
-              const endDateStr = getWeekDate(weekLabels, act.endWeek, WEEKS);
-              // Parse end date — format is DD/MM (assume current year or 2026)
-              let endDate: Date | null = null;
-              if (endDateStr && endDateStr.includes('/')) {
-                const parts = endDateStr.split('/');
-                if (parts.length === 2) {
-                  endDate = new Date(`2026-${parts[1].padStart(2,'0')}-${parts[0].padStart(2,'0')}T23:59:00`);
-                }
-              }
-              const today = new Date();
-              const isOverdue = endDate ? endDate < today : false;
+              // Fechas reales calculadas desde startDate del plan (más preciso que parsear labels)
+              const startActual = weekToActualDate(planStartDate, act.startWeek);
+              const endActual   = weekToActualDate(planStartDate, act.endWeek);
+              const today       = new Date();
+              const isOverdue   = endActual ? endActual < today : false;
               const deadlineColor = isOverdue && effectivePct < 100 ? '#dc2626' : '#374151';
               return (
-                <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 8, padding: '6px 10px', background: '#f8fafc', borderRadius: 7, fontSize: 11 }}>
-                  <div>
-                    <span style={{ color: '#94a3b8', fontSize: 10 }}>Inicio</span>
-                    <div style={{ fontWeight: 600, color: '#374151' }}>S{act.startWeek} · {getWeekDate(weekLabels, act.startWeek, WEEKS)}</div>
+                <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start', marginTop: 8, padding: '8px 12px', background: '#f8fafc', borderRadius: 8, fontSize: 11 }}>
+                  {/* Inicio */}
+                  <div style={{ flex: 1 }}>
+                    <span style={{ color: '#94a3b8', fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.4px' }}>Inicio</span>
+                    <div style={{ fontWeight: 700, color: '#374151', marginTop: 2 }}>S{act.startWeek}</div>
+                    {startActual && (
+                      <div style={{ fontSize: 11, color: '#64748b', marginTop: 1 }}>{fmtCalDate(startActual)}</div>
+                    )}
                   </div>
-                  <div style={{ color: '#e2e8f0' }}>→</div>
-                  <div>
-                    <span style={{ color: '#94a3b8', fontSize: 10 }}>Fin planificado</span>
-                    <div style={{ fontWeight: 600, color: deadlineColor }}>S{act.endWeek} · {getWeekDate(weekLabels, act.endWeek, WEEKS)}</div>
+                  <div style={{ color: '#cbd5e1', paddingTop: 16, fontSize: 13 }}>→</div>
+                  {/* Fin planificado */}
+                  <div style={{ flex: 1 }}>
+                    <span style={{ color: '#94a3b8', fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.4px' }}>Fin planificado</span>
+                    <div style={{ fontWeight: 700, color: deadlineColor, marginTop: 2 }}>S{act.endWeek}</div>
+                    {endActual && (
+                      <div style={{ fontSize: 11, color: deadlineColor, marginTop: 1 }}>{fmtCalDate(endActual)}</div>
+                    )}
                   </div>
                   {isOverdue && effectivePct < 100 && (
-                    <div style={{ marginLeft: 'auto', padding: '3px 8px', background: '#fef2f2', border: '0.5px solid #fecaca', borderRadius: 6, fontSize: 10, color: '#dc2626', fontWeight: 600 }}>
-                      ⚠ Fecha límite vencida
+                    <div style={{ alignSelf: 'center', padding: '3px 8px', background: '#fef2f2', border: '0.5px solid #fecaca', borderRadius: 6, fontSize: 10, color: '#dc2626', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                      ⚠ Vencida
                     </div>
                   )}
                 </div>
@@ -2152,6 +2170,7 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
           assigneeIds={drawerAssigneeIds} allUsers={allUsers} canMark={canMark}
           jiraId={activityJiras[drawerKey]}
           weekLabels={effectivePlans.find(p => p.projectId === drawer.projectId)?.weekLabels}
+          planStartDate={effectivePlans.find(p => p.projectId === drawer.projectId)?.startDate}
           onEtapaToggle={handleEtapaToggle}
           onAssigneeAdd={handleAssigneeAdd}
           onAssigneeRemove={handleAssigneeRemove}
