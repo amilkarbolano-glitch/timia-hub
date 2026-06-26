@@ -723,7 +723,9 @@ export default function Estimaciones({ onViewChange, onBack }: EstimacionesProps
   const [inFlow, setInFlow]   = useState<boolean>(
     () => localStorage.getItem('timia_setup_flow') === '2'
   );
-  const [teamOpen, setTeamOpen] = useState(false);
+  const [teamOpen,   setTeamOpen]   = useState(false);
+  const [teamSearch, setTeamSearch] = useState('');
+  const [teamRev,    setTeamRev]    = useState(0); // incrementar fuerza re-render del equipo
 
   // ── Auto-limpiar flag del wizard al montar ──────────────────────────────────
   // Si el usuario abandona el wizard por el navbar (sin usar Volver/Siguiente),
@@ -1010,21 +1012,26 @@ export default function Estimaciones({ onViewChange, onBack }: EstimacionesProps
 
         {/* ── Panel Gestionar Equipo — visible para pm / tech_lead / project_lead ── */}
         {(role === 'pm' || role === 'tech_lead' || role === 'project_lead') && (() => {
+          // teamRev en dependencias → re-render cada vez que se toggle un miembro
           const allUsers  = adminStore.getUsers().filter(u => u.active && u.role !== 'pm');
-          const inProject = (u: { projectIds: string[] }) => u.projectIds.includes(selectedProjectId);
+          const inProject = (u: { id: string; projectIds: string[] }) =>
+            adminStore.getUsers().find(x => x.id === u.id)?.projectIds.includes(selectedProjectId) ?? false;
 
           function toggleMember(userId: string) {
             const users = adminStore.getUsers();
-            const updated = users.map(u => {
-              if (u.id !== userId) return u;
-              return {
+            const cur   = users.find(u => u.id === userId);
+            if (!cur) return;
+            const alreadyIn = cur.projectIds.includes(selectedProjectId);
+            const updated = users.map(u =>
+              u.id !== userId ? u : {
                 ...u,
-                projectIds: inProject(u)
+                projectIds: alreadyIn
                   ? u.projectIds.filter(id => id !== selectedProjectId)
                   : [...u.projectIds, selectedProjectId],
-              };
-            });
+              }
+            );
             adminStore.saveUsers(updated);
+            setTeamRev(v => v + 1); // ← dispara re-render reactivo
           }
 
           const ROLE_LABEL_SHORT: Record<string, string> = {
@@ -1036,22 +1043,33 @@ export default function Estimaciones({ onViewChange, onBack }: EstimacionesProps
             tech_ref: '#0d9488', developer: '#374151',
           };
 
-          const memberCount = allUsers.filter(inProject).length;
+          const memberCount  = allUsers.filter(u => inProject(u)).length;
+          const searchLow    = teamSearch.toLowerCase();
+          const filteredUsers = teamSearch
+            ? allUsers.filter(u => u.name.toLowerCase().includes(searchLow) || (u.role ?? '').toLowerCase().includes(searchLow))
+            : allUsers;
+          // siempre primero los que ya están en el proyecto
+          const sortedUsers = [...filteredUsers].sort((a, b) => {
+            const aIn = inProject(a) ? 0 : 1;
+            const bIn = inProject(b) ? 0 : 1;
+            return aIn - bIn || a.name.localeCompare(b.name);
+          });
 
           return (
             <div style={{ marginBottom: 14, border: '0.5px solid #e2e8f0', borderRadius: 10, overflow: 'hidden' }}>
               {/* Header del panel */}
               <button
-                onClick={() => setTeamOpen(v => !v)}
+                onClick={() => { setTeamOpen(v => !v); setTeamSearch(''); }}
                 style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px',
                   background: teamOpen ? '#f8fafc' : '#fff', border: 'none', cursor: 'pointer', textAlign: 'left' }}>
                 <Users size={14} color="#64748b"/>
                 <span style={{ fontSize: 12, fontWeight: 600, color: '#374151', flex: 1 }}>
                   Equipo del proyecto
+                  {memberCount > 0 && <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 500, color: '#7c3aed' }}>{memberCount} asignado{memberCount !== 1 ? 's' : ''}</span>}
                 </span>
                 {/* Avatares resumen */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 3, marginRight: 8 }}>
-                  {allUsers.filter(inProject).slice(0, 5).map(u => (
+                  {allUsers.filter(u => inProject(u)).slice(0, 5).map(u => (
                     <div key={u.id} style={{ width: 22, height: 22, borderRadius: '50%', background: u.avatarColor,
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                       fontSize: 8, fontWeight: 700, color: '#fff', border: '1.5px solid #fff', marginLeft: -4 }}
@@ -1059,12 +1077,8 @@ export default function Estimaciones({ onViewChange, onBack }: EstimacionesProps
                       {u.initials}
                     </div>
                   ))}
-                  {memberCount > 5 && (
-                    <span style={{ fontSize: 9, color: '#64748b', marginLeft: 2 }}>+{memberCount - 5}</span>
-                  )}
-                  {memberCount === 0 && (
-                    <span style={{ fontSize: 10, color: '#94a3b8' }}>Sin equipo asignado</span>
-                  )}
+                  {memberCount > 5 && <span style={{ fontSize: 9, color: '#64748b', marginLeft: 2 }}>+{memberCount - 5}</span>}
+                  {memberCount === 0 && <span style={{ fontSize: 10, color: '#94a3b8' }}>Sin equipo asignado</span>}
                 </div>
                 {teamOpen ? <ChevronDown size={13} color="#94a3b8"/> : <ChevronRight size={13} color="#94a3b8"/>}
               </button>
@@ -1072,40 +1086,69 @@ export default function Estimaciones({ onViewChange, onBack }: EstimacionesProps
               {/* Cuerpo del panel */}
               {teamOpen && (
                 <div style={{ padding: '12px 16px', borderTop: '0.5px solid #f1f5f9', background: '#fafafe' }}>
-                  <p style={{ margin: '0 0 10px', fontSize: 10, color: '#64748b' }}>
-                    Selecciona los miembros que trabajarán en <strong>{selectedProjectId}</strong>.
-                    Esto define quién ve el proyecto en el Tablero y el Plan de Trabajo.
-                  </p>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 6 }}>
-                    {allUsers.map(u => {
-                      const active = inProject(u);
-                      return (
-                        <button key={u.id} onClick={() => { toggleMember(u.id); setTeamOpen(true); }}
-                          style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px',
-                            border: `1.5px solid ${active ? u.avatarColor + '60' : '#e2e8f0'}`,
-                            borderRadius: 8, background: active ? u.avatarColor + '0e' : '#fff',
-                            cursor: 'pointer', textAlign: 'left', transition: 'all .12s' }}>
-                          <div style={{ width: 28, height: 28, borderRadius: '50%', background: u.avatarColor,
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            fontSize: 9, fontWeight: 700, color: '#fff', flexShrink: 0 }}>
-                            {u.initials}
-                          </div>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: 11, fontWeight: 600, color: '#111', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                              {u.name}
-                            </div>
-                            <div style={{ fontSize: 9, color: ROLE_COLOR[u.role] ?? '#64748b', fontWeight: 500 }}>
-                              {ROLE_LABEL_SHORT[u.role] ?? u.role}
-                            </div>
-                          </div>
-                          <div style={{ width: 16, height: 16, borderRadius: 4, border: `1.5px solid ${active ? u.avatarColor : '#d1d5db'}`,
-                            background: active ? u.avatarColor : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                            {active && <span style={{ fontSize: 9, color: '#fff', fontWeight: 700 }}>✓</span>}
-                          </div>
-                        </button>
-                      );
-                    })}
+                  {/* Barra de búsqueda */}
+                  <div style={{ position: 'relative', marginBottom: 10 }}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2"
+                      style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
+                      <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                    </svg>
+                    <input
+                      autoFocus
+                      placeholder={`Buscar entre ${allUsers.length} personas…`}
+                      value={teamSearch}
+                      onChange={e => setTeamSearch(e.target.value)}
+                      onClick={e => e.stopPropagation()}
+                      style={{ width: '100%', padding: '7px 10px 7px 28px', fontSize: 11, border: '0.5px solid #e2e8f0',
+                        borderRadius: 7, background: '#fff', outline: 'none', boxSizing: 'border-box',
+                        color: '#374151' }}
+                    />
+                    {teamSearch && (
+                      <button onClick={() => setTeamSearch('')}
+                        style={{ position: 'absolute', right: 7, top: '50%', transform: 'translateY(-50%)',
+                          border: 'none', background: 'none', cursor: 'pointer', color: '#94a3b8', display: 'flex', padding: 2 }}>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                        </svg>
+                      </button>
+                    )}
                   </div>
+
+                  {sortedUsers.length === 0 ? (
+                    <p style={{ margin: 0, fontSize: 11, color: '#94a3b8', textAlign: 'center', padding: '10px 0' }}>
+                      Sin resultados para "{teamSearch}"
+                    </p>
+                  ) : (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 6 }}>
+                      {sortedUsers.map(u => {
+                        const active = inProject(u);
+                        return (
+                          <button key={u.id + '-' + teamRev} onClick={() => toggleMember(u.id)}
+                            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px',
+                              border: `1.5px solid ${active ? u.avatarColor + '60' : '#e2e8f0'}`,
+                              borderRadius: 8, background: active ? u.avatarColor + '12' : '#fff',
+                              cursor: 'pointer', textAlign: 'left', transition: 'all .12s' }}>
+                            <div style={{ width: 28, height: 28, borderRadius: '50%', background: u.avatarColor,
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              fontSize: 9, fontWeight: 700, color: '#fff', flexShrink: 0 }}>
+                              {u.initials}
+                            </div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: 11, fontWeight: 600, color: '#111', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {u.name}
+                              </div>
+                              <div style={{ fontSize: 9, color: ROLE_COLOR[u.role] ?? '#64748b', fontWeight: 500 }}>
+                                {ROLE_LABEL_SHORT[u.role] ?? u.role}
+                              </div>
+                            </div>
+                            <div style={{ width: 16, height: 16, borderRadius: 4, border: `1.5px solid ${active ? u.avatarColor : '#d1d5db'}`,
+                              background: active ? u.avatarColor : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                              {active && <span style={{ fontSize: 9, color: '#fff', fontWeight: 700 }}>✓</span>}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
