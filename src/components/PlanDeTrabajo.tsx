@@ -783,13 +783,13 @@ function PlanDetail({ plan, getActivityPct, setActivityPct, onActivityClick, onG
 }
 
 // ─── computeActExpPct — % esperado de una actividad a la semana actual ──────
-// todayWeekIdx: 0-indexed (0 = S1). startWeek/endWeek: 1-indexed en el plan.
-// Lógica: cuánto tiempo del rango de la actividad ha transcurrido ya hoy.
+// Una tarea "debería estar completa" SOLO si su semana de fin ya pasó (endWeek ≤ hoy).
+// Si está en curso o no ha arrancado → NO cuenta como esperada todavía.
+// Esto permite que el esperado sea "¿cuántas tareas deberían estar 100% hechas?"
+// y da diferencias positivas (adelantado) o negativas (atrasado) según sección.
 function computeActExpPct(startWeek: number, endWeek: number, todayWeekIdx: number): number {
   const todayWeek = todayWeekIdx + 1; // pasar a 1-indexed
-  if (todayWeek < startWeek) return 0;
-  if (todayWeek >= endWeek)  return 100;
-  return parseFloat(((todayWeek - startWeek + 1) / (endWeek - startWeek + 1) * 100).toFixed(1));
+  return todayWeek >= endWeek ? 100 : 0;
 }
 
 // ─── planConfigToWorkPlan — convierte un PlanConfig (Estimaciones) → WorkPlan ─
