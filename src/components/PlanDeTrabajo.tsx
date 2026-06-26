@@ -1076,7 +1076,69 @@ const WORK_PLANS: WorkPlan[] = [
 
   // ── Proyectos resumen — pctReal/pctExp en 0 hasta que se carguen actividades reales ──
   { projectId:'NGA',     respBBVA:'TBD · BBVA',              respTimia:'Juan Pablo Arévalo M.', pasos:[], alertas:[], bloqueantes:[], entregables:[{id:'doc',name:'I. Documentación y gobierno',pctReal:0,pctExp:0,activities:[]},{id:'etl',name:'II. Componentes ETL',pctReal:0,pctExp:0,activities:[]},{id:'val',name:'III. Validación y despliegue',pctReal:0,pctExp:0,activities:[]}] },
-  { projectId:'CRONOS',  respBBVA:'TBD · BBVA',              respTimia:'Juan Pablo Arévalo M.', pasos:[], alertas:[], bloqueantes:[], entregables:[{id:'doc',name:'I. Documentación',pctReal:0,pctExp:0,activities:[]},{id:'proc',name:'II. Procesamiento Spark',pctReal:0,pctExp:0,activities:[]},{id:'auto',name:'III. Automatización',pctReal:0,pctExp:0,activities:[]}] },
+  {
+    projectId: 'CRONOS',
+    startDate: '2026-06-02',   // S1 = 2 jun → hoy 25 jun cae en S4
+    respBBVA:  'Pedro Gómez · BBVA Analytics',
+    respTimia: 'Juan Pablo Arévalo M.',
+    pasos: [
+      'Completar diccionario técnico y enviar a Gobierno de datos',
+      'Iniciar construcción componentes Spark-Scala (semana en curso)',
+      'Gestionar acceso Control-M distribuido con BBVA',
+    ],
+    alertas: ['Circuito validación Gobierno Técnico sin respuesta de BBVA'],
+    bloqueantes: [],
+    entregables: [
+      {
+        id: 'doc', name: 'I. Documentación y gobierno', pctReal: 55, pctExp: 45,
+        activities: [
+          { name: 'Análisis y resolución de dudas',          pct: 100, pctExp: 100, startWeek: 1, endWeek: 2 },
+          { name: 'Elaboración diccionario técnico',          pct:  75, pctExp: 100, startWeek: 1, endWeek: 3,
+            etapas: [
+              { id:'dt-1', label:'Levantamiento inicial de campos',  peso: 25 },
+              { id:'dt-2', label:'Envío a Gobierno de datos',        peso: 25 },
+              { id:'dt-3', label:'Correcciones de Gobierno',         peso: 25, optional: true },
+              { id:'dt-4', label:'Validación final del diccionario', peso: 25 },
+            ],
+          },
+          { name: 'Inicialización en Nebula',                pct: 100, pctExp: 100, startWeek: 1, endWeek: 1, bbva: true },
+          { name: 'Documentación técnica ETL',               pct:  50, pctExp:  75, startWeek: 2, endWeek: 4 },
+          { name: 'Circuito validación Gobierno Técnico',    pct:   0, pctExp:  20, startWeek: 3, endWeek: 6, bbva: true },
+          { name: 'Construcción Modelo Solución del Dato',   pct:  30, pctExp:  50, startWeek: 2, endWeek: 4 },
+        ],
+      },
+      {
+        id: 'ada', name: 'II. Componentes ADA', pctReal: 10, pctExp: 15,
+        activities: [
+          { name: 'Gestión repos Bitbucket · Procesamiento', pct: 100, pctExp: 100, startWeek: 1, endWeek: 1, bbva: true },
+          { name: 'Construcción Spark · Scala',              pct:  15, pctExp:  20, startWeek: 3, endWeek: 9,
+            etapas: [
+              { id:'sp-1', label:'Ambientación repositorio local',      peso: 10 },
+              { id:'sp-2', label:'Construcción clases principales',     peso: 40 },
+              { id:'sp-3', label:'Config y utilitarios',                peso: 20 },
+              { id:'sp-4', label:'Test unitarios y aceptación',         peso: 20 },
+              { id:'sp-5', label:'Escritura local · validación salida', peso: 10 },
+            ],
+          },
+          { name: 'Construcción reglas calidad (Hammurabi)', pct:   0, pctExp:   0, startWeek:  6, endWeek:  8 },
+          { name: 'Pruebas en entorno local',                pct:   0, pctExp:   0, startWeek:  8, endWeek:  9 },
+          { name: 'Despliegue y pruebas entornos Work',      pct:   0, pctExp:   0, startWeek:  9, endWeek: 10, bbva: true },
+          { name: 'Certificación calidad por equipo QA',     pct:   0, pctExp:   0, startWeek: 10, endWeek: 11, bbva: true },
+        ],
+      },
+      {
+        id: 'auto', name: 'III. Automatización y orquestación', pctReal: 0, pctExp: 0,
+        activities: [
+          { name: 'Gestión acceso Control-M distribuido',    pct: 0, pctExp: 0, startWeek:  4, endWeek:  5, bbva: true },
+          { name: 'Definición de la automatización',         pct: 0, pctExp: 0, startWeek:  5, endWeek:  6 },
+          { name: 'Construcción Mallas Control-M',           pct: 0, pctExp: 0, startWeek:  7, endWeek: 10 },
+          { name: 'Pruebas orquestación en Work',            pct: 0, pctExp: 0, startWeek:  9, endWeek: 11 },
+          { name: 'Certificación mallas Control-M',          pct: 0, pctExp: 0, startWeek: 10, endWeek: 12, bbva: true },
+          { name: 'Estabilización en producción',            pct: 0, pctExp: 0, startWeek: 12, endWeek: 13 },
+        ],
+      },
+    ],
+  },
   { projectId:'SDM1',    respBBVA:'TBD · BBVA',              respTimia:'Diego Sánchez',         pasos:[], alertas:[], bloqueantes:[], entregables:[{id:'doc',name:'I. Documentación',pctReal:0,pctExp:0,activities:[]},{id:'comp',name:'II. Componentes',pctReal:0,pctExp:0,activities:[]},{id:'int',name:'III. Integración',pctReal:0,pctExp:0,activities:[]}] },
   { projectId:'SDM2',    respBBVA:'TBD · BBVA',              respTimia:'Diego Sánchez',         pasos:[], alertas:[], bloqueantes:[], entregables:[{id:'doc',name:'I. Documentación',pctReal:0,pctExp:0,activities:[]},{id:'comp',name:'II. Componentes',pctReal:0,pctExp:0,activities:[]},{id:'auto',name:'III. Automatización',pctReal:0,pctExp:0,activities:[]}] },
   { projectId:'MURIC',   respBBVA:'TBD · BBVA',              respTimia:'Diego Sánchez',         pasos:[], alertas:[], bloqueantes:[], entregables:[{id:'doc',name:'I. Documentación',pctReal:0,pctExp:0,activities:[]},{id:'comp',name:'II. Componentes',pctReal:0,pctExp:0,activities:[]},{id:'auto',name:'III. Automatización',pctReal:0,pctExp:0,activities:[]}] },
