@@ -829,7 +829,7 @@ function planConfigToWorkPlan(cfg: PlanConfig): WorkPlan {
 const WORK_PLANS: WorkPlan[] = [
   {
     projectId: 'FICO',
-    startDate: '2026-01-26',
+    startDate: '2026-05-04',
     respBBVA: 'Alfonso Caro · Bibiana Andres Vargas',
     respTimia: 'Juan Pablo Arévalo M.',
     pasos: [
@@ -1126,7 +1126,7 @@ const WORK_PLANS: WorkPlan[] = [
   },
 
   // ── Proyectos resumen — pctReal/pctExp en 0 hasta que se carguen actividades reales ──
-  { projectId:'NGA',     respBBVA:'TBD · BBVA',              respTimia:'Juan Pablo Arévalo M.', pasos:[], alertas:[], bloqueantes:[], entregables:[{id:'doc',name:'I. Documentación y gobierno',pctReal:0,pctExp:0,activities:[]},{id:'etl',name:'II. Componentes ETL',pctReal:0,pctExp:0,activities:[]},{id:'val',name:'III. Validación y despliegue',pctReal:0,pctExp:0,activities:[]}] },
+  { projectId:'NGA', startDate:'2026-04-27', respBBVA:'TBD · BBVA',              respTimia:'Juan Pablo Arévalo M.', pasos:[], alertas:[], bloqueantes:[], entregables:[{id:'doc',name:'I. Documentación y gobierno',pctReal:0,pctExp:0,activities:[]},{id:'etl',name:'II. Componentes ETL',pctReal:0,pctExp:0,activities:[]},{id:'val',name:'III. Validación y despliegue',pctReal:0,pctExp:0,activities:[]}] },
   {
     projectId: 'CRONOS',
     startDate: '2026-06-02',   // S1 = 2 jun → hoy 25 jun cae en S4
