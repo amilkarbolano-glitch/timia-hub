@@ -176,9 +176,9 @@
       "totalWeeks": 13,
       "generatedAt": "2026-06-25T12:00:00.000Z",
       "weekLabels": [
-        "S1 · 2 jun", "S2 · 9 jun", "S3 · 16 jun", "S4 · 23 jun",
-        "S5 · 30 jun", "S6 · 7 jul", "S7 · 14 jul", "S8 · 21 jul",
-        "S9 · 28 jul", "S10 · 4 ago", "S11 · 11 ago", "S12 · 18 ago", "S13 · 25 ago"
+        "S1 · 2 jun",  "S2 · 10 jun", "S3 · 18 jun", "S4 · 25 jun",
+        "S5 · 3 jul",  "S6 · 10 jul", "S7 · 17 jul", "S8 · 27 jul",
+        "S9 · 3 ago",  "S10 · 11 ago","S11 · 19 ago","S12 · 26 ago","S13 · 2 sep"
       ],
       "entregables": [
         {

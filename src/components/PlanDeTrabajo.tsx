@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { PROJECTS, useAuth } from '../contexts/AuthContext';
 import { FlowStepper } from './SetupProject';
+import { snapToBusinessDay, addBusinessDays, computeBusinessWeekIdx } from '../lib/businessDays';
 import {
   adminStore,
   type PlanEtapa, type EtapaStates, type PlanHistorialEntry,
@@ -40,12 +41,12 @@ const CELL_W = 38;
 function difColor(d: number) { return d >= 0 ? '#15803d' : d < -5 ? '#dc2626' : '#d97706'; }
 function difBg(d: number)    { return d >= 0 ? '#dcfce7' : d < -5 ? '#fef2f2' : '#fef9c3'; }
 function fmt1(n: number)     { const d = parseFloat(n.toFixed(1)); return `${d > 0 ? '+' : ''}${d}%`; }
-function computeCurrentWeekIdx(startDate: string | undefined): number {
+// computeCurrentWeekIdx ahora delega en computeBusinessWeekIdx (días hábiles)
+// para que los festivos de timia_holidays sean tenidos en cuenta.
+// Se llama con el Set de festivos del plan activo.
+function computeCurrentWeekIdx(startDate: string | undefined, holidays: Set<string>): number {
   if (!startDate) return -1;
-  const start = new Date(startDate + 'T12:00:00');
-  const today = new Date();
-  const diffMs = today.getTime() - start.getTime();
-  return Math.floor(diffMs / (7 * 24 * 3600 * 1000)); // 0-indexed
+  return computeBusinessWeekIdx(startDate, holidays);
 }
 function getWeekDate(weekLabels: string[] | undefined, weekIdx: number, weeks: typeof WEEKS): string {
   if (weekLabels && weekLabels[weekIdx - 1]) {
@@ -54,12 +55,16 @@ function getWeekDate(weekLabels: string[] | undefined, weekIdx: number, weeks: t
   return weeks[weekIdx - 1]?.d ?? `S${weekIdx}`;
 }
 
-// Calcula la Date real del inicio de una semana dado el startDate del plan
-function weekToActualDate(planStartDate: string | undefined, weekIdx: number): Date | null {
+// Calcula la Date real del inicio de una semana dado el startDate del plan.
+// Usa días hábiles: cada semana = 5 días hábiles, saltando fines de semana y festivos.
+function weekToActualDate(
+  planStartDate: string | undefined,
+  weekIdx: number,
+  holidays: Set<string>,
+): Date | null {
   if (!planStartDate) return null;
-  const base = new Date(planStartDate + 'T12:00:00');
-  base.setDate(base.getDate() + (weekIdx - 1) * 7);
-  return base;
+  const s1 = snapToBusinessDay(new Date(planStartDate + 'T12:00:00'), holidays);
+  return addBusinessDays(s1, (weekIdx - 1) * 5, holidays);
 }
 
 // Formatea un Date como "lun 2 jun 2026"
@@ -168,6 +173,7 @@ interface ActivityDrawerProps {
   jiraId?: string;
   weekLabels?: string[];
   planStartDate?: string;
+  holidays: Set<string>;
   onEtapaToggle: (etapaId: string) => void;
   onAssigneeAdd: (userId: string) => void;
   onAssigneeRemove: (userId: string) => void;
@@ -175,7 +181,7 @@ interface ActivityDrawerProps {
   onClose: () => void;
 }
 
-function ActivityDrawer({ projectId, entregableId, actIdx, act, effectivePct, etapaStates, historial, assigneeIds, allUsers, canMark, jiraId, weekLabels, planStartDate, onEtapaToggle, onAssigneeAdd, onAssigneeRemove, onJiraSave, onClose }: ActivityDrawerProps) {
+function ActivityDrawer({ projectId, entregableId, actIdx, act, effectivePct, etapaStates, historial, assigneeIds, allUsers, canMark, jiraId, weekLabels, planStartDate, holidays, onEtapaToggle, onAssigneeAdd, onAssigneeRemove, onJiraSave, onClose }: ActivityDrawerProps) {
   const [search, setSearch]         = useState('');
   const [searchFocused, setFocused] = useState(false);
   const [editJira, setEditJira]     = useState(false);
@@ -237,9 +243,9 @@ function ActivityDrawer({ projectId, entregableId, actIdx, act, effectivePct, et
               <div style={{ width: `${effectivePct}%`, height: '100%', borderRadius: 4, background: effectivePct >= 100 ? '#15803d' : '#0d9488', transition: 'width .35s ease' }}/>
             </div>
             {(() => {
-              // Fechas reales calculadas desde startDate del plan (más preciso que parsear labels)
-              const startActual = weekToActualDate(planStartDate, act.startWeek);
-              const endActual   = weekToActualDate(planStartDate, act.endWeek);
+              // Fechas reales calculadas con días hábiles (fines de semana + festivos omitidos)
+              const startActual = weekToActualDate(planStartDate, act.startWeek, holidays);
+              const endActual   = weekToActualDate(planStartDate, act.endWeek, holidays);
               const today       = new Date();
               const isOverdue   = endActual ? endActual < today : false;
               const deadlineColor = isOverdue && effectivePct < 100 ? '#dc2626' : '#374151';
@@ -600,12 +606,13 @@ function saveNotes(projectId: string, data: { pasos:string[]; alertas:string[]; 
   localStorage.setItem(`timia_notes_${projectId}`, JSON.stringify(data));
 }
 
-function PlanDetail({ plan, getActivityPct, setActivityPct, onActivityClick, onGoEstimaciones, getDoneDate }: {
+function PlanDetail({ plan, getActivityPct, setActivityPct, onActivityClick, onGoEstimaciones, getDoneDate, holidays }: {
   plan: WorkPlan;
   getActivityPct: (eid: string, ai: number, a: PlanActivity) => number;
   setActivityPct: (eid: string, ai: number, pct: number) => void;
   onActivityClick: (eid: string, ai: number, a: PlanActivity) => void;
   onGoEstimaciones?: () => void;
+  holidays: Set<string>;
   getDoneDate?: (eid: string, ai: number) => string | undefined;
 }) {
   const color = PROJECTS.find(p => p.id === plan.projectId)?.color ?? '#64748b';
@@ -743,7 +750,7 @@ function PlanDetail({ plan, getActivityPct, setActivityPct, onActivityClick, onG
       )}
 
       {(() => {
-        const todayWeekIdx = computeCurrentWeekIdx(plan.startDate);
+        const todayWeekIdx = computeCurrentWeekIdx(plan.startDate, holidays);
         return plan.entregables.map((e, ei) => (
           <EntregableSection key={e.id} block={e} projectId={plan.projectId} sectionIdx={ei}
             getActivityPct={i => getActivityPct(e.id,i,e.activities[i])}
@@ -2067,6 +2074,12 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
   // All active users for the search (not project-filtered — 100+ employees)
   const allUsers: AdminUser[] = adminStore.getUsers().filter(u => u.active);
 
+  // Set de festivos para cálculo de días hábiles (cargado una vez por render)
+  const holidays = React.useMemo(() => {
+    const hols = adminStore.getHolidays();
+    return new Set(hols.map(h => h.date));
+  }, []);
+
   const drawerKey         = drawer ? `${drawer.projectId}__${drawer.entregableId}__${drawer.actIdx}` : '';
   const drawerAssigneeIds = drawer ? (activityAssignees[drawerKey] ?? []) : [];
   const drawerEffectivePct = drawer ? getActivityPct(drawer.projectId, drawer.entregableId, drawer.actIdx, drawer.act) : 0;
@@ -2154,6 +2167,7 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
               onActivityClick={(eid,ai,a)=>setDrawer({projectId:plan.projectId,entregableId:eid,actIdx:ai,act:a})}
               onGoEstimaciones={onGoEstimaciones}
               getDoneDate={(eid,ai)=>getDoneDateLabel(plan.projectId,eid,ai)}
+              holidays={holidays}
             />
           </>
         ) : (
@@ -2171,6 +2185,7 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
           jiraId={activityJiras[drawerKey]}
           weekLabels={effectivePlans.find(p => p.projectId === drawer.projectId)?.weekLabels}
           planStartDate={effectivePlans.find(p => p.projectId === drawer.projectId)?.startDate}
+          holidays={holidays}
           onEtapaToggle={handleEtapaToggle}
           onAssigneeAdd={handleAssigneeAdd}
           onAssigneeRemove={handleAssigneeRemove}
