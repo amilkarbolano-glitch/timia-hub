@@ -532,6 +532,14 @@ export const adminStore = {
   getImputaciones:  (): ImputacionEntry[]       => load('imputaciones', DEFAULT_IMPUTACIONES),
   saveImputaciones: (i: ImputacionEntry[])      => save('imputaciones', i),
 
+  // Activity done dates: key = `${projectId}-${entregableId}-${actIdx}`
+  getActivityDoneDates: (): Record<string, string> => {
+    try { return JSON.parse(localStorage.getItem('timia_activity_done_dates') ?? '{}'); } catch { return {}; }
+  },
+  saveActivityDoneDates: (d: Record<string, string>) => {
+    try { localStorage.setItem('timia_activity_done_dates', JSON.stringify(d)); } catch {}
+  },
+
   // Sync a specific plan-activity assignee to its kanban card
   syncKanbanAssignees: (projectId: string, entregableId: string, actIdx: number, assigneeIds: string[]) => {
     const tasks = load<KanbanTask[]>('kanban_tasks', DEFAULT_KANBAN_TASKS);

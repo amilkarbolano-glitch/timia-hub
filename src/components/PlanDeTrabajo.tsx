@@ -22,7 +22,7 @@ interface PlanActivity {
   bbva?: boolean; subtasks?: PlanSubtask[]; etapas?: PlanEtapa[];
 }
 interface PlanEntregable { id: string; name: string; pctReal: number; pctExp: number; activities: PlanActivity[]; }
-interface WorkPlan { projectId: string; respBBVA: string; respTimia: string; pasos: string[]; alertas: string[]; bloqueantes: string[]; entregables: PlanEntregable[]; }
+interface WorkPlan { projectId: string; respBBVA: string; respTimia: string; pasos: string[]; alertas: string[]; bloqueantes: string[]; entregables: PlanEntregable[]; startDate?: string; weekLabels?: string[]; }
 
 // ─── Semanas ──────────────────────────────────────────────────────────────────
 
@@ -40,6 +40,19 @@ const CELL_W = 38;
 function difColor(d: number) { return d >= 0 ? '#15803d' : d < -5 ? '#dc2626' : '#d97706'; }
 function difBg(d: number)    { return d >= 0 ? '#dcfce7' : d < -5 ? '#fef2f2' : '#fef9c3'; }
 function fmt1(n: number)     { const d = parseFloat(n.toFixed(1)); return `${d > 0 ? '+' : ''}${d}%`; }
+function computeCurrentWeekIdx(startDate: string | undefined): number {
+  if (!startDate) return -1;
+  const start = new Date(startDate + 'T12:00:00');
+  const today = new Date();
+  const diffMs = today.getTime() - start.getTime();
+  return Math.floor(diffMs / (7 * 24 * 3600 * 1000)); // 0-indexed
+}
+function getWeekDate(weekLabels: string[] | undefined, weekIdx: number, weeks: typeof WEEKS): string {
+  if (weekLabels && weekLabels[weekIdx - 1]) {
+    return weekLabels[weekIdx - 1].replace(/S\d+ · /, '').replace(' 🗓', '');
+  }
+  return weeks[weekIdx - 1]?.d ?? `S${weekIdx}`;
+}
 function hexToRgb(hex: string): [number, number, number] {
   const c = hex.replace('#', '');
   const n = parseInt(c.length === 3 ? c.split('').map(x => x+x).join('') : c, 16);
@@ -48,19 +61,21 @@ function hexToRgb(hex: string): [number, number, number] {
 
 // ─── GanttCell ────────────────────────────────────────────────────────────────
 
-function GanttCell({ wi, act, effectivePct, isSubtask }: { wi: number; act: PlanActivity; effectivePct: number; isSubtask?: boolean }) {
+function GanttCell({ wi, act, effectivePct, isSubtask, todayWeekIdx }: { wi: number; act: PlanActivity; effectivePct: number; isSubtask?: boolean; todayWeekIdx?: number }) {
   const planStart = act.startWeek - 1, planEnd = act.endWeek, totalSpan = planEnd - planStart;
   const execEnd = planStart + (effectivePct / 100) * totalSpan;
   const cellStart = wi, cellEnd = wi + 1;
   const planOverlap = Math.max(0, Math.min(planEnd, cellEnd) - Math.max(planStart, cellStart));
-  if (planOverlap === 0) return <td style={{ width: CELL_W, minWidth: CELL_W, borderLeft: '0.5px solid #f1f5f9' }} />;
+  const isToday = todayWeekIdx !== undefined && todayWeekIdx >= 0 && wi === todayWeekIdx;
+  const todayStyle = isToday ? { borderLeft: '2px solid #16a34a', background: '#f0fdf4' } : {};
+  if (planOverlap === 0) return <td style={{ width: CELL_W, minWidth: CELL_W, borderLeft: isToday ? '2px solid #16a34a' : '0.5px solid #f1f5f9', background: isToday ? '#f0fdf4' : undefined }} />;
   const execOverlap = Math.max(0, Math.min(execEnd, cellEnd) - Math.max(planStart, cellStart));
   const execPct = (execOverlap / planOverlap) * 100;
   const isFirst = planStart >= cellStart && planStart < cellEnd;
   const isLast  = planEnd > cellStart && planEnd <= cellEnd;
   const br = `${isFirst?3:0}px ${isLast?3:0}px ${isLast?3:0}px ${isFirst?3:0}px`;
   return (
-    <td style={{ width: CELL_W, minWidth: CELL_W, borderLeft: '0.5px solid #f1f5f9' }}>
+    <td style={{ width: CELL_W, minWidth: CELL_W, borderLeft: isToday ? '2px solid #16a34a' : '0.5px solid #f1f5f9', ...todayStyle }}>
       <div style={{ margin: '3px 1px', height: 13, borderRadius: br, overflow: 'hidden', background: isSubtask ? 'rgba(13,148,136,0.12)' : 'rgba(13,148,136,0.22)' }}>
         <div style={{ width: `${execPct}%`, height: '100%', background: isSubtask ? 'rgba(13,148,136,0.55)' : '#0d9488', transition: 'width .3s' }} />
       </div>
@@ -70,10 +85,11 @@ function GanttCell({ wi, act, effectivePct, isSubtask }: { wi: number; act: Plan
 
 // ─── GanttRow ─────────────────────────────────────────────────────────────────
 
-function GanttRow({ act, effectivePct, idx, expanded, onToggle, isSubtask = false, onPctChange, onActivityClick }: {
+function GanttRow({ act, effectivePct, idx, expanded, onToggle, isSubtask = false, onPctChange, onActivityClick, todayWeekIdx, doneDateLabel }: {
   act: PlanActivity; effectivePct: number; idx: number; expanded: boolean;
   onToggle: () => void; isSubtask?: boolean;
   onPctChange?: (n: number) => void; onActivityClick?: () => void;
+  todayWeekIdx?: number; doneDateLabel?: string;
 }) {
   const hasSubtasks = (act.subtasks?.length ?? 0) > 0;
   const hasEtapas   = (act.etapas?.length ?? 0) > 0;
@@ -96,6 +112,11 @@ function GanttRow({ act, effectivePct, idx, expanded, onToggle, isSubtask = fals
           {isSubtask && <span style={{ color: '#94a3b8', fontSize: 10, flexShrink: 0 }}>└</span>}
           {act.bbva && !isSubtask && <span style={{ fontSize: 8, padding: '1px 4px', borderRadius: 3, background: '#dbeafe', color: '#1d4ed8', fontWeight: 700, flexShrink: 0, whiteSpace: 'nowrap' }}>BBVA</span>}
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{act.name}</span>
+          {doneDateLabel && (
+            <span style={{ fontSize: 9, color: '#15803d', fontWeight: 500, flexShrink: 0, whiteSpace: 'nowrap' }}>
+              ({doneDateLabel})
+            </span>
+          )}
           {(act as any).optional && <span style={{ fontSize: 8, color: '#94a3b8', flexShrink: 0 }}>(opc.)</span>}
           {hasEtapas && !isSubtask && <LayoutList size={10} color="#0d9488" style={{ flexShrink: 0 }}/>}
         </div>
@@ -116,7 +137,7 @@ function GanttRow({ act, effectivePct, idx, expanded, onToggle, isSubtask = fals
         )}
       </td>
       {Array.from({ length: TOTAL_WEEKS }).map((_, wi) => (
-        <GanttCell key={wi} wi={wi} act={act} effectivePct={effectivePct} isSubtask={isSubtask}/>
+        <GanttCell key={wi} wi={wi} act={act} effectivePct={effectivePct} isSubtask={isSubtask} todayWeekIdx={todayWeekIdx}/>
       ))}
     </tr>
   );
@@ -130,6 +151,7 @@ interface ActivityDrawerProps {
   etapaStates: EtapaStates; historial: PlanHistorialEntry[];
   assigneeIds: string[]; allUsers: AdminUser[]; canMark: boolean;
   jiraId?: string;
+  weekLabels?: string[];
   onEtapaToggle: (etapaId: string) => void;
   onAssigneeAdd: (userId: string) => void;
   onAssigneeRemove: (userId: string) => void;
@@ -137,7 +159,7 @@ interface ActivityDrawerProps {
   onClose: () => void;
 }
 
-function ActivityDrawer({ projectId, entregableId, actIdx, act, effectivePct, etapaStates, historial, assigneeIds, allUsers, canMark, jiraId, onEtapaToggle, onAssigneeAdd, onAssigneeRemove, onJiraSave, onClose }: ActivityDrawerProps) {
+function ActivityDrawer({ projectId, entregableId, actIdx, act, effectivePct, etapaStates, historial, assigneeIds, allUsers, canMark, jiraId, weekLabels, onEtapaToggle, onAssigneeAdd, onAssigneeRemove, onJiraSave, onClose }: ActivityDrawerProps) {
   const [search, setSearch]         = useState('');
   const [searchFocused, setFocused] = useState(false);
   const [editJira, setEditJira]     = useState(false);
@@ -198,6 +220,38 @@ function ActivityDrawer({ projectId, entregableId, actIdx, act, effectivePct, et
             <div style={{ height: 7, background: '#f1f5f9', borderRadius: 4, overflow: 'hidden' }}>
               <div style={{ width: `${effectivePct}%`, height: '100%', borderRadius: 4, background: effectivePct >= 100 ? '#15803d' : '#0d9488', transition: 'width .35s ease' }}/>
             </div>
+            {(() => {
+              const endDateStr = getWeekDate(weekLabels, act.endWeek, WEEKS);
+              // Parse end date — format is DD/MM (assume current year or 2026)
+              let endDate: Date | null = null;
+              if (endDateStr && endDateStr.includes('/')) {
+                const parts = endDateStr.split('/');
+                if (parts.length === 2) {
+                  endDate = new Date(`2026-${parts[1].padStart(2,'0')}-${parts[0].padStart(2,'0')}T23:59:00`);
+                }
+              }
+              const today = new Date();
+              const isOverdue = endDate ? endDate < today : false;
+              const deadlineColor = isOverdue && effectivePct < 100 ? '#dc2626' : '#374151';
+              return (
+                <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 8, padding: '6px 10px', background: '#f8fafc', borderRadius: 7, fontSize: 11 }}>
+                  <div>
+                    <span style={{ color: '#94a3b8', fontSize: 10 }}>Inicio</span>
+                    <div style={{ fontWeight: 600, color: '#374151' }}>S{act.startWeek} · {getWeekDate(weekLabels, act.startWeek, WEEKS)}</div>
+                  </div>
+                  <div style={{ color: '#e2e8f0' }}>→</div>
+                  <div>
+                    <span style={{ color: '#94a3b8', fontSize: 10 }}>Fin planificado</span>
+                    <div style={{ fontWeight: 600, color: deadlineColor }}>S{act.endWeek} · {getWeekDate(weekLabels, act.endWeek, WEEKS)}</div>
+                  </div>
+                  {isOverdue && effectivePct < 100 && (
+                    <div style={{ marginLeft: 'auto', padding: '3px 8px', background: '#fef2f2', border: '0.5px solid #fecaca', borderRadius: 6, fontSize: 10, color: '#dc2626', fontWeight: 600 }}>
+                      ⚠ Fecha límite vencida
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         </div>
 
@@ -388,12 +442,14 @@ function ActivityDrawer({ projectId, entregableId, actIdx, act, effectivePct, et
 
 // ─── EntregableSection ────────────────────────────────────────────────────────
 
-function EntregableSection({ block, projectId, sectionIdx, getActivityPct, setActivityPct, onActivityClick, onGoEstimaciones }: {
+function EntregableSection({ block, projectId, sectionIdx, getActivityPct, setActivityPct, onActivityClick, onGoEstimaciones, todayWeekIdx, getDoneDate }: {
   block: PlanEntregable; projectId: string; sectionIdx: number;
   getActivityPct: (i: number) => number;
   setActivityPct: (i: number, pct: number) => void;
   onActivityClick: (i: number, act: PlanActivity) => void;
   onGoEstimaciones?: () => void;
+  todayWeekIdx?: number;
+  getDoneDate?: (i: number) => string | undefined;
 }) {
   const effectiveActivities = block.activities.map((a, i) => ({ ...a, pct: getActivityPct(i) }));
   const effectivePctReal = block.activities.length > 0
@@ -426,19 +482,24 @@ function EntregableSection({ block, projectId, sectionIdx, getActivityPct, setAc
               <tr style={{ background: '#881337' }}>
                 <th style={{ padding:'6px 10px', textAlign:'left', fontSize:10, color:'#fff', fontWeight:600, minWidth:230 }}>Actividades / Avance</th>
                 <th style={{ padding:'6px', textAlign:'center', fontSize:10, color:'#fff', fontWeight:600, width:50 }}>%</th>
-                {WEEKS.map((w, i) => (
-                  <th key={i} style={{ width:CELL_W, padding:'4px 2px', textAlign:'center', borderLeft:'0.5px solid rgba(255,255,255,0.15)' }}>
-                    <div style={{ fontSize:9, fontWeight:700, color:'#fce7f3' }}>{w.l}</div>
-                    <div style={{ fontSize:7, color:'#fbcfe8' }}>{w.d}</div>
-                  </th>
-                ))}
+                {WEEKS.map((w, i) => {
+                  const isToday = todayWeekIdx !== undefined && todayWeekIdx >= 0 && i === todayWeekIdx;
+                  return (
+                    <th key={i} style={{ width:CELL_W, padding:'4px 2px', textAlign:'center', borderLeft: isToday ? '2px solid #16a34a' : '0.5px solid rgba(255,255,255,0.15)', background: isToday ? 'rgba(22,163,74,0.25)' : undefined }}>
+                      {isToday && <div style={{ fontSize:6, fontWeight:800, color:'#86efac', letterSpacing:'.05em', lineHeight:1.2 }}>HOY</div>}
+                      <div style={{ fontSize:9, fontWeight:700, color: isToday ? '#fff' : '#fce7f3' }}>{w.l}</div>
+                      <div style={{ fontSize:7, color: isToday ? '#bbf7d0' : '#fbcfe8' }}>{w.d}</div>
+                    </th>
+                  );
+                })}
               </tr>
             </thead>
             <tbody>
               {effectiveActivities.map((act, i) => (
                 <React.Fragment key={i}>
                   <GanttRow act={act} effectivePct={act.pct} idx={i} expanded={expanded.has(i)} onToggle={() => toggle(i)}
-                    onPctChange={v => setActivityPct(i, v)} onActivityClick={() => onActivityClick(i, block.activities[i])}/>
+                    onPctChange={v => setActivityPct(i, v)} onActivityClick={() => onActivityClick(i, block.activities[i])}
+                    todayWeekIdx={todayWeekIdx} doneDateLabel={getDoneDate?.(i)}/>
                   {expanded.has(i) && act.subtasks?.map((sub, si) => (
                     <GanttRow key={`sub-${si}`} act={{ name:sub.name, pct:sub.pct, pctExp:sub.pct, startWeek:act.startWeek, endWeek:act.endWeek, ...(sub.optional?{optional:true}as any:{}) }} effectivePct={sub.pct} idx={si} expanded={false} onToggle={() => {}} isSubtask/>
                   ))}
@@ -521,12 +582,13 @@ function saveNotes(projectId: string, data: { pasos:string[]; alertas:string[]; 
   localStorage.setItem(`timia_notes_${projectId}`, JSON.stringify(data));
 }
 
-function PlanDetail({ plan, getActivityPct, setActivityPct, onActivityClick, onGoEstimaciones }: {
+function PlanDetail({ plan, getActivityPct, setActivityPct, onActivityClick, onGoEstimaciones, getDoneDate }: {
   plan: WorkPlan;
   getActivityPct: (eid: string, ai: number, a: PlanActivity) => number;
   setActivityPct: (eid: string, ai: number, pct: number) => void;
   onActivityClick: (eid: string, ai: number, a: PlanActivity) => void;
   onGoEstimaciones?: () => void;
+  getDoneDate?: (eid: string, ai: number) => string | undefined;
 }) {
   const color = PROJECTS.find(p => p.id === plan.projectId)?.color ?? '#64748b';
   // ── Extra notes (persisted) ─────────────────────────────────────────────────
@@ -662,14 +724,19 @@ function PlanDetail({ plan, getActivityPct, setActivityPct, onActivityClick, onG
         />
       )}
 
-      {plan.entregables.map((e, ei) => (
-        <EntregableSection key={e.id} block={e} projectId={plan.projectId} sectionIdx={ei}
-          getActivityPct={i => getActivityPct(e.id,i,e.activities[i])}
-          setActivityPct={(i,pct) => setActivityPct(e.id,i,pct)}
-          onActivityClick={(i,a) => onActivityClick(e.id,i,a)}
-          onGoEstimaciones={onGoEstimaciones}
-        />
-      ))}
+      {(() => {
+        const todayWeekIdx = computeCurrentWeekIdx(plan.startDate);
+        return plan.entregables.map((e, ei) => (
+          <EntregableSection key={e.id} block={e} projectId={plan.projectId} sectionIdx={ei}
+            getActivityPct={i => getActivityPct(e.id,i,e.activities[i])}
+            setActivityPct={(i,pct) => setActivityPct(e.id,i,pct)}
+            onActivityClick={(i,a) => onActivityClick(e.id,i,a)}
+            onGoEstimaciones={onGoEstimaciones}
+            todayWeekIdx={todayWeekIdx}
+            getDoneDate={getDoneDate ? (i => getDoneDate(e.id, i)) : undefined}
+          />
+        ));
+      })()}
     </div>
   );
 }
@@ -679,6 +746,8 @@ function PlanDetail({ plan, getActivityPct, setActivityPct, onActivityClick, onG
 function planConfigToWorkPlan(cfg: PlanConfig): WorkPlan {
   return {
     projectId: cfg.projectId,
+    startDate: cfg.startDate,
+    weekLabels: cfg.weekLabels,
     respBBVA:  'Por definir',
     respTimia: 'Por definir',
     pasos:      ['Plan generado desde Estimaciones — ajusta los % de avance'],
@@ -709,6 +778,7 @@ function planConfigToWorkPlan(cfg: PlanConfig): WorkPlan {
 const WORK_PLANS: WorkPlan[] = [
   {
     projectId: 'FICO',
+    startDate: '2026-01-26',
     respBBVA: 'Alfonso Caro · Bibiana Andres Vargas',
     respTimia: 'Juan Pablo Arévalo M.',
     pasos: [
@@ -1343,6 +1413,7 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
   const [activityAssignees, setActivityAssignees] = useState<ActivityAssignees>(()   => adminStore.getActivityAssignees());
   const [pctOverrides,      setPctOverrides]      = useState<Record<string,number>>(()=> adminStore.getPlanPcts());
   const [activityJiras,     setActivityJiras]     = useState<Record<string,string>>(()=> adminStore.getActivityJiras());
+  const [activityDoneDates, setActivityDoneDates] = useState<Record<string,string>>(()=> adminStore.getActivityDoneDates());
   const [selected,          setSelected]          = useState<string>(() => {
     // Si vienen de Estimaciones con un proyecto recién generado, auto-seleccionarlo
     const lastGen = localStorage.getItem('timia_last_plan_project');
@@ -1401,6 +1472,15 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
     const k = `${selected}-${entregableId}-${actIdx}`;
     const next = { ...pctOverrides, [k]: pct };
     setPctOverrides(next); adminStore.savePlanPcts(next);
+    const doneKey = `${selected}-${entregableId}-${actIdx}`;
+    const nextDone = { ...activityDoneDates };
+    if (pct >= 100) {
+      if (!nextDone[doneKey]) nextDone[doneKey] = new Date().toISOString();
+    } else {
+      delete nextDone[doneKey];
+    }
+    setActivityDoneDates(nextDone);
+    adminStore.saveActivityDoneDates(nextDone);
   }
 
   function handleEtapaToggle(etapaId: string) {
@@ -1427,8 +1507,16 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
       timestamp: new Date().toISOString(),
     };
     const nextHistorial = [histEntry, ...historial];
+    const doneKey2 = `${projectId}-${entregableId}-${actIdx}`;
+    const nextDone2 = { ...activityDoneDates };
+    if (newActPct >= 100) {
+      if (!nextDone2[doneKey2]) nextDone2[doneKey2] = new Date().toISOString();
+    } else {
+      delete nextDone2[doneKey2];
+    }
+    setActivityDoneDates(nextDone2);
     setEtapaStates(nextEtapaStates); setPctOverrides(nextPctOverrides); setHistorial(nextHistorial);
-    adminStore.saveEtapaStates(nextEtapaStates); adminStore.savePlanPcts(nextPctOverrides); adminStore.saveHistorial(nextHistorial);
+    adminStore.saveEtapaStates(nextEtapaStates); adminStore.savePlanPcts(nextPctOverrides); adminStore.saveHistorial(nextHistorial); adminStore.saveActivityDoneDates(nextDone2);
   }
 
   function handleAssigneeAdd(userId: string) {
@@ -1888,6 +1976,14 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
     setActivityJiras(next); adminStore.saveActivityJiras(next);
   }
 
+  function getDoneDateLabel(projectId: string, entregableId: string, actIdx: number): string | undefined {
+    const k = `${projectId}-${entregableId}-${actIdx}`;
+    const iso = activityDoneDates[k];
+    if (!iso) return undefined;
+    const d = new Date(iso);
+    return `finalizada ${d.getDate()} ${d.toLocaleDateString('es-CO', { month: 'short' })}`;
+  }
+
   // All active users for the search (not project-filtered — 100+ employees)
   const allUsers: AdminUser[] = adminStore.getUsers().filter(u => u.active);
 
@@ -1977,6 +2073,7 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
               setActivityPct={(eid,ai,pct)=>setActivityPctManual(eid,ai,pct)}
               onActivityClick={(eid,ai,a)=>setDrawer({projectId:plan.projectId,entregableId:eid,actIdx:ai,act:a})}
               onGoEstimaciones={onGoEstimaciones}
+              getDoneDate={(eid,ai)=>getDoneDateLabel(plan.projectId,eid,ai)}
             />
           </>
         ) : (
@@ -1992,6 +2089,7 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
           etapaStates={etapaStates} historial={historial}
           assigneeIds={drawerAssigneeIds} allUsers={allUsers} canMark={canMark}
           jiraId={activityJiras[drawerKey]}
+          weekLabels={effectivePlans.find(p => p.projectId === drawer.projectId)?.weekLabels}
           onEtapaToggle={handleEtapaToggle}
           onAssigneeAdd={handleAssigneeAdd}
           onAssigneeRemove={handleAssigneeRemove}
