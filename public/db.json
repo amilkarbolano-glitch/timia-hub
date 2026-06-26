@@ -2,6 +2,21 @@
   "_version": "1.0.0",
   "_note": "Fuente de verdad del app Timia Hub. Editar aquí y hacer commit para actualizar datos en todas las instancias.",
 
+  "_comment_startdates": "startDate de planes por proyecto. Sobrescribe el hardcodeado en WORK_PLANS sin recompilar. Hoy = 2026-06-26.",
+  "timia_plan_startdates": {
+    "FICO":     "2026-05-04",
+    "NGA":      "2026-04-27",
+    "SDM1":     "2026-04-27",
+    "SDM2":     "2026-05-04",
+    "BCBS239":  "2026-04-13",
+    "OPTIM":    "2026-05-04",
+    "FABRICA":  "2026-04-20",
+    "MURIC":    "2026-05-11",
+    "BRICKELL": "2026-05-11",
+    "PINTO":    "2026-05-18",
+    "QA":       "2026-05-18"
+  },
+
   "timia_admin_projects": [
     {"id":"FICO",     "name":"FICO",         "area":"Juan Pablo Arévalo", "color":"#dc2626", "priority":"Media",   "client":"BBVA Colombia",     "startDate":"2026-01-15", "active":true, "sda":"BCOL-2025-0082"},
     {"id":"NGA",      "name":"NGA",          "area":"Juan Pablo Arévalo", "color":"#7c3aed", "priority":"Alta",    "client":"BBVA Colombia",     "startDate":"2026-01-15", "active":true, "sda":"BCOL-2025-0091"},
