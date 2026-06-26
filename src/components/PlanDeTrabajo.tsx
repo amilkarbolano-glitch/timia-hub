@@ -479,7 +479,11 @@ function EntregableSection({ block, projectId, sectionIdx, getActivityPct, setAc
   const effectivePctReal = block.activities.length > 0
     ? parseFloat((effectiveActivities.reduce((s, a) => s + a.pct, 0) / effectiveActivities.length).toFixed(1))
     : block.pctReal;
-  const dif = parseFloat((effectivePctReal - block.pctExp).toFixed(1));
+  // pctExp dinámico: promedio de lo que debería estar completado hoy según el Gantt
+  const dynamicPctExp = block.activities.length > 0 && todayWeekIdx !== undefined
+    ? parseFloat((block.activities.reduce((s, a) => s + computeActExpPct(a.startWeek, a.endWeek, todayWeekIdx), 0) / block.activities.length).toFixed(1))
+    : block.pctExp;
+  const dif = parseFloat((effectivePctReal - dynamicPctExp).toFixed(1));
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const toggle = (i: number) => setExpanded(prev => { const n = new Set(prev); n.has(i) ? n.delete(i) : n.add(i); return n; });
 
@@ -491,7 +495,7 @@ function EntregableSection({ block, projectId, sectionIdx, getActivityPct, setAc
           <span style={{ fontSize: 9, color: '#94a3b8', marginRight: 2, display: 'flex', alignItems: 'center', gap: 3 }}>
             <LayoutList size={10}/> Click actividad para etapas
           </span>
-          {[{ label:'Avance real', val:`${effectivePctReal}%`, bg:'#374151' },{ label:'Esperado', val:`${block.pctExp}%`, bg:'#4b5563' },{ label:'Diferencia', val:fmt1(dif), bg:difBg(dif), c:difColor(dif) }].map(b => (
+          {[{ label:'Avance real', val:`${effectivePctReal}%`, bg:'#374151' },{ label:'Esperado', val:`${dynamicPctExp}%`, bg:'#4b5563' },{ label:'Diferencia', val:fmt1(dif), bg:difBg(dif), c:difColor(dif) }].map(b => (
             <div key={b.label} style={{ textAlign:'center', padding:'4px 12px', background: b.bg, borderRadius:7 }}>
               <div style={{ fontSize:8, color: (b as any).c ?? '#9ca3af', marginBottom:1 }}>{b.label}</div>
               <div style={{ fontSize:15, fontWeight:700, color: (b as any).c ?? '#fff' }}>{b.val}</div>
@@ -631,10 +635,19 @@ function PlanDetail({ plan, getActivityPct, setActivityPct, onActivityClick, onG
     const next = { ...extraNotes, [type]: extraNotes[type].filter((_:string,i:number)=>i!==customIdx) };
     saveExtra(next);
   }
+  // todayWeekIdx disponible en todo PlanDetail para cálculos de esperado
+  const todayWeekIdx = computeCurrentWeekIdx(plan.startDate, holidays);
+
   const overallReal = parseFloat((plan.entregables.map(e => e.activities.length
     ? e.activities.reduce((s,a,i) => s + getActivityPct(e.id,i,a), 0) / e.activities.length
     : e.pctReal).reduce((s,v)=>s+v,0) / plan.entregables.length).toFixed(1));
-  const overallExp  = parseFloat((plan.entregables.reduce((s,e)=>s+e.pctExp,0)/plan.entregables.length).toFixed(1));
+
+  // overallExp dinámico: promedio de pctExp calculado por semana para cada actividad
+  const overallExp = parseFloat((plan.entregables.map(e => {
+    if (!e.activities.length) return e.pctExp;
+    return e.activities.reduce((s, a) => s + computeActExpPct(a.startWeek, a.endWeek, todayWeekIdx), 0) / e.activities.length;
+  }).reduce((s,v)=>s+v,0) / plan.entregables.length).toFixed(1));
+
   const overallDif  = parseFloat((overallReal-overallExp).toFixed(1));
 
   return (
@@ -671,13 +684,17 @@ function PlanDetail({ plan, getActivityPct, setActivityPct, onActivityClick, onG
           const ePct = e.activities.length
             ? parseFloat((e.activities.reduce((s,a,i)=>s+getActivityPct(e.id,i,a),0)/e.activities.length).toFixed(1))
             : e.pctReal;
-          const dif = parseFloat((ePct-e.pctExp).toFixed(1));
+          // pctExp dinámico por entregable
+          const eExp = e.activities.length
+            ? parseFloat((e.activities.reduce((s,a)=>s+computeActExpPct(a.startWeek,a.endWeek,todayWeekIdx),0)/e.activities.length).toFixed(1))
+            : e.pctExp;
+          const dif = parseFloat((ePct-eExp).toFixed(1));
           return (
             <div key={e.id} style={{ background:'#fff', border:'0.5px solid #e2e8f0', borderRadius:10, padding:'10px 14px' }}>
               <p style={{ margin:'0 0 8px', fontSize:11, fontWeight:600, color:'#9f1239', lineHeight:1.3 }}>{e.name}</p>
               <div style={{ display:'flex', alignItems:'baseline', gap:6, marginBottom:4 }}>
                 <span style={{ fontSize:20, fontWeight:700, color:'#111' }}>{ePct}%</span>
-                <span style={{ fontSize:10, color:'#94a3b8' }}>real · {e.pctExp}% esp.</span>
+                <span style={{ fontSize:10, color:'#94a3b8' }}>real · {eExp}% esp.</span>
                 <span style={{ fontSize:11, fontWeight:700, color:difColor(dif), marginLeft:'auto' }}>{fmt1(dif)}</span>
               </div>
               <div style={{ height:5, background:'#f1f5f9', borderRadius:4, overflow:'hidden' }}>
@@ -750,7 +767,6 @@ function PlanDetail({ plan, getActivityPct, setActivityPct, onActivityClick, onG
       )}
 
       {(() => {
-        const todayWeekIdx = computeCurrentWeekIdx(plan.startDate, holidays);
         return plan.entregables.map((e, ei) => (
           <EntregableSection key={e.id} block={e} projectId={plan.projectId} sectionIdx={ei}
             getActivityPct={i => getActivityPct(e.id,i,e.activities[i])}
@@ -764,6 +780,16 @@ function PlanDetail({ plan, getActivityPct, setActivityPct, onActivityClick, onG
       })()}
     </div>
   );
+}
+
+// ─── computeActExpPct — % esperado de una actividad a la semana actual ──────
+// todayWeekIdx: 0-indexed (0 = S1). startWeek/endWeek: 1-indexed en el plan.
+// Lógica: cuánto tiempo del rango de la actividad ha transcurrido ya hoy.
+function computeActExpPct(startWeek: number, endWeek: number, todayWeekIdx: number): number {
+  const todayWeek = todayWeekIdx + 1; // pasar a 1-indexed
+  if (todayWeek < startWeek) return 0;
+  if (todayWeek >= endWeek)  return 100;
+  return parseFloat(((todayWeek - startWeek + 1) / (endWeek - startWeek + 1) * 100).toFixed(1));
 }
 
 // ─── planConfigToWorkPlan — convierte un PlanConfig (Estimaciones) → WorkPlan ─
