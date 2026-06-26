@@ -36,6 +36,7 @@ export interface ImputacionEntry {
 export interface AdminProject {
   id: string; name: string; area: string; color: string;
   priority: Priority; client: string; startDate: string; active: boolean;
+  sda?: string;  // Código SDA — solo clientes BBVA Colombia / BBVA Argentina
 }
 
 export interface AdminUser {
