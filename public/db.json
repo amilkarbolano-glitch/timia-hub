@@ -169,6 +169,105 @@
     {"id":"imp-1537",  "projectId":"FICO","jiraId":"DECRONOS-1537","summary":"Procesamiento FICO – integración completa y cierre",                "type":"Enabler Delivery","status":"In Progress","assigneeIds":["u-sergio","u-fabrizio","u-amilkar"],"month":"Mayo",    "weeks":"",      "q":"Q2-II-2026","phase":"Codificación",    "hoursEst":120, "hoursImputed":48,  "context":"",                                                        "createdBy":"Juan Pablo Arévalo","createdAt":"2026-05-01"}
   ],
 
+  "timia_plan_configs": {
+    "CRONOS": {
+      "projectId": "CRONOS",
+      "startDate": "2026-06-02",
+      "totalWeeks": 13,
+      "generatedAt": "2026-06-25T12:00:00.000Z",
+      "weekLabels": [
+        "S1 · 2 jun", "S2 · 9 jun", "S3 · 16 jun", "S4 · 23 jun",
+        "S5 · 30 jun", "S6 · 7 jul", "S7 · 14 jul", "S8 · 21 jul",
+        "S9 · 28 jul", "S10 · 4 ago", "S11 · 11 ago", "S12 · 18 ago", "S13 · 25 ago"
+      ],
+      "entregables": [
+        {
+          "id": "doc", "label": "I. Documentación y gobierno",
+          "activities": [
+            {"label": "Análisis y resolución de dudas",         "startWeek": 1, "endWeek": 2},
+            {"label": "Elaboración diccionario técnico",        "startWeek": 1, "endWeek": 3,
+             "etapas": [
+               {"id":"dt-1","label":"Levantamiento inicial de campos",  "peso":25},
+               {"id":"dt-2","label":"Envío a Gobierno de datos",        "peso":25},
+               {"id":"dt-3","label":"Correcciones de Gobierno",         "peso":25,"optional":true},
+               {"id":"dt-4","label":"Validación final del diccionario", "peso":25}
+             ]},
+            {"label": "Inicialización en Nebula",              "startWeek": 1, "endWeek": 1, "bbva": true},
+            {"label": "Documentación técnica ETL",             "startWeek": 2, "endWeek": 4},
+            {"label": "Circuito validación Gobierno Técnico",  "startWeek": 3, "endWeek": 6, "bbva": true},
+            {"label": "Construcción Modelo Solución del Dato", "startWeek": 2, "endWeek": 4}
+          ]
+        },
+        {
+          "id": "ada", "label": "II. Componentes ADA",
+          "activities": [
+            {"label": "Gestión repos Bitbucket · Procesamiento","startWeek": 1, "endWeek": 1, "bbva": true},
+            {"label": "Construcción Spark · Scala",             "startWeek": 3, "endWeek": 9,
+             "etapas": [
+               {"id":"sp-1","label":"Ambientación repositorio local",      "peso":10},
+               {"id":"sp-2","label":"Construcción clases principales",     "peso":40},
+               {"id":"sp-3","label":"Config y utilitarios",                "peso":20},
+               {"id":"sp-4","label":"Test unitarios y aceptación",         "peso":20},
+               {"id":"sp-5","label":"Escritura local · validación salida", "peso":10}
+             ]},
+            {"label": "Construcción reglas calidad (Hammurabi)","startWeek":  6, "endWeek":  8},
+            {"label": "Pruebas en entorno local",               "startWeek":  8, "endWeek":  9},
+            {"label": "Despliegue y pruebas entornos Work",     "startWeek":  9, "endWeek": 10, "bbva": true},
+            {"label": "Certificación calidad por equipo QA",    "startWeek": 10, "endWeek": 11, "bbva": true}
+          ]
+        },
+        {
+          "id": "auto", "label": "III. Automatización y orquestación",
+          "activities": [
+            {"label": "Gestión acceso Control-M distribuido",  "startWeek":  4, "endWeek":  5, "bbva": true},
+            {"label": "Definición de la automatización",       "startWeek":  5, "endWeek":  6},
+            {"label": "Construcción Mallas Control-M",         "startWeek":  7, "endWeek": 10},
+            {"label": "Pruebas orquestación en Work",          "startWeek":  9, "endWeek": 11},
+            {"label": "Certificación mallas Control-M",        "startWeek": 10, "endWeek": 12, "bbva": true},
+            {"label": "Estabilización en producción",          "startWeek": 12, "endWeek": 13}
+          ]
+        }
+      ]
+    }
+  },
+
+  "timia_plan_pcts": {
+    "CRONOS-doc-0": 100,
+    "CRONOS-doc-2": 100,
+    "CRONOS-doc-3": 50,
+    "CRONOS-doc-4": 0,
+    "CRONOS-doc-5": 30,
+    "CRONOS-ada-0": 100,
+    "CRONOS-ada-2": 0,
+    "CRONOS-ada-3": 0,
+    "CRONOS-ada-4": 0,
+    "CRONOS-ada-5": 0,
+    "CRONOS-auto-0": 0,
+    "CRONOS-auto-1": 0,
+    "CRONOS-auto-2": 0,
+    "CRONOS-auto-3": 0,
+    "CRONOS-auto-4": 0,
+    "CRONOS-auto-5": 0
+  },
+
+  "timia_etapa_states": {
+    "CRONOS__doc__1__dt-1": {"done":true,  "doneBy":"Juliana Garzón",         "doneAt":"2026-06-10T10:00:00.000Z"},
+    "CRONOS__doc__1__dt-2": {"done":true,  "doneBy":"Juliana Garzón",         "doneAt":"2026-06-15T14:00:00.000Z"},
+    "CRONOS__doc__1__dt-3": {"done":true,  "doneBy":"Sergio David Rodriguez", "doneAt":"2026-06-19T11:00:00.000Z"},
+    "CRONOS__doc__1__dt-4": {"done":false, "doneBy":"",                       "doneAt":""},
+    "CRONOS__ada__1__sp-1": {"done":true,  "doneBy":"Fabrizio Atiquipa",      "doneAt":"2026-06-17T09:00:00.000Z"},
+    "CRONOS__ada__1__sp-2": {"done":false, "doneBy":"",                       "doneAt":""},
+    "CRONOS__ada__1__sp-3": {"done":false, "doneBy":"",                       "doneAt":""},
+    "CRONOS__ada__1__sp-4": {"done":false, "doneBy":"",                       "doneAt":""},
+    "CRONOS__ada__1__sp-5": {"done":false, "doneBy":"",                       "doneAt":""}
+  },
+
+  "timia_activity_done_dates": {
+    "CRONOS-doc-0": "2026-06-09T15:00:00.000Z",
+    "CRONOS-doc-2": "2026-06-03T11:00:00.000Z",
+    "CRONOS-ada-0": "2026-06-03T09:00:00.000Z"
+  },
+
   "timia_kanban_tasks": [
     {"id":"kt-1","title":"Análisis y resolución de dudas","description":"Recopilación y resolución de dudas técnicas con BBVA para inicio del proyecto FICO.","priority":"Alta","startDate":"2026-01-26","endDate":"2026-02-08","status":"done","assigneeIds":["u-juliana"],"projectId":"FICO","entregableId":"doc","actIdx":0,"fromPlan":true,"links":[],"comments":[]},
     {"id":"kt-2","title":"Elaboración diccionario técnico (370 campos)","description":"Levantamiento, envío a Gobierno de Datos BBVA y validación del diccionario técnico.","priority":"Alta","startDate":"2026-01-26","endDate":"2026-02-08","status":"in-progress","assigneeIds":["u-juliana"],"projectId":"FICO","entregableId":"doc","actIdx":1,"fromPlan":true,"links":[],"comments":[]},
