@@ -42,6 +42,8 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     'view_plan_trabajo', 'mark_etapas',
     // Estimaciones: tech_lead crea/edita los planes, el PM los aprueba y genera
     'view_estimaciones', 'edit_estimaciones',
+    // Admin: el líder ve y gestiona solo los proyectos que tiene asignados
+    'view_admin',
   ],
   project_lead: [
     'view_project', 'view_bank_status', 'manage_tasks', 'assign_tasks',

@@ -174,8 +174,8 @@ export default function Layout({ children, currentView, onViewChange, userRole }
                 </div>
               )}
 
-              {/* 7. Admin — solo PM, al final */}
-              {userRole === 'pm' && (
+              {/* 7. Admin — PM (global) y tech_lead (solo sus proyectos) */}
+              {canAccess(userRole as UserRole, 'view_admin') && (
                 <button onClick={() => onViewChange('admin')}
                   className={`text-sm font-medium transition-colors flex items-center gap-1 ${currentView==='admin'?'text-primary':'text-slate-600 hover:text-primary'}`}>
                   <Building2 size={13}/> Admin

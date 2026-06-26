@@ -7,7 +7,7 @@ import {
   adminStore, AdminProject, AdminUser, AnsConfig,
   BbvaAnsConfig, Holiday, Priority, UserRole,
 } from '../lib/adminStore';
-import { PROJECTS } from '../contexts/AuthContext';
+import { PROJECTS, useAuth } from '../contexts/AuthContext';
 
 // ─── Paleta colores ────────────────────────────────────────────────────────────
 const COLORS = ['#dc2626','#7c3aed','#2563eb','#0891b2','#059669','#d97706','#be185d','#0369a1','#0f766e','#4f46e5','#b45309','#7e22ce'];
@@ -242,8 +242,12 @@ function TeamModal({
 // Tab 1: Proyectos (con equipo inline)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function TabProyectos({ onViewChange }: { onViewChange?: (view: string) => void }) {
-  const [projects, setProjects]   = useState<AdminProject[]>(() => adminStore.getProjects());
+function TabProyectos({ onViewChange, allowedProjectIds }: { onViewChange?: (view: string) => void; allowedProjectIds?: string[] }) {
+  const allProjects = adminStore.getProjects();
+  // Si allowedProjectIds está definido (tech_lead), mostramos solo sus proyectos
+  const [projects, setProjects] = useState<AdminProject[]>(() =>
+    allowedProjectIds ? allProjects.filter(p => allowedProjectIds.includes(p.id)) : allProjects
+  );
   const [users, setUsers]         = useState<AdminUser[]>(() => adminStore.getUsers());
   const [editing, setEditing]     = useState<AdminProject | null>(null);
   const [expanded, setExpanded]   = useState<string | null>(null);
@@ -761,7 +765,15 @@ const ADMIN_TABS: { id: AdminTab; label: string; icon: React.ReactNode; desc: st
 ];
 
 export default function AdminPanel({ onViewChange }: { onViewChange?: (view: string) => void } = {}) {
-  const [tab, setTab] = useState<AdminTab>('proyectos');  // default: proyectos con equipo
+  const { user } = useAuth();
+  const isPM        = user?.role === 'pm';
+  const isTechLead  = user?.role === 'tech_lead';
+  // tech_lead solo ve sus proyectos asignados; PM ve todos
+  const allowedProjectIds = isTechLead ? (user?.projectIds ?? []) : undefined;
+  // Tabs visibles: tech_lead solo ve Proyectos (los globales son solo PM)
+  const visibleTabs = isPM ? ADMIN_TABS : ADMIN_TABS.filter(t => t.id === 'proyectos');
+
+  const [tab, setTab] = useState<AdminTab>('proyectos');
 
   return (
     <div style={{ padding: '28px 36px', maxWidth: 1520, margin: '0 auto' }}>
@@ -774,25 +786,29 @@ export default function AdminPanel({ onViewChange }: { onViewChange?: (view: str
           <h2 style={{ margin: 0, fontSize: 20, fontWeight: 500, color: '#111' }}>Panel de administración</h2>
         </div>
         <p style={{ margin: 0, fontSize: 13, color: '#94a3b8' }}>
-          Configuración parametrizable del sistema — solo accesible para Project Manager
+          {isPM
+            ? 'Configuración global del sistema — Project Manager'
+            : 'Gestión de equipos de tus proyectos asignados — Líder Técnico'}
         </p>
       </div>
 
-      {/* Nav tabs */}
-      <div style={{ display: 'flex', gap: 0, marginBottom: 24, borderBottom: '0.5px solid #e2e8f0' }}>
-        {ADMIN_TABS.map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)}
-            style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '10px 18px', fontSize: 12, fontWeight: tab === t.id ? 500 : 400, color: tab === t.id ? '#dc2626' : '#64748b', background: 'none', border: 'none', borderBottom: tab === t.id ? '2px solid #dc2626' : '2px solid transparent', cursor: 'pointer', transition: 'all .15s' }}>
-            {t.icon} {t.label}
-          </button>
-        ))}
-      </div>
+      {/* Nav tabs — solo se muestran los tabs que el rol puede ver */}
+      {visibleTabs.length > 1 && (
+        <div style={{ display: 'flex', gap: 0, marginBottom: 24, borderBottom: '0.5px solid #e2e8f0' }}>
+          {visibleTabs.map(t => (
+            <button key={t.id} onClick={() => setTab(t.id as AdminTab)}
+              style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '10px 18px', fontSize: 12, fontWeight: tab === t.id ? 500 : 400, color: tab === t.id ? '#dc2626' : '#64748b', background: 'none', border: 'none', borderBottom: tab === t.id ? '2px solid #dc2626' : '2px solid transparent', cursor: 'pointer', transition: 'all .15s' }}>
+              {t.icon} {t.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Content */}
-      {tab === 'proyectos' && <TabProyectos onViewChange={onViewChange}/>}
-      {tab === 'usuarios'  && <TabEquipo/>}
-      {tab === 'ans'       && <TabAns/>}
-      {tab === 'festivos'  && <TabFestivos/>}
+      {tab === 'proyectos' && <TabProyectos onViewChange={onViewChange} allowedProjectIds={allowedProjectIds}/>}
+      {tab === 'usuarios'  && isPM && <TabEquipo/>}
+      {tab === 'ans'       && isPM && <TabAns/>}
+      {tab === 'festivos'  && isPM && <TabFestivos/>}
     </div>
   );
 }
