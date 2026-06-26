@@ -317,7 +317,10 @@ function TabProyectos({ onViewChange, allowedProjectIds }: { onViewChange?: (vie
                 <span style={{ fontSize: 12, fontWeight: 700, color: p.color }}>{p.id}</span>
                 <span style={{ fontSize: 12, fontWeight: 500, color: '#111' }}>{p.name}</span>
                 <span style={{ fontSize: 11, color: '#64748b' }}>{p.area || '—'}</span>
-                <span style={{ fontSize: 11, color: '#64748b' }}>{p.client}</span>
+                <span style={{ fontSize: 11, color: '#64748b' }}>
+                  {p.client}
+                  {p.sda && <span style={{ marginLeft: 5, fontSize: 10, padding: '1px 5px', background: '#eff6ff', color: '#1d4ed8', borderRadius: 4, fontWeight: 600, border: '0.5px solid #bfdbfe' }}>{p.sda}</span>}
+                </span>
                 <Badge color={PRIO_COLOR[p.priority]}>{p.priority}</Badge>
                 <span style={{ fontSize: 11, color: '#64748b' }}>{p.startDate || '—'}</span>
                 {/* Equipo inline: avatares */}
@@ -418,6 +421,18 @@ function TabProyectos({ onViewChange, allowedProjectIds }: { onViewChange?: (vie
                   </select>
                 </div>
               </div>
+              {/* SDA — solo visible para clientes BBVA */}
+              {editing.client.toUpperCase().includes('BBVA') && (
+                <div>
+                  <label style={{ fontSize: 11, color: '#64748b', display: 'block', marginBottom: 4 }}>
+                    Código SDA
+                    <span style={{ marginLeft: 6, fontSize: 10, color: '#94a3b8', fontWeight: 400 }}>BBVA Colombia / Argentina</span>
+                  </label>
+                  <input value={editing.sda ?? ''} onChange={e => setEditing(v => v && ({ ...v, sda: e.target.value }))}
+                    placeholder="Ej: BCOL-2026-0012"
+                    style={{ width: '100%', padding: '8px 10px', fontSize: 12, border: '0.5px solid #bfdbfe', borderRadius: 7, boxSizing: 'border-box', background: '#eff6ff' }}/>
+                </div>
+              )}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div>
                   <label style={{ fontSize: 11, color: '#64748b', display: 'block', marginBottom: 4 }}>Fecha inicio</label>
