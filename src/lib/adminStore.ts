@@ -67,10 +67,21 @@ export interface BitacoraEntry {
   quien: string; tipo: 'Campo' | 'Regla' | 'Modelo' | 'ETL' | 'Otro';
   descripcion: string; motivo: string;
   tablasAfectadas: string; jira: string;
-  responsableId?: string;   // usuario responsable del cambio
+  responsableId?: string;   // usuario Timia responsable del cambio (uno solo)
   responsable?: string;     // nombre (denormalizado)
+  solicitadoPor?: string;   // quién lo pidió (BBVA / negocio / etc.)
   horasEstimadas?: number;  // horas estimadas al momento de registrar el cambio
   impacts?: PlanImpact[];   // tareas/subtareas del plan impactadas
+  /** 'extiende' (default): corre el fin de las tareas impactadas · 'absorbe': no mueve fechas */
+  modo?: 'extiende' | 'absorbe';
+}
+
+/** Horas por día hábil para convertir cambios en extensión de plan */
+export const HOURS_PER_DAY = 8;
+/** Días hábiles que un conjunto de cambios agrega a una tarea (solo modo 'extiende'). */
+export function changeExtensionDays(changes: BitacoraEntry[]): number {
+  const h = changes.filter(c => c.modo !== 'absorbe').reduce((s, c) => s + (c.horasEstimadas ?? 0), 0);
+  return h > 0 ? Math.ceil(h / HOURS_PER_DAY - 1e-9) : 0;
 }
 
 export type CircuitoColumna = 'Pendiente' | 'Enviado' | 'En revisión' | 'Observaciones' | 'Aprobado';

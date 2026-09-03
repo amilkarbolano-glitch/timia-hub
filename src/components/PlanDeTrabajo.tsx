@@ -12,7 +12,7 @@ import {
   adminStore,
   type PlanEtapa, type EtapaStates, type PlanHistorialEntry,
   type ActivityAssignees, type AdminUser, type PlanConfig, type PlanIssue, type PlanImpact, type BitacoraEntry,
-  issueImpacts, makePlanKey, splitPlanKey, planKeyOf, CRONO_MAIN_NAME,
+  issueImpacts, changeExtensionDays, makePlanKey, splitPlanKey, planKeyOf, CRONO_MAIN_NAME,
 } from '../lib/adminStore';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -95,7 +95,7 @@ function hexToRgb(hex: string): [number, number, number] {
 
 // ─── GanttCell ────────────────────────────────────────────────────────────────
 
-function GanttCell({ wi, act, effectivePct, isSubtask, todayWeekIdx, issueMark }: { wi: number; act: PlanActivity; effectivePct: number; isSubtask?: boolean; todayWeekIdx?: number; issueMark?: 'alerta' | 'bloqueante' }) {
+function GanttCell({ wi, act, effectivePct, isSubtask, todayWeekIdx, issueMark, extWeeks = 0 }: { wi: number; act: PlanActivity; effectivePct: number; isSubtask?: boolean; todayWeekIdx?: number; issueMark?: 'alerta' | 'bloqueante'; extWeeks?: number }) {
   // Marca de alerta/bloqueante en la semana: franja inferior roja/ámbar
   const markBar = issueMark ? (
     <div style={{ position:'absolute', left:0, right:0, bottom:0, height:3, background: issueMark==='bloqueante' ? '#dc2626' : '#f59e0b', opacity:.9 }}/>
@@ -106,7 +106,14 @@ function GanttCell({ wi, act, effectivePct, isSubtask, todayWeekIdx, issueMark }
   const planOverlap = Math.max(0, Math.min(planEnd, cellEnd) - Math.max(planStart, cellStart));
   const isToday = todayWeekIdx !== undefined && todayWeekIdx >= 0 && wi === todayWeekIdx;
   const todayStyle = isToday ? { borderLeft: '2px solid #16a34a', background: '#f0fdf4' } : {};
-  if (planOverlap === 0) return <td style={{ position:'relative', width: CELL_W, minWidth: CELL_W, borderLeft: isToday ? '2px solid #16a34a' : '0.5px solid #f1f5f9', background: isToday ? '#f0fdf4' : undefined }}>{markBar}</td>;
+  // Segmento de extensión por cambios (rayado morado) entre planEnd y planEnd+extWeeks
+  const extEnd = planEnd + extWeeks;
+  const extOverlap = extWeeks > 0 ? Math.max(0, Math.min(extEnd, cellEnd) - Math.max(planEnd, cellStart)) : 0;
+  const extBar = extOverlap > 0 ? (
+    <div title={`Extensión por cambios funcionales`} style={{ position:'absolute', top:3, height:13, left:`${(Math.max(planEnd, cellStart) - cellStart) * 100}%`, width:`${extOverlap * 100}%`,
+      background:'repeating-linear-gradient(135deg, #c4b5fd 0 3px, #ede9fe 3px 6px)', borderRadius: extEnd <= cellEnd ? '0 3px 3px 0' : 0, borderRight: extEnd <= cellEnd ? '2px solid #7c3aed' : 'none' }}/>
+  ) : null;
+  if (planOverlap === 0) return <td style={{ position:'relative', width: CELL_W, minWidth: CELL_W, borderLeft: isToday ? '2px solid #16a34a' : '0.5px solid #f1f5f9', background: isToday ? '#f0fdf4' : undefined }}>{markBar}{extBar}</td>;
   const execOverlap = Math.max(0, Math.min(execEnd, cellEnd) - Math.max(planStart, cellStart));
   const execPct = (execOverlap / planOverlap) * 100;
   const isFirst = planStart >= cellStart && planStart < cellEnd;
@@ -114,7 +121,7 @@ function GanttCell({ wi, act, effectivePct, isSubtask, todayWeekIdx, issueMark }
   const br = `${isFirst?3:0}px ${isLast?3:0}px ${isLast?3:0}px ${isFirst?3:0}px`;
   return (
     <td style={{ position:'relative', width: CELL_W, minWidth: CELL_W, borderLeft: isToday ? '2px solid #16a34a' : '0.5px solid #f1f5f9', ...todayStyle }}>
-      {markBar}
+      {markBar}{extBar}
       <div style={{ margin: '3px 1px', height: 13, borderRadius: br, overflow: 'hidden', background: isSubtask ? 'rgba(13,148,136,0.12)' : 'rgba(13,148,136,0.22)' }}>
         <div style={{ width: `${execPct}%`, height: '100%', background: isSubtask ? 'rgba(13,148,136,0.55)' : '#0d9488', transition: 'width .3s' }} />
       </div>
@@ -124,7 +131,7 @@ function GanttCell({ wi, act, effectivePct, isSubtask, todayWeekIdx, issueMark }
 
 // ─── GanttRow ─────────────────────────────────────────────────────────────────
 
-function GanttRow({ act, effectivePct, idx, expanded, onToggle, isSubtask = false, onPctChange, onActivityClick, todayWeekIdx, doneDateLabel, issues = [], issueWeeks, changes }: {
+function GanttRow({ act, effectivePct, idx, expanded, onToggle, isSubtask = false, onPctChange, onActivityClick, todayWeekIdx, doneDateLabel, issues = [], issueWeeks, changes, ext }: {
   act: PlanActivity; effectivePct: number; idx: number; expanded: boolean;
   onToggle: () => void; isSubtask?: boolean;
   onPctChange?: (n: number) => void; onActivityClick?: () => void;
@@ -135,6 +142,8 @@ function GanttRow({ act, effectivePct, idx, expanded, onToggle, isSubtask = fals
   issueWeeks?: Record<number, 'alerta' | 'bloqueante'>;
   /** Cambios funcionales (Tareas/Bitácora) que impactan esta actividad */
   changes?: BitacoraEntry[];
+  /** Extensión calculada por cambios (días hábiles, fracción de semana, nueva fecha fin) */
+  ext?: { days: number; extWeeks: number; hours: number; newEndLabel?: string };
 }) {
   const hasBloq  = issues.some(i => i.type === 'bloqueante');
   const hasAlert = issues.some(i => i.type === 'alerta');
@@ -171,9 +180,10 @@ function GanttRow({ act, effectivePct, idx, expanded, onToggle, isSubtask = fals
           )}
           {(act as any).optional && <span style={{ fontSize: 8, color: '#94a3b8', flexShrink: 0 }}>(opc.)</span>}
           {(changes?.length ?? 0) > 0 && (
-            <span title={changes!.map(c => `Δ ${c.fecha} · ${c.descripcion}${c.horasEstimadas ? ` (+${c.horasEstimadas} h)` : ''}${c.responsable ? ` · ${c.responsable}` : ''}`).join('\n')}
-              style={{ fontSize: 8, padding: '1px 5px', borderRadius: 3, background: '#ede9fe', color: '#6d28d9', fontWeight: 700, flexShrink: 0, whiteSpace: 'nowrap', cursor: 'help' }}>
-              Δ{changes!.length > 1 ? changes!.length : ''}{changes!.some(c => c.horasEstimadas) ? ` +${changes!.reduce((s, c) => s + (c.horasEstimadas ?? 0), 0)}h` : ''}
+            <span title={[...changes!.map(c => `Δ ${c.fecha} · ${c.descripcion}${c.horasEstimadas ? ` (+${c.horasEstimadas} h${c.modo === 'absorbe' ? ', absorbido' : ''})` : ''}${c.responsable ? ` · ${c.responsable}` : ''}`),
+                ...(ext && ext.days > 0 ? [`→ Fin replanificado: ${ext.newEndLabel ?? ''} (+${ext.days} día${ext.days !== 1 ? 's' : ''} hábil${ext.days !== 1 ? 'es' : ''})`] : [])].join('\n')}
+              style={{ fontSize: 8, padding: '1px 5px', borderRadius: 3, background: '#ede9fe', color: '#6d28d9', fontWeight: 700, flexShrink: 0, whiteSpace: 'nowrap', cursor: 'help', border: ext && ext.days > 0 ? '0.5px solid #c4b5fd' : 'none' }}>
+              Δ{changes!.length > 1 ? changes!.length : ''}{ext && ext.hours > 0 ? ` +${ext.hours}h` : ''}{ext && ext.days > 0 ? ` · +${ext.days}d` : ''}
             </span>
           )}
           {hasEtapas && !isSubtask && <LayoutList size={10} color="#0d9488" style={{ flexShrink: 0 }}/>}
@@ -195,7 +205,7 @@ function GanttRow({ act, effectivePct, idx, expanded, onToggle, isSubtask = fals
         )}
       </td>
       {Array.from({ length: TOTAL_WEEKS }).map((_, wi) => (
-        <GanttCell key={wi} wi={wi} act={act} effectivePct={effectivePct} isSubtask={isSubtask} todayWeekIdx={todayWeekIdx} issueMark={issueWeeks?.[wi]}/>
+        <GanttCell key={wi} wi={wi} act={act} effectivePct={effectivePct} isSubtask={isSubtask} todayWeekIdx={todayWeekIdx} issueMark={issueWeeks?.[wi]} extWeeks={ext?.extWeeks ?? 0}/>
       ))}
     </tr>
   );
@@ -348,7 +358,7 @@ function ActivityDrawer({ projectId, entregableId, actIdx, act, effectivePct, et
             {changes.map(c => (
               <div key={c.id} style={{ fontSize:10, color:'#374151', lineHeight:1.4, margin:'2px 0' }}>
                 <strong>{c.fecha}</strong> · {c.descripcion}
-                <span style={{ color:'#94a3b8' }}> · {c.tipo}{c.horasEstimadas ? ` · +${c.horasEstimadas} h` : ''}{c.responsable ? ` · ${c.responsable}` : ''}</span>
+                <span style={{ color:'#94a3b8' }}> · {c.tipo}{c.horasEstimadas ? ` · +${c.horasEstimadas} h${c.modo === 'absorbe' ? ' (absorbido)' : ''}` : ''}{c.responsable ? ` · ${c.responsable}` : ''}{c.solicitadoPor ? ` · pidió: ${c.solicitadoPor}` : ''}</span>
               </div>
             ))}
           </div>
@@ -562,6 +572,12 @@ function EntregableSection({ block, projectId, sectionIdx, getActivityPct, setAc
   const todayISO = new Date().toISOString().slice(0, 10);
   const hits = (imps: PlanImpact[], i: number) => imps.some(m => m.planKey === planKey && m.entregableId === block.id && m.actIdx === i);
   function changesFor(i: number): BitacoraEntry[] { return (changes ?? []).filter(c => hits(c.impacts ?? [], i)); }
+  function extFor(i: number) {
+    const a = block.activities[i];
+    const ex = extensionFor(changes, planKey, block.id, i, a.endWeek);
+    const d = holidays ? effectiveEndDate(planStartDate, a.endWeek, ex.days, holidays) : null;
+    return { ...ex, newEndLabel: d ? fmtCalDate(d) : undefined };
+  }
   function issuesFor(i: number): { list: PlanIssue[]; weeks: Record<number, 'alerta' | 'bloqueante'> } {
     const list = (issues ?? []).filter(x => !x.endDate && hits(issueImpacts(x), i));
     const weeks: Record<number, 'alerta' | 'bloqueante'> = {};
@@ -581,7 +597,7 @@ function EntregableSection({ block, projectId, sectionIdx, getActivityPct, setAc
     : block.pctReal;
   // pctExp dinámico: promedio de lo que debería estar completado hoy según el Gantt
   const dynamicPctExp = block.activities.length > 0 && todayWeekIdx !== undefined
-    ? parseFloat((block.activities.reduce((s, a) => s + computeActExpPct(a.startWeek, a.endWeek, todayWeekIdx), 0) / block.activities.length).toFixed(1))
+    ? parseFloat((block.activities.reduce((s, a, i) => s + computeActExpPct(a.startWeek, extensionFor(changes, planKey, block.id, i, a.endWeek).effEndWeek, todayWeekIdx), 0) / block.activities.length).toFixed(1))
     : block.pctExp;
   const dif = parseFloat((effectivePctReal - dynamicPctExp).toFixed(1));
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
@@ -637,7 +653,7 @@ function EntregableSection({ block, projectId, sectionIdx, getActivityPct, setAc
                   <GanttRow act={act} effectivePct={act.pct} idx={i} expanded={expanded.has(i)} onToggle={() => toggle(i)}
                     onPctChange={v => setActivityPct(i, v)} onActivityClick={() => onActivityClick(i, block.activities[i])}
                     todayWeekIdx={todayWeekIdx} doneDateLabel={getDoneDate?.(i)}
-                    issues={issuesFor(i).list} issueWeeks={issuesFor(i).weeks} changes={changesFor(i)}/>
+                    issues={issuesFor(i).list} issueWeeks={issuesFor(i).weeks} changes={changesFor(i)} ext={extFor(i)}/>
                   {expanded.has(i) && act.subtasks?.map((sub, si) => (
                     <GanttRow key={`sub-${si}`} act={{ name:sub.name, pct:sub.pct, pctExp:sub.pct, startWeek:act.startWeek, endWeek:act.endWeek, ...(sub.optional?{optional:true}as any:{}) }} effectivePct={sub.pct} idx={si} expanded={false} onToggle={() => {}} isSubtask/>
                   ))}
@@ -936,10 +952,28 @@ function PlanDetail({ plan, getActivityPct, setActivityPct, onActivityClick, onG
   // overallExp dinámico: promedio de pctExp calculado por semana para cada actividad
   const overallExp = parseFloat((plan.entregables.map(e => {
     if (!e.activities.length) return e.pctExp;
-    return e.activities.reduce((s, a) => s + computeActExpPct(a.startWeek, a.endWeek, todayWeekIdx), 0) / e.activities.length;
+    return e.activities.reduce((s, a, i) => s + computeActExpPct(a.startWeek, extensionFor(changes, plan.planKey, e.id, i, a.endWeek).effEndWeek, todayWeekIdx), 0) / e.activities.length;
   }).reduce((s,v)=>s+v,0) / plan.entregables.length).toFixed(1));
 
   const overallDif  = parseFloat((overallReal-overallExp).toFixed(1));
+
+  // ── Resumen de cambios funcionales sobre este cronograma ─────────────────
+  const planChanges = changes.filter(c => (c.impacts ?? []).some(m => m.planKey === plan.planKey));
+  const changeSummary = (() => {
+    if (!planChanges.length) return null;
+    const hours = planChanges.reduce((s, c) => s + (c.horasEstimadas ?? 0), 0);
+    const absorbed = planChanges.filter(c => c.modo === 'absorbe').length;
+    let daysTotal = 0, baseEnd = 0, effEnd = 0, tasks = 0;
+    plan.entregables.forEach(e => e.activities.forEach((a, i) => {
+      const ex = extensionFor(changes, plan.planKey, e.id, i, a.endWeek);
+      baseEnd = Math.max(baseEnd, a.endWeek); effEnd = Math.max(effEnd, ex.effEndWeek);
+      if (ex.days > 0) { daysTotal += ex.days; tasks++; }
+    }));
+    const weeksShift = effEnd - baseEnd;
+    const endDate = holidays ? effectiveEndDate(plan.startDate, baseEnd, 0, holidays) : null;
+    const newEndDate = weeksShift > 0 && holidays ? effectiveEndDate(plan.startDate, effEnd, 0, holidays) : null;
+    return { n: planChanges.length, hours, absorbed, daysTotal, tasks, weeksShift, endDate, newEndDate };
+  })();
 
   return (
     <div>
@@ -980,7 +1014,7 @@ function PlanDetail({ plan, getActivityPct, setActivityPct, onActivityClick, onG
             : e.pctReal;
           // pctExp dinámico por entregable
           const eExp = e.activities.length
-            ? parseFloat((e.activities.reduce((s,a)=>s+computeActExpPct(a.startWeek,a.endWeek,todayWeekIdx),0)/e.activities.length).toFixed(1))
+            ? parseFloat((e.activities.reduce((s,a,i)=>s+computeActExpPct(a.startWeek,extensionFor(changes, plan.planKey, e.id, i, a.endWeek).effEndWeek,todayWeekIdx),0)/e.activities.length).toFixed(1))
             : e.pctExp;
           const dif = parseFloat((ePct-eExp).toFixed(1));
           return (
@@ -998,6 +1032,20 @@ function PlanDetail({ plan, getActivityPct, setActivityPct, onActivityClick, onG
           );
         })}
       </div>
+
+      {/* Resumen de cambios funcionales (Tareas) que impactan este cronograma */}
+      {changeSummary && (
+        <div style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 14px', marginBottom:8, background:'#faf5ff', border:'0.5px solid #ddd6fe', borderRadius:10, flexWrap:'wrap' }}>
+          <span style={{ fontSize:11, fontWeight:700, color:'#6d28d9' }}>Δ {changeSummary.n} cambio{changeSummary.n !== 1 ? 's' : ''} funcional{changeSummary.n !== 1 ? 'es' : ''}</span>
+          <span style={{ fontSize:10, color:'#374151' }}>+{changeSummary.hours} h estimadas{changeSummary.absorbed ? ` (${changeSummary.absorbed} absorbido${changeSummary.absorbed !== 1 ? 's' : ''})` : ''}</span>
+          {changeSummary.daysTotal > 0 && <span style={{ fontSize:10, color:'#374151' }}>· +{changeSummary.daysTotal} día{changeSummary.daysTotal !== 1 ? 's' : ''} hábil{changeSummary.daysTotal !== 1 ? 'es' : ''} sobre {changeSummary.tasks} tarea{changeSummary.tasks !== 1 ? 's' : ''}</span>}
+          <span style={{ marginLeft:'auto', fontSize:10, color: changeSummary.weeksShift > 0 ? '#dc2626' : '#15803d', fontWeight:600 }}>
+            {changeSummary.weeksShift > 0
+              ? `Fin del cronograma: ${changeSummary.newEndDate ? fmtCalDate(changeSummary.newEndDate) : ''} (+${changeSummary.weeksShift} sem vs. línea base${changeSummary.endDate ? ` ${fmtCalDate(changeSummary.endDate)}` : ''})`
+              : 'Fin del cronograma sin cambio — la extensión cabe dentro del plan'}
+          </span>
+        </div>
+      )}
 
       {/* Pasos (editables) + Alertas / Bloqueantes con fechas e impacto */}
       <div style={{ display:'grid', gridTemplateColumns:'1fr 2fr', gap:8, marginBottom:20 }}>
@@ -1095,6 +1143,27 @@ function PlanDetail({ plan, getActivityPct, setActivityPct, onActivityClick, onG
 function computeActExpPct(startWeek: number, endWeek: number, todayWeekIdx: number): number {
   const todayWeek = todayWeekIdx + 1; // pasar a 1-indexed
   return todayWeek >= endWeek ? 100 : 0;
+}
+
+// ─── Extensión por cambios funcionales ───────────────────────────────────────
+// 8 h = 1 día hábil. La línea base (endWeek) no se toca; el fin efectivo es
+// endWeek + días/5 (fracción de semana). Sin cascada a otras tareas.
+interface ActExtension { hours: number; days: number; extWeeks: number; effEndWeek: number; changes: BitacoraEntry[] }
+function extensionFor(changes: BitacoraEntry[] | undefined, planKey: string | undefined, entregableId: string, actIdx: number, endWeek: number): ActExtension {
+  const list = (changes ?? []).filter(c => (c.impacts ?? []).some(m => m.planKey === planKey && m.entregableId === entregableId && m.actIdx === actIdx));
+  const days = changeExtensionDays(list);
+  const hours = list.filter(c => c.modo !== 'absorbe').reduce((s, c) => s + (c.horasEstimadas ?? 0), 0);
+  const extWeeks = days / 5;
+  // Semana en la que realmente termina (1-indexed, entera): si la extensión entra en la semana siguiente, cuenta esa
+  const effEndWeek = days > 0 ? Math.ceil(endWeek + extWeeks - 1e-9) : endWeek;
+  return { hours, days, extWeeks, effEndWeek, changes: list };
+}
+/** Fecha real de fin de una tarea considerando extensión (último día hábil). */
+function effectiveEndDate(planStartDate: string | undefined, endWeek: number, days: number, holidays: Set<string>): Date | null {
+  const nextWeekStart = weekToActualDate(planStartDate, endWeek + 1, holidays);
+  if (!nextWeekStart) return null;
+  const base = addBusinessDays(nextWeekStart, -1, holidays);
+  return days > 0 ? addBusinessDays(base, days, holidays) : base;
 }
 
 // ─── planConfigToWorkPlan — convierte un PlanConfig (Estimaciones) → WorkPlan ─
@@ -1514,10 +1583,11 @@ const WORK_PLANS: WorkPlan[] = WORK_PLANS_RAW.map(p => ({ ...p, planKey: p.proje
 // Muestra el % ponderado por actividades del proyecto completo, una tarjeta por
 // cronograma y una línea de tiempo calendario donde se ve el solapamiento.
 
-function ConsolidadoView({ plans, holidays, getActivityPct, onOpen, openIssues = [] }: {
+function ConsolidadoView({ plans, holidays, getActivityPct, onOpen, openIssues = [], changes = [] }: {
   plans: WorkPlan[];
   holidays: Set<string>;
   openIssues?: PlanIssue[];
+  changes?: BitacoraEntry[];
   getActivityPct: (planKey: string, eid: string, ai: number, a: PlanActivity) => number;
   onOpen: (planKey: string) => void;
 }) {
@@ -1525,16 +1595,23 @@ function ConsolidadoView({ plans, holidays, getActivityPct, onOpen, openIssues =
   const color = PROJECTS.find(p => p.id === projectId)?.color ?? '#64748b';
   const today = new Date(); today.setHours(12,0,0,0);
 
-  type Row = { p: WorkPlan; real: number; exp: number; n: number; start: Date | null; end: Date | null; weeks: number; todayIdx: number };
+  type Row = { p: WorkPlan; real: number; exp: number; n: number; start: Date | null; end: Date | null; weeks: number; todayIdx: number; extDays: number; weeksShift: number };
   const rows: Row[] = plans.map(p => {
     const todayIdx = computeCurrentWeekIdx(p.startDate, holidays);
     let sr = 0, se = 0, n = 0;
-    p.entregables.forEach(e => e.activities.forEach((a, i) => { sr += getActivityPct(p.planKey, e.id, i, a); se += computeActExpPct(a.startWeek, a.endWeek, todayIdx); n++; }));
-    const weeks = p.weekLabels?.length ?? Math.max(TOTAL_WEEKS, ...p.entregables.flatMap(e => e.activities.map(a => a.endWeek)));
+    let extDays = 0, baseEndW = 0, effEndW = 0;
+    p.entregables.forEach(e => e.activities.forEach((a, i) => {
+      const ex = extensionFor(changes, p.planKey, e.id, i, a.endWeek);
+      sr += getActivityPct(p.planKey, e.id, i, a); se += computeActExpPct(a.startWeek, ex.effEndWeek, todayIdx); n++;
+      extDays += ex.days; baseEndW = Math.max(baseEndW, a.endWeek); effEndW = Math.max(effEndW, ex.effEndWeek);
+    }));
+    const weeks = Math.max(p.weekLabels?.length ?? Math.max(TOTAL_WEEKS, ...p.entregables.flatMap(e => e.activities.map(a => a.endWeek))), effEndW);
+    const weeksShift = Math.max(0, effEndW - baseEndW);
     const start = weekToActualDate(p.startDate, 1, holidays);
     const end   = weekToActualDate(p.startDate, weeks + 1, holidays);
-    return { p, real: n ? sr / n : 0, exp: n ? se / n : 0, n, start, end, weeks, todayIdx };
+    return { p, real: n ? sr / n : 0, exp: n ? se / n : 0, n, start, end, weeks, todayIdx, extDays, weeksShift };
   });
+  const totalExtDays = rows.reduce((s, r) => s + r.extDays, 0);
   const totalN = rows.reduce((s, r) => s + r.n, 0);
   const real = totalN ? rows.reduce((s, r) => s + r.real * r.n, 0) / totalN : 0;
   const exp  = totalN ? rows.reduce((s, r) => s + r.exp  * r.n, 0) / totalN : 0;
@@ -1574,6 +1651,12 @@ function ConsolidadoView({ plans, holidays, getActivityPct, onOpen, openIssues =
           <div style={{ fontSize:9, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'.05em' }}>Dif.</div>
           <div style={{ fontSize:20, fontWeight:700, color: difColor(dif) }}>{fmt1(parseFloat(dif.toFixed(1)))}</div>
         </div>
+        {totalExtDays > 0 && (
+          <div style={{ textAlign:'right' }} title="Días hábiles agregados por cambios funcionales (Tareas)">
+            <div style={{ fontSize:9, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'.05em' }}>Δ vs. base</div>
+            <div style={{ fontSize:20, fontWeight:700, color:'#6d28d9' }}>+{totalExtDays} d</div>
+          </div>
+        )}
       </div>
 
       {/* Línea de tiempo calendario */}
@@ -1630,7 +1713,7 @@ function ConsolidadoView({ plans, holidays, getActivityPct, onOpen, openIssues =
                 <div style={{ width:`${Math.min(r.real,100)}%`, height:'100%', background:color }}/>
               </div>
               <div style={{ fontSize:9, color:'#64748b' }}>
-                {fmt(r.start)} → {fmt(r.end)} · {r.weeks} sem · {r.n} act.
+                {fmt(r.start)} → {fmt(r.end)} · {r.weeks} sem · {r.n} act.{r.weeksShift > 0 && <span style={{ color:'#6d28d9', fontWeight:600 }}> · +{r.weeksShift} sem Δ</span>}
                 {r.todayIdx >= 0 && r.todayIdx < r.weeks && <span style={{ marginLeft:4, color:'#16a34a', fontWeight:600 }}>S{r.todayIdx + 1}</span>}
               </div>
             </button>
@@ -2064,7 +2147,7 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
       const todayIdx = computeCurrentWeekIdx(p.startDate, holidays);
       p.entregables.forEach(e => e.activities.forEach((a, i) => {
         sumReal += getActivityPct(p.planKey, e.id, i, a);
-        sumExp  += computeActExpPct(a.startWeek, a.endWeek, todayIdx);
+        sumExp  += computeActExpPct(a.startWeek, extensionFor(changes, p.planKey, e.id, i, a.endWeek).effEndWeek, todayIdx);
         n++;
       }));
     });
@@ -2740,6 +2823,7 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
                 plans={projectPlans}
                 holidays={holidays}
                 openIssues={issues.filter(i => !i.endDate)}
+                changes={changes}
                 getActivityPct={getActivityPct}
                 onOpen={(key) => { setSelected(key); setConsolidado(false); }}
               />

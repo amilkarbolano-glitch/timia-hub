@@ -112,7 +112,7 @@ function CopyBtn({ text }: { text: string }) {
 
 function TabCambios({ user }: { user: any }) {
   const [entries, setEntries] = useState<BitacoraEntry[]>(() => adminStore.getBitacora());
-  const emptyForm = { projectId:'', tipo:'Campo' as typeof TIPOS_CAMBIO[number], descripcion:'', motivo:'', tablasAfectadas:'', jira:'', responsableId:'', horasEstimadas:'' as string | number, impacts: [] as PlanImpact[] };
+  const emptyForm = { projectId:'', tipo:'Campo' as typeof TIPOS_CAMBIO[number], descripcion:'', motivo:'', tablasAfectadas:'', jira:'', responsableId:'', solicitadoPor:'', horasEstimadas:'' as string | number, impacts: [] as PlanImpact[], modo:'extiende' as 'extiende' | 'absorbe' };
   const [form, setForm]       = useState(emptyForm);
   const [showForm, setShow]   = useState(false);
   const [picker, setPicker]   = useState(false);
@@ -132,9 +132,9 @@ function TabCambios({ user }: { user: any }) {
     if (!form.projectId || !form.descripcion.trim()) return;
     const resp = allUsers.find(u => u.id === form.responsableId);
     const horas = form.horasEstimadas === '' ? undefined : Math.max(0, Number(form.horasEstimadas) || 0);
-    const { responsableId, horasEstimadas, impacts, ...rest } = form;
+    const { responsableId, horasEstimadas, impacts, solicitadoPor, modo, ...rest } = form;
     save([{ id:'b'+Date.now(), fecha:new Date().toISOString().slice(0,10), quien:user?.name??'Sistema', ...rest,
-      responsableId: responsableId || undefined, responsable: resp?.name, horasEstimadas: horas, impacts }, ...entries]);
+      responsableId: responsableId || undefined, responsable: resp?.name, solicitadoPor: solicitadoPor.trim() || undefined, horasEstimadas: horas, impacts, modo }, ...entries]);
     setForm(emptyForm);
     setShow(false);
   }
@@ -280,17 +280,29 @@ function TabCambios({ user }: { user: any }) {
           </div>
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:10 }}>
             <div><label style={lbl()}>Descripción del cambio *</label><textarea value={form.descripcion} onChange={e=>setForm(f=>({...f,descripcion:e.target.value}))} rows={3} placeholder="Ej: Campo PAN_CUST_ID cambió de VARCHAR a NUMERIC…" style={{...inp(),resize:'vertical'}}/></div>
-            <div><label style={lbl()}>Motivo / Solicitado por</label><textarea value={form.motivo} onChange={e=>setForm(f=>({...f,motivo:e.target.value}))} rows={3} placeholder="Ej: BBVA solicitó cambio el 2026-06-03…" style={{...inp(),resize:'vertical'}}/></div>
+            <div><label style={lbl()}>Motivo</label><textarea value={form.motivo} onChange={e=>setForm(f=>({...f,motivo:e.target.value}))} rows={3} placeholder="Ej: la regla anterior generaba falsos positivos en clientes preaprobados…" style={{...inp(),resize:'vertical'}}/></div>
           </div>
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:10, marginBottom:10 }}>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr', gap:10, marginBottom:10 }}>
             <div><label style={lbl()}>Tablas afectadas</label><input value={form.tablasAfectadas} onChange={e=>setForm(f=>({...f,tablasAfectadas:e.target.value}))} placeholder="t_kfca_input, t_kbrb_output, …" style={inp()}/></div>
-            <div><label style={lbl()}>Responsable del cambio *</label>
+            <div><label style={lbl()}>Solicitado por</label>
+              <input value={form.solicitadoPor} onChange={e=>setForm(f=>({...f,solicitadoPor:e.target.value}))} placeholder="Ej: Pedro Gómez · BBVA Riesgos" style={inp()}/></div>
+            <div><label style={lbl()}>Responsable Timia *</label>
               <select value={form.responsableId} onChange={e=>setForm(f=>({...f,responsableId:e.target.value}))} style={inp()}>
                 <option value="">Seleccionar…</option>
                 {projUsers.map(u=><option key={u.id} value={u.id}>{u.name}</option>)}
               </select></div>
             <div><label style={lbl()}>Horas estimadas *</label>
               <input type="number" min={0} step={0.5} value={form.horasEstimadas} onChange={e=>setForm(f=>({...f,horasEstimadas:e.target.value}))} placeholder="Ej: 16" style={inp()}/></div>
+          </div>
+          <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:10, padding:'8px 10px', background:'#fff', border:'0.5px solid #ede9fe', borderRadius:8, flexWrap:'wrap' }}>
+            <span style={{ fontSize:10, fontWeight:600, color:'#374151', marginRight:4 }}>Efecto en el plan:</span>
+            {([['extiende','Extiende la fecha fin','8 h = 1 día hábil sobre cada tarea impactada (salta fines de semana y festivos)'],['absorbe','Se absorbe','No mueve fechas (más gente / horas extra). Queda registrado igual.']] as const).map(([v,l,d]) => (
+              <button key={v} onClick={()=>setForm(f=>({...f,modo:v}))} title={d}
+                style={{ fontSize:10, padding:'4px 10px', borderRadius:12, cursor:'pointer', border:`0.5px solid ${form.modo===v?'#7c3aed':'#e2e8f0'}`, background: form.modo===v?'#7c3aed':'#fff', color: form.modo===v?'#fff':'#374151', fontWeight: form.modo===v?600:500 }}>{l}</button>
+            ))}
+            {form.horasEstimadas!=='' && Number(form.horasEstimadas)>0 && form.modo==='extiende' && (
+              <span style={{ fontSize:10, color:'#6d28d9', marginLeft:'auto' }}>→ +{Math.ceil(Number(form.horasEstimadas)/8)} día{Math.ceil(Number(form.horasEstimadas)/8)!==1?'s':''} hábil{Math.ceil(Number(form.horasEstimadas)/8)!==1?'es':''} por tarea impactada</span>
+            )}
           </div>
           <div style={{ marginBottom:14 }}>
             <label style={lbl()}>Tareas del plan impactadas</label>
@@ -361,8 +373,8 @@ function TabCambios({ user }: { user: any }) {
                 <span style={{ fontSize:11, color:'#64748b', lineHeight:1.5 }}>{e.motivo||<em style={{color:'#cbd5e1'}}>—</em>}</span>
                 <span style={{ fontSize:10, color:'#64748b', fontFamily:'monospace', lineHeight:1.5, wordBreak:'break-all' }}>{e.tablasAfectadas||<em style={{color:'#cbd5e1'}}>—</em>}</span>
                 <span>{e.impacts?.length ? <ImpactChips impacts={e.impacts} plans={outlinesFor(e.projectId)} max={3}/> : <em style={{fontSize:10,color:'#cbd5e1'}}>—</em>}</span>
-                <span style={{ fontSize:10, color:'#374151' }}>{e.responsable || <em style={{color:'#cbd5e1'}}>—</em>}</span>
-                <span style={{ fontSize:11, fontWeight:700, color: e.horasEstimadas ? '#6d28d9' : '#cbd5e1', fontVariantNumeric:'tabular-nums' }}>{e.horasEstimadas !== undefined ? `${e.horasEstimadas} h` : '—'}</span>
+                <span style={{ fontSize:10, color:'#374151', lineHeight:1.4 }}>{e.responsable || <em style={{color:'#cbd5e1'}}>—</em>}{e.solicitadoPor && <span style={{ display:'block', fontSize:9, color:'#94a3b8' }}>pidió: {e.solicitadoPor}</span>}</span>
+                <span style={{ fontSize:11, fontWeight:700, color: e.horasEstimadas ? '#6d28d9' : '#cbd5e1', fontVariantNumeric:'tabular-nums', lineHeight:1.4 }}>{e.horasEstimadas !== undefined ? `${e.horasEstimadas} h` : '—'}{e.horasEstimadas ? <span style={{ display:'block', fontSize:8, fontWeight:500, color: e.modo==='absorbe' ? '#94a3b8' : '#6d28d9' }}>{e.modo==='absorbe' ? 'absorbido' : `+${Math.ceil(e.horasEstimadas/8)} d`}</span> : null}</span>
                 <span>
                   {e.jira
                     ? <a href={`https://jira.bbva.com/browse/${e.jira}`} target="_blank" rel="noreferrer" style={{ fontSize:10, color:'#1d4ed8', fontWeight:600, textDecoration:'none', display:'inline-flex', alignItems:'center', gap:3, background:'#eff6ff', padding:'2px 6px', borderRadius:4, border:'0.5px solid #bfdbfe' }}>
