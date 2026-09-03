@@ -18,6 +18,7 @@
     "db:reset": "prisma db push --force-reset && npm run db:seed",
     "start": "NODE_ENV=production node dist/server/index.js",
     "lint": "tsc --noEmit",
+    "lint:real": "tsc --noEmit -p tsconfig.json 2>&1 | grep error | grep -v \"Property 'key' does not exist\" | grep -v CSSStyleDeclaration | grep -v lastCommit | grep -v ImportMeta | grep -v server/ ; true",
     "smoke": "tsx scripts/smoke.tsx",
     "check": "vite build && tsx scripts/smoke.tsx"
   },

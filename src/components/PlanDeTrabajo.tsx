@@ -6,12 +6,13 @@ import {
 } from 'lucide-react';
 import { PROJECTS, useAuth } from '../contexts/AuthContext';
 import { FlowStepper } from './SetupProject';
+import ImpactPicker, { ImpactChips, impactLabel, type PlanOutline } from './ImpactPicker';
 import { snapToBusinessDay, addBusinessDays, computeBusinessWeekIdx, dateToBusinessWeekIdx } from '../lib/businessDays';
 import {
   adminStore,
   type PlanEtapa, type EtapaStates, type PlanHistorialEntry,
-  type ActivityAssignees, type AdminUser, type PlanConfig, type PlanIssue,
-  makePlanKey, splitPlanKey, planKeyOf, CRONO_MAIN_NAME,
+  type ActivityAssignees, type AdminUser, type PlanConfig, type PlanIssue, type PlanImpact, type BitacoraEntry,
+  issueImpacts, makePlanKey, splitPlanKey, planKeyOf, CRONO_MAIN_NAME,
 } from '../lib/adminStore';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -123,7 +124,7 @@ function GanttCell({ wi, act, effectivePct, isSubtask, todayWeekIdx, issueMark }
 
 // ─── GanttRow ─────────────────────────────────────────────────────────────────
 
-function GanttRow({ act, effectivePct, idx, expanded, onToggle, isSubtask = false, onPctChange, onActivityClick, todayWeekIdx, doneDateLabel, issues = [], issueWeeks }: {
+function GanttRow({ act, effectivePct, idx, expanded, onToggle, isSubtask = false, onPctChange, onActivityClick, todayWeekIdx, doneDateLabel, issues = [], issueWeeks, changes }: {
   act: PlanActivity; effectivePct: number; idx: number; expanded: boolean;
   onToggle: () => void; isSubtask?: boolean;
   onPctChange?: (n: number) => void; onActivityClick?: () => void;
@@ -132,6 +133,8 @@ function GanttRow({ act, effectivePct, idx, expanded, onToggle, isSubtask = fals
   issues?: PlanIssue[];
   /** Por índice de semana (0-based), la marca a dibujar en la celda */
   issueWeeks?: Record<number, 'alerta' | 'bloqueante'>;
+  /** Cambios funcionales (Tareas/Bitácora) que impactan esta actividad */
+  changes?: BitacoraEntry[];
 }) {
   const hasBloq  = issues.some(i => i.type === 'bloqueante');
   const hasAlert = issues.some(i => i.type === 'alerta');
@@ -167,6 +170,12 @@ function GanttRow({ act, effectivePct, idx, expanded, onToggle, isSubtask = fals
             </span>
           )}
           {(act as any).optional && <span style={{ fontSize: 8, color: '#94a3b8', flexShrink: 0 }}>(opc.)</span>}
+          {(changes?.length ?? 0) > 0 && (
+            <span title={changes!.map(c => `Δ ${c.fecha} · ${c.descripcion}${c.horasEstimadas ? ` (+${c.horasEstimadas} h)` : ''}${c.responsable ? ` · ${c.responsable}` : ''}`).join('\n')}
+              style={{ fontSize: 8, padding: '1px 5px', borderRadius: 3, background: '#ede9fe', color: '#6d28d9', fontWeight: 700, flexShrink: 0, whiteSpace: 'nowrap', cursor: 'help' }}>
+              Δ{changes!.length > 1 ? changes!.length : ''}{changes!.some(c => c.horasEstimadas) ? ` +${changes!.reduce((s, c) => s + (c.horasEstimadas ?? 0), 0)}h` : ''}
+            </span>
+          )}
           {hasEtapas && !isSubtask && <LayoutList size={10} color="#0d9488" style={{ flexShrink: 0 }}/>}
         </div>
       </td>
@@ -203,6 +212,7 @@ interface ActivityDrawerProps {
   weekLabels?: string[];
   planLabel?: string;
   issues?: PlanIssue[];
+  changes?: BitacoraEntry[];
   planStartDate?: string;
   holidays: Set<string>;
   onEtapaToggle: (etapaId: string) => void;
@@ -212,7 +222,7 @@ interface ActivityDrawerProps {
   onClose: () => void;
 }
 
-function ActivityDrawer({ projectId, entregableId, actIdx, act, effectivePct, etapaStates, historial, assigneeIds, allUsers, canMark, jiraId, weekLabels, planLabel, issues = [], planStartDate, holidays, onEtapaToggle, onAssigneeAdd, onAssigneeRemove, onJiraSave, onClose }: ActivityDrawerProps) {
+function ActivityDrawer({ projectId, entregableId, actIdx, act, effectivePct, etapaStates, historial, assigneeIds, allUsers, canMark, jiraId, weekLabels, planLabel, issues = [], changes = [], planStartDate, holidays, onEtapaToggle, onAssigneeAdd, onAssigneeRemove, onJiraSave, onClose }: ActivityDrawerProps) {
   const [search, setSearch]         = useState('');
   const [searchFocused, setFocused] = useState(false);
   const [editJira, setEditJira]     = useState(false);
@@ -315,18 +325,32 @@ function ActivityDrawer({ projectId, entregableId, actIdx, act, effectivePct, et
           <div style={{ padding:'7px 18px', borderBottom:'1px solid #f1f5f9', flexShrink:0, background: issues.some(i=>i.type==='bloqueante') ? '#fff5f5' : '#fffbeb' }}>
             {issues.map(i => {
               const st = ISSUE_STYLE[i.type];
-              const et = i.etapaId ? act.etapas?.find(e => e.id === i.etapaId)?.label : undefined;
+              const et = issueImpacts(i).find(m => m.entregableId === entregableId && m.actIdx === actIdx && m.etapaId)?.etapaId;
+              const etLabel = et ? act.etapas?.find(e => e.id === et)?.label : undefined;
               return (
                 <div key={i.id} style={{ display:'flex', alignItems:'flex-start', gap:6, fontSize:10, color:'#374151', lineHeight:1.4, margin:'2px 0' }}>
                   <span>{st.icon}</span>
                   <span style={{ flex:1 }}>
                     <strong style={{ color: st.tc }}>{i.title}</strong>
-                    {et && <span style={{ color:'#64748b' }}> · {et}</span>}
+                    {etLabel && <span style={{ color:'#64748b' }}> · {etLabel}</span>}
                     <span style={{ color:'#94a3b8' }}> · desde {fmtShort(i.startDate)} ({daysBetween(i.startDate, new Date().toISOString().slice(0,10))} d)</span>
                   </span>
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {/* Cambios funcionales que impactan esta actividad */}
+        {changes.length > 0 && (
+          <div style={{ padding:'7px 18px', borderBottom:'1px solid #f1f5f9', flexShrink:0, background:'#faf5ff' }}>
+            <p style={{ margin:'0 0 3px', fontSize:9, fontWeight:700, color:'#6d28d9', textTransform:'uppercase', letterSpacing:'.05em' }}>Δ Cambios funcionales · {changes.reduce((s,c)=>s+(c.horasEstimadas??0),0)} h estimadas</p>
+            {changes.map(c => (
+              <div key={c.id} style={{ fontSize:10, color:'#374151', lineHeight:1.4, margin:'2px 0' }}>
+                <strong>{c.fecha}</strong> · {c.descripcion}
+                <span style={{ color:'#94a3b8' }}> · {c.tipo}{c.horasEstimadas ? ` · +${c.horasEstimadas} h` : ''}{c.responsable ? ` · ${c.responsable}` : ''}</span>
+              </div>
+            ))}
           </div>
         )}
 
@@ -517,7 +541,7 @@ function ActivityDrawer({ projectId, entregableId, actIdx, act, effectivePct, et
 
 // ─── EntregableSection ────────────────────────────────────────────────────────
 
-function EntregableSection({ block, projectId, sectionIdx, getActivityPct, setActivityPct, onActivityClick, onGoEstimaciones, todayWeekIdx, getDoneDate, planStartDate, holidays, weekLabels, issues }: {
+function EntregableSection({ block, projectId, sectionIdx, getActivityPct, setActivityPct, onActivityClick, onGoEstimaciones, todayWeekIdx, getDoneDate, planStartDate, holidays, weekLabels, issues, changes, planKey }: {
   block: PlanEntregable; projectId: string; sectionIdx: number;
   getActivityPct: (i: number) => number;
   setActivityPct: (i: number, pct: number) => void;
@@ -529,12 +553,17 @@ function EntregableSection({ block, projectId, sectionIdx, getActivityPct, setAc
   holidays?: Set<string>;
   weekLabels?: string[];
   issues?: PlanIssue[];
+  changes?: BitacoraEntry[];
+  planKey?: string;
 }) {
   const effectiveActivities = block.activities.map((a, i) => ({ ...a, pct: getActivityPct(i) }));
-  // Issues abiertos por actividad + semanas afectadas (desde inicio hasta fin o hoy)
+  // Issues abiertos por actividad + semanas afectadas (desde inicio hasta fin o hoy).
+  // Un issue puede vivir en otro cronograma del proyecto e impactar tareas de este.
   const todayISO = new Date().toISOString().slice(0, 10);
+  const hits = (imps: PlanImpact[], i: number) => imps.some(m => m.planKey === planKey && m.entregableId === block.id && m.actIdx === i);
+  function changesFor(i: number): BitacoraEntry[] { return (changes ?? []).filter(c => hits(c.impacts ?? [], i)); }
   function issuesFor(i: number): { list: PlanIssue[]; weeks: Record<number, 'alerta' | 'bloqueante'> } {
-    const list = (issues ?? []).filter(x => !x.endDate && x.entregableId === block.id && x.actIdx === i);
+    const list = (issues ?? []).filter(x => !x.endDate && hits(issueImpacts(x), i));
     const weeks: Record<number, 'alerta' | 'bloqueante'> = {};
     if (planStartDate && holidays) {
       list.forEach(x => {
@@ -608,7 +637,7 @@ function EntregableSection({ block, projectId, sectionIdx, getActivityPct, setAc
                   <GanttRow act={act} effectivePct={act.pct} idx={i} expanded={expanded.has(i)} onToggle={() => toggle(i)}
                     onPctChange={v => setActivityPct(i, v)} onActivityClick={() => onActivityClick(i, block.activities[i])}
                     todayWeekIdx={todayWeekIdx} doneDateLabel={getDoneDate?.(i)}
-                    issues={issuesFor(i).list} issueWeeks={issuesFor(i).weeks}/>
+                    issues={issuesFor(i).list} issueWeeks={issuesFor(i).weeks} changes={changesFor(i)}/>
                   {expanded.has(i) && act.subtasks?.map((sub, si) => (
                     <GanttRow key={`sub-${si}`} act={{ name:sub.name, pct:sub.pct, pctExp:sub.pct, startWeek:act.startWeek, endWeek:act.endWeek, ...(sub.optional?{optional:true}as any:{}) }} effectivePct={sub.pct} idx={si} expanded={false} onToggle={() => {}} isSubtask/>
                   ))}
@@ -697,45 +726,34 @@ function fmtShort(iso: string): string {
   return `${d.getDate()} ${['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'][d.getMonth()]}`;
 }
 
-function IssuesPanel({ plan, issues, legacy, userName, onChange }: {
+function IssuesPanel({ plan, issues, legacy, userName, onChange, outlines }: {
   plan: WorkPlan;
   issues: PlanIssue[];
   legacy: { type: 'alerta' | 'bloqueante'; text: string }[];
   userName: string;
   onChange: (next: PlanIssue[]) => void;
+  outlines: PlanOutline[];
 }) {
+  const [picker, setPicker] = useState(false);
   const todayISO = new Date().toISOString().slice(0, 10);
   const [adding, setAdding]       = useState<null | 'alerta' | 'bloqueante'>(null);
   const [showClosed, setShowClosed] = useState(false);
   const [resolving, setResolving] = useState<string | null>(null);
   const [resolveDate, setResolveDate] = useState(todayISO);
-  const empty = { title:'', detail:'', startDate: todayISO, target:'', etapaId:'' };
+  const empty = { title:'', detail:'', startDate: todayISO, impacts: [] as PlanImpact[] };
   const [form, setForm] = useState(empty);
 
   const open   = issues.filter(i => !i.endDate).sort((a,b) => (a.type === b.type ? a.startDate.localeCompare(b.startDate) : a.type === 'bloqueante' ? -1 : 1));
   const closed = issues.filter(i => !!i.endDate).sort((a,b) => (b.endDate ?? '').localeCompare(a.endDate ?? ''));
 
-  // Opciones de impacto: "entregableId|actIdx"
-  const targets = plan.entregables.flatMap(e => e.activities.map((a, i) => ({ v:`${e.id}|${i}`, label:`${e.name.replace(/^[IVX]+\.\s*/, '')} › ${a.name}`, etapas: a.etapas ?? [] })));
-  const selTarget = targets.find(t => t.v === form.target);
-
-  function actLabel(i: PlanIssue): string | null {
-    if (!i.entregableId || i.actIdx === undefined) return null;
-    const e = plan.entregables.find(x => x.id === i.entregableId); const a = e?.activities[i.actIdx];
-    if (!a) return null;
-    const et = i.etapaId ? a.etapas?.find(x => x.id === i.etapaId)?.label : undefined;
-    return et ? `${a.name} › ${et}` : a.name;
-  }
 
   function submit() {
     if (!adding || !form.title.trim()) return;
-    const [entregableId, actIdxStr] = form.target ? form.target.split('|') : [undefined, undefined];
     const it: PlanIssue = {
       id: `is-${Date.now()}-${Math.random().toString(36).slice(2,6)}`,
       planKey: plan.planKey, type: adding, title: form.title.trim(), detail: form.detail.trim() || undefined,
       startDate: form.startDate || todayISO,
-      entregableId, actIdx: actIdxStr !== undefined ? parseInt(actIdxStr) : undefined,
-      etapaId: form.etapaId || undefined,
+      impacts: form.impacts,
       createdBy: userName, createdAt: new Date().toISOString(),
     };
     onChange([...issues, it]); setAdding(null); setForm(empty);
@@ -754,7 +772,7 @@ function IssuesPanel({ plan, issues, legacy, userName, onChange }: {
   const row = (i: PlanIssue) => {
     const st = ISSUE_STYLE[i.type]; const isOpen = !i.endDate;
     const days = daysBetween(i.startDate, i.endDate ?? todayISO);
-    const target = actLabel(i);
+    const imps = issueImpacts(i);
     return (
       <div key={i.id} style={{ display:'flex', alignItems:'flex-start', gap:7, padding:'6px 8px', margin:'3px 0', borderRadius:7, background: isOpen ? '#fff' : '#f8fafc', border:`0.5px solid ${isOpen ? st.bc : '#e2e8f0'}`, opacity: isOpen ? 1 : .75 }}>
         <span style={{ fontSize:12, flexShrink:0, marginTop:1 }}>{st.icon}</span>
@@ -765,8 +783,8 @@ function IssuesPanel({ plan, issues, legacy, userName, onChange }: {
             <span style={{ fontSize:9, color: st.tc, fontWeight:600, background: st.bg, borderRadius:4, padding:'1px 5px' }}>
               {fmtShort(i.startDate)} → {i.endDate ? fmtShort(i.endDate) : 'abierta'} · {days} día{days!==1?'s':''}
             </span>
-            {target
-              ? <span title="Tarea impactada" style={{ fontSize:9, color:'#374151', background:'#f1f5f9', borderRadius:4, padding:'1px 5px', maxWidth:260, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>↳ {target}</span>
+            {imps.length
+              ? <ImpactChips impacts={imps} plans={outlines} max={4}/>
               : <span style={{ fontSize:9, color:'#94a3b8' }}>sin tarea asociada</span>}
             <span style={{ fontSize:9, color:'#94a3b8' }}>· {i.createdBy.split(' ')[0]}{i.closedBy ? ` · cerró ${i.closedBy.split(' ')[0]}` : ''}</span>
           </div>
@@ -814,25 +832,18 @@ function IssuesPanel({ plan, issues, legacy, userName, onChange }: {
                 style={{ padding:'4px 6px', fontSize:10, border:'0.5px solid #e2e8f0', borderRadius:6 }}/>
             </label>
           </div>
-          <div style={{ display:'grid', gridTemplateColumns: selTarget?.etapas.length ? '1fr 1fr' : '1fr', gap:6, marginBottom:6 }}>
-            <label style={{ display:'flex', flexDirection:'column', gap:2 }}>
-              <span style={{ fontSize:8, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'.05em' }}>Tarea impactada</span>
-              <select value={form.target} onChange={e => setForm(f => ({ ...f, target:e.target.value, etapaId:'' }))}
-                style={{ padding:'5px 6px', fontSize:10, border:'0.5px solid #e2e8f0', borderRadius:6, background:'#fff' }}>
-                <option value="">— Sin tarea específica (afecta al plan en general) —</option>
-                {targets.map(t => <option key={t.v} value={t.v}>{t.label}</option>)}
-              </select>
-            </label>
-            {selTarget && selTarget.etapas.length > 0 && (
-              <label style={{ display:'flex', flexDirection:'column', gap:2 }}>
-                <span style={{ fontSize:8, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'.05em' }}>Subtarea (opcional)</span>
-                <select value={form.etapaId} onChange={e => setForm(f => ({ ...f, etapaId:e.target.value }))}
-                  style={{ padding:'5px 6px', fontSize:10, border:'0.5px solid #e2e8f0', borderRadius:6, background:'#fff' }}>
-                  <option value="">— Toda la tarea —</option>
-                  {selTarget.etapas.map(et => <option key={et.id} value={et.id}>{et.label}</option>)}
-                </select>
-              </label>
-            )}
+          <div style={{ marginBottom:6 }}>
+            <span style={{ fontSize:8, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'.05em', display:'block', marginBottom:3 }}>Tareas impactadas</span>
+            <div style={{ display:'flex', alignItems:'flex-start', gap:8, flexWrap:'wrap' }}>
+              <button onClick={() => setPicker(true)} style={{ fontSize:10, padding:'5px 10px', background:'#fff', border:`0.5px solid ${st.bc}`, color: st.tc, borderRadius:6, cursor:'pointer', fontWeight:600, flexShrink:0 }}>
+                {form.impacts.length ? `Editar selección (${form.impacts.length})` : '+ Seleccionar tareas…'}
+              </button>
+              <div style={{ flex:1, minWidth:0 }}>
+                {form.impacts.length
+                  ? <ImpactChips impacts={form.impacts} plans={outlines} onRemove={i => setForm(f => ({ ...f, impacts: f.impacts.filter(x => !(x.planKey===i.planKey && x.entregableId===i.entregableId && x.actIdx===i.actIdx && x.etapaId===i.etapaId)) }))} max={10}/>
+                  : <span style={{ fontSize:9, color:'#94a3b8' }}>Sin tareas — afecta al plan en general. Puedes marcar una o varias, incluso de otro cronograma.</span>}
+              </div>
+            </div>
           </div>
           <textarea value={form.detail} onChange={e => setForm(f => ({ ...f, detail:e.target.value }))} rows={2} placeholder="Detalle / contexto (opcional)"
             style={{ width:'100%', padding:'5px 8px', fontSize:10, border:'0.5px solid #e2e8f0', borderRadius:6, resize:'vertical', boxSizing:'border-box', lineHeight:1.5, marginBottom:6 }}/>
@@ -860,6 +871,12 @@ function IssuesPanel({ plan, issues, legacy, userName, onChange }: {
           {showClosed && closed.map(row)}
         </div>
       )}
+      {picker && adding && (
+        <ImpactPicker plans={outlines} value={form.impacts} accent={ISSUE_STYLE[adding].solid}
+          title={`Tareas impactadas por ${adding === 'bloqueante' ? 'el bloqueante' : 'la alerta'}`}
+          onConfirm={imps => { setForm(f => ({ ...f, impacts: imps })); setPicker(false); }}
+          onClose={() => setPicker(false)}/>
+      )}
     </div>
   );
 }
@@ -879,9 +896,11 @@ function saveNotes(projectId: string, data: { pasos:string[]; alertas:string[]; 
   localStorage.setItem(`timia_notes_${projectId}`, JSON.stringify(data));
 }
 
-function PlanDetail({ plan, getActivityPct, setActivityPct, onActivityClick, onGoEstimaciones, getDoneDate, holidays, issues, onIssuesChange, userName }: {
+function PlanDetail({ plan, getActivityPct, setActivityPct, onActivityClick, onGoEstimaciones, getDoneDate, holidays, issues, onIssuesChange, userName, changes, outlines }: {
   plan: WorkPlan;
   issues: PlanIssue[];
+  changes: BitacoraEntry[];
+  outlines: PlanOutline[];
   onIssuesChange: (next: PlanIssue[]) => void;
   userName: string;
   getActivityPct: (eid: string, ai: number, a: PlanActivity) => number;
@@ -1035,6 +1054,7 @@ function PlanDetail({ plan, getActivityPct, setActivityPct, onActivityClick, onG
           legacy={[...plan.alertas.map(t => ({ type:'alerta' as const, text:t })), ...plan.bloqueantes.map(t => ({ type:'bloqueante' as const, text:t })),
                    ...extraNotes.alertas.map((t:string) => ({ type:'alerta' as const, text:t })), ...extraNotes.bloqueantes.map((t:string) => ({ type:'bloqueante' as const, text:t }))]}
           userName={userName}
+          outlines={outlines}
           onChange={next => onIssuesChange([...issues.filter(i => i.planKey !== plan.planKey), ...next])}
         />
       </div>
@@ -1058,6 +1078,8 @@ function PlanDetail({ plan, getActivityPct, setActivityPct, onActivityClick, onG
             holidays={holidays}
             weekLabels={plan.weekLabels}
             issues={issues}
+            changes={changes}
+            planKey={plan.planKey}
           />
         ));
       })()}
@@ -1913,51 +1935,61 @@ async function exportPlanPPTX(plan: WorkPlan, getActivityPct: (eid: string, ai: 
 
 interface DrawerState { projectId: string; entregableId: string; actIdx: number; act: PlanActivity; }
 
+// ─── Planes efectivos (módulo) ─────────────────────────────────────────────────
+// ── Planes efectivos: WORK_PLANS estáticos + planes generados desde Estimaciones ──
+// Si existe un plan generado para un proyecto estático, lo sobreescribe (permite generar NGA, CRONOS, etc.)
+function buildEffectivePlans(): WorkPlan[] {
+  const storedConfigs = adminStore.getPlanConfigs();
+  // Fechas de inicio overrides desde db.json → localStorage
+  // Permite cambiar startDate sin recompilar el código
+  let startDateOverrides: Record<string, string> = {};
+  try {
+    const raw = localStorage.getItem('timia_plan_startdates');
+    if (raw) startDateOverrides = JSON.parse(raw);
+  } catch { /* ignorar */ }
+
+  // Mapa de planes generados (planKey → WorkPlan). planKey = projectId (principal) o projectId::cronoId
+  const generatedMap: Record<string, WorkPlan> = {};
+  Object.entries(storedConfigs).forEach(([key, c]) => {
+    if (c.generatedAt && c.entregables.length > 0) {
+      const wp = planConfigToWorkPlan(c);
+      // La key del storage manda (por si cronoId no está en el objeto)
+      const { cronoId } = splitPlanKey(key);
+      generatedMap[key] = cronoId && !wp.cronoId ? { ...wp, planKey: key, cronoId, cronoName: c.cronoName ?? cronoId } : wp;
+    }
+  });
+  // Prioridad: generated sobre static; aplica startDate override si existe (solo principal)
+  const merged = WORK_PLANS.map(p => {
+    const base = generatedMap[p.planKey] ?? p;
+    const override = startDateOverrides[p.planKey];
+    return override ? { ...base, startDate: override } : base;
+  });
+  // Agregar planes generados sin plan estático: proyectos nuevos y cronogramas adicionales.
+  // Los cronogramas se insertan justo después de su proyecto para mantener el orden.
+  const staticKeys = new Set(WORK_PLANS.map(p => p.planKey));
+  const extra = Object.values(generatedMap).filter(g => !staticKeys.has(g.planKey));
+  const out: WorkPlan[] = [];
+  merged.forEach(p => {
+    out.push(p);
+    extra.filter(e => e.projectId === p.projectId).forEach(e => out.push(e));
+  });
+  extra.filter(e => !merged.some(m => m.projectId === e.projectId)).forEach(e => out.push(e));
+  return out;
+}
+
+
+/** Esqueleto de los planes (para selectores de impacto en otras vistas, ej. Tareas/Bitácora). */
+export function getPlanOutlines(projectId?: string): PlanOutline[] {
+  return buildEffectivePlans()
+    .filter(p => !projectId || p.projectId === projectId)
+    .map(p => ({ planKey: p.planKey, projectId: p.projectId, cronoId: p.cronoId, cronoName: p.cronoName,
+      entregables: p.entregables.map(e => ({ id: e.id, name: e.name, activities: e.activities.map(a => ({ name: a.name, startWeek: a.startWeek, endWeek: a.endWeek, etapas: a.etapas?.map(x => ({ id: x.id, label: x.label })) })) })) }));
+}
+
 export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?: () => void }) {
   const { user } = useAuth();
   const role = user?.role ?? 'developer';
   const canMark = user ? (['pm','tech_lead','tech_ref'] as string[]).includes(user.role) : false;
-
-  // ── Planes efectivos: WORK_PLANS estáticos + planes generados desde Estimaciones ──
-  // Si existe un plan generado para un proyecto estático, lo sobreescribe (permite generar NGA, CRONOS, etc.)
-  function buildEffectivePlans(): WorkPlan[] {
-    const storedConfigs = adminStore.getPlanConfigs();
-    // Fechas de inicio overrides desde db.json → localStorage
-    // Permite cambiar startDate sin recompilar el código
-    let startDateOverrides: Record<string, string> = {};
-    try {
-      const raw = localStorage.getItem('timia_plan_startdates');
-      if (raw) startDateOverrides = JSON.parse(raw);
-    } catch { /* ignorar */ }
-
-    // Mapa de planes generados (planKey → WorkPlan). planKey = projectId (principal) o projectId::cronoId
-    const generatedMap: Record<string, WorkPlan> = {};
-    Object.entries(storedConfigs).forEach(([key, c]) => {
-      if (c.generatedAt && c.entregables.length > 0) {
-        const wp = planConfigToWorkPlan(c);
-        // La key del storage manda (por si cronoId no está en el objeto)
-        const { cronoId } = splitPlanKey(key);
-        generatedMap[key] = cronoId && !wp.cronoId ? { ...wp, planKey: key, cronoId, cronoName: c.cronoName ?? cronoId } : wp;
-      }
-    });
-    // Prioridad: generated sobre static; aplica startDate override si existe (solo principal)
-    const merged = WORK_PLANS.map(p => {
-      const base = generatedMap[p.planKey] ?? p;
-      const override = startDateOverrides[p.planKey];
-      return override ? { ...base, startDate: override } : base;
-    });
-    // Agregar planes generados sin plan estático: proyectos nuevos y cronogramas adicionales.
-    // Los cronogramas se insertan justo después de su proyecto para mantener el orden.
-    const staticKeys = new Set(WORK_PLANS.map(p => p.planKey));
-    const extra = Object.values(generatedMap).filter(g => !staticKeys.has(g.planKey));
-    const out: WorkPlan[] = [];
-    merged.forEach(p => {
-      out.push(p);
-      extra.filter(e => e.projectId === p.projectId).forEach(e => out.push(e));
-    });
-    extra.filter(e => !merged.some(m => m.projectId === e.projectId)).forEach(e => out.push(e));
-    return out;
-  }
 
   const [effectivePlans, setEffectivePlans] = useState<WorkPlan[]>(buildEffectivePlans);
 
@@ -1976,6 +2008,10 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
   const [activityJiras,     setActivityJiras]     = useState<Record<string,string>>(()=> adminStore.getActivityJiras());
   const [activityDoneDates, setActivityDoneDates] = useState<Record<string,string>>(()=> adminStore.getActivityDoneDates());
   const [issues,            setIssues]            = useState<PlanIssue[]>(() => adminStore.getPlanIssues());
+  // Cambios funcionales (vista Tareas) con impactos sobre el plan
+  const changes = React.useMemo(() => adminStore.getBitacora().filter(c => (c.impacts?.length ?? 0) > 0), []);
+  const outlines = React.useMemo(() => effectivePlans.map(p => ({ planKey: p.planKey, projectId: p.projectId, cronoId: p.cronoId, cronoName: p.cronoName,
+    entregables: p.entregables.map(e => ({ id: e.id, name: e.name, activities: e.activities.map(a => ({ name: a.name, startWeek: a.startWeek, endWeek: a.endWeek, etapas: a.etapas?.map(x => ({ id: x.id, label: x.label })) })) })) })) as PlanOutline[], [effectivePlans]);
   function handleIssuesChange(next: PlanIssue[]) { setIssues(next); adminStore.savePlanIssues(next); }
   const openIssuesOf = (planKey: string) => issues.filter(i => i.planKey === planKey && !i.endDate);
   const [selected,          setSelected]          = useState<string>(() => {
@@ -2719,6 +2755,8 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
               issues={issues}
               onIssuesChange={handleIssuesChange}
               userName={user?.name ?? 'Usuario'}
+              changes={changes}
+              outlines={outlines.filter(o => o.projectId === plan.projectId)}
             />
             )}
           </>
@@ -2738,7 +2776,8 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
           weekLabels={effectivePlans.find(p => p.planKey === drawer.projectId)?.weekLabels}
           planStartDate={effectivePlans.find(p => p.planKey === drawer.projectId)?.startDate}
           planLabel={(() => { const p = effectivePlans.find(p => p.planKey === drawer.projectId); return p ? planLabel(p) : drawer.projectId; })()}
-          issues={issues.filter(i => !i.endDate && i.planKey === drawer.projectId && i.entregableId === drawer.entregableId && i.actIdx === drawer.actIdx)}
+          issues={issues.filter(i => !i.endDate && issueImpacts(i).some(m => m.planKey === drawer.projectId && m.entregableId === drawer.entregableId && m.actIdx === drawer.actIdx))}
+          changes={changes.filter(c => (c.impacts ?? []).some(m => m.planKey === drawer.projectId && m.entregableId === drawer.entregableId && m.actIdx === drawer.actIdx))}
           holidays={holidays}
           onEtapaToggle={handleEtapaToggle}
           onAssigneeAdd={handleAssigneeAdd}

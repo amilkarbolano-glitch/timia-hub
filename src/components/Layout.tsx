@@ -104,10 +104,10 @@ export default function Layout({ children, currentView, onViewChange, userRole }
                 </button>
               )}
 
-              {/* 4. Alcances */}
+              {/* 4. Tareas (cambios funcionales) */}
               <button onClick={() => onViewChange('bitacora')}
                 className={`text-sm font-medium transition-colors ${currentView==='bitacora'?'text-primary':'text-slate-600 hover:text-primary'}`}>
-                Alcances
+                Tareas
               </button>
 
               {/* 5. Recursos — Imputaciones · Inventario · Links */}

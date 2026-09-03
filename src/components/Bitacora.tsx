@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Trash2, Search, Link2, Package, BookOpen, X, ExternalLink, Copy, Check, TicketCheck, ClipboardList } from 'lucide-react';
-import { adminStore, BitacoraEntry } from '../lib/adminStore';
+import { adminStore, BitacoraEntry, type PlanImpact } from '../lib/adminStore';
+import ImpactPicker, { ImpactChips, type PlanOutline } from './ImpactPicker';
+import { getPlanOutlines } from './PlanDeTrabajo';
 import { PROJECTS, useAuth, canAccess } from '../contexts/AuthContext';
 import ImputacionesJira from './ImputacionesJira';
 
@@ -110,8 +112,14 @@ function CopyBtn({ text }: { text: string }) {
 
 function TabCambios({ user }: { user: any }) {
   const [entries, setEntries] = useState<BitacoraEntry[]>(() => adminStore.getBitacora());
-  const [form, setForm]       = useState({ projectId:'', tipo:'Campo' as typeof TIPOS_CAMBIO[number], descripcion:'', motivo:'', tablasAfectadas:'', jira:'' });
+  const emptyForm = { projectId:'', tipo:'Campo' as typeof TIPOS_CAMBIO[number], descripcion:'', motivo:'', tablasAfectadas:'', jira:'', responsableId:'', horasEstimadas:'' as string | number, impacts: [] as PlanImpact[] };
+  const [form, setForm]       = useState(emptyForm);
   const [showForm, setShow]   = useState(false);
+  const [picker, setPicker]   = useState(false);
+  const allUsers = React.useMemo(() => adminStore.getUsers().filter(u => u.active), []);
+  const allOutlines = React.useMemo(() => getPlanOutlines(), []);
+  const outlinesFor = (projectId: string): PlanOutline[] => allOutlines.filter(o => o.projectId === projectId);
+  const projUsers = form.projectId ? allUsers.filter(u => u.role === 'pm' || u.projectIds.includes(form.projectId)) : allUsers;
   const [filterProj, setFP]   = useState('');
   const [filterTipo, setFT]   = useState('');
   const [search, setSearch]   = useState('');
@@ -122,8 +130,12 @@ function TabCambios({ user }: { user: any }) {
   function save(next: BitacoraEntry[]) { setEntries(next); adminStore.saveBitacora(next); }
   function add() {
     if (!form.projectId || !form.descripcion.trim()) return;
-    save([{ id:'b'+Date.now(), fecha:new Date().toISOString().slice(0,10), quien:user?.name??'Sistema', ...form }, ...entries]);
-    setForm({ projectId:'', tipo:'Campo', descripcion:'', motivo:'', tablasAfectadas:'', jira:'' });
+    const resp = allUsers.find(u => u.id === form.responsableId);
+    const horas = form.horasEstimadas === '' ? undefined : Math.max(0, Number(form.horasEstimadas) || 0);
+    const { responsableId, horasEstimadas, impacts, ...rest } = form;
+    save([{ id:'b'+Date.now(), fecha:new Date().toISOString().slice(0,10), quien:user?.name??'Sistema', ...rest,
+      responsableId: responsableId || undefined, responsable: resp?.name, horasEstimadas: horas, impacts }, ...entries]);
+    setForm(emptyForm);
     setShow(false);
   }
 
@@ -261,7 +273,7 @@ function TabCambios({ user }: { user: any }) {
           </div>
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:10, marginBottom:10 }}>
             {[
-              { label:'Proyecto *', node:<select value={form.projectId} onChange={e=>setForm(f=>({...f,projectId:e.target.value}))} style={inp()}><option value="">Seleccionar…</option>{accessibleProjects.map((p: any)=><option key={p.id} value={p.id}>{p.name}</option>)}</select> },
+              { label:'Proyecto *', node:<select value={form.projectId} onChange={e=>setForm(f=>({...f,projectId:e.target.value, impacts:[], responsableId:''}))} style={inp()}><option value="">Seleccionar…</option>{accessibleProjects.map((p: any)=><option key={p.id} value={p.id}>{p.name}</option>)}</select> },
               { label:'Tipo *',     node:<select value={form.tipo} onChange={e=>setForm(f=>({...f,tipo:e.target.value as any}))} style={inp()}>{TIPOS_CAMBIO.map(t=><option key={t}>{t}</option>)}</select> },
               { label:'Ticket Jira',node:<input value={form.jira} onChange={e=>setForm(f=>({...f,jira:e.target.value}))} placeholder="DECRONOS-xxxx" style={inp()}/> },
             ].map(({label,node})=><div key={label}><label style={lbl()}>{label}</label>{node}</div>)}
@@ -270,11 +282,38 @@ function TabCambios({ user }: { user: any }) {
             <div><label style={lbl()}>Descripción del cambio *</label><textarea value={form.descripcion} onChange={e=>setForm(f=>({...f,descripcion:e.target.value}))} rows={3} placeholder="Ej: Campo PAN_CUST_ID cambió de VARCHAR a NUMERIC…" style={{...inp(),resize:'vertical'}}/></div>
             <div><label style={lbl()}>Motivo / Solicitado por</label><textarea value={form.motivo} onChange={e=>setForm(f=>({...f,motivo:e.target.value}))} rows={3} placeholder="Ej: BBVA solicitó cambio el 2026-06-03…" style={{...inp(),resize:'vertical'}}/></div>
           </div>
-          <div style={{ marginBottom:14 }}><label style={lbl()}>Tablas afectadas</label><input value={form.tablasAfectadas} onChange={e=>setForm(f=>({...f,tablasAfectadas:e.target.value}))} placeholder="t_kfca_input, t_kbrb_output, …" style={inp()}/></div>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:10, marginBottom:10 }}>
+            <div><label style={lbl()}>Tablas afectadas</label><input value={form.tablasAfectadas} onChange={e=>setForm(f=>({...f,tablasAfectadas:e.target.value}))} placeholder="t_kfca_input, t_kbrb_output, …" style={inp()}/></div>
+            <div><label style={lbl()}>Responsable del cambio *</label>
+              <select value={form.responsableId} onChange={e=>setForm(f=>({...f,responsableId:e.target.value}))} style={inp()}>
+                <option value="">Seleccionar…</option>
+                {projUsers.map(u=><option key={u.id} value={u.id}>{u.name}</option>)}
+              </select></div>
+            <div><label style={lbl()}>Horas estimadas *</label>
+              <input type="number" min={0} step={0.5} value={form.horasEstimadas} onChange={e=>setForm(f=>({...f,horasEstimadas:e.target.value}))} placeholder="Ej: 16" style={inp()}/></div>
+          </div>
+          <div style={{ marginBottom:14 }}>
+            <label style={lbl()}>Tareas del plan impactadas</label>
+            <div style={{ display:'flex', alignItems:'flex-start', gap:10, flexWrap:'wrap' }}>
+              <button onClick={()=>setPicker(true)} disabled={!form.projectId}
+                style={{ padding:'7px 12px', fontSize:11, fontWeight:600, background:'#fff', border:'0.5px solid #c4b5fd', color:'#6d28d9', borderRadius:7, cursor: form.projectId ? 'pointer' : 'default', opacity: form.projectId ? 1 : .5, flexShrink:0 }}>
+                {form.impacts.length ? `Editar selección (${form.impacts.length})` : '+ Seleccionar tareas…'}
+              </button>
+              <div style={{ flex:1, minWidth:0, paddingTop:4 }}>
+                {form.impacts.length
+                  ? <ImpactChips impacts={form.impacts} plans={outlinesFor(form.projectId)} onRemove={i=>setForm(f=>({...f, impacts:f.impacts.filter(x=>!(x.planKey===i.planKey&&x.entregableId===i.entregableId&&x.actIdx===i.actIdx&&x.etapaId===i.etapaId))}))} max={12}/>
+                  : <span style={{ fontSize:10, color:'#94a3b8' }}>{form.projectId ? 'El cambio se verá marcado (Δ) sobre estas tareas en el Plan de trabajo.' : 'Selecciona primero el proyecto.'}</span>}
+              </div>
+            </div>
+          </div>
           <div style={{ display:'flex', gap:8, justifyContent:'flex-end' }}>
             <button onClick={()=>setShow(false)} style={btnSec()}>Cancelar</button>
-            <button onClick={add} disabled={!form.projectId||!form.descripcion.trim()} style={{ ...btnPrimary(), opacity:!form.projectId||!form.descripcion.trim()?0.5:1 }}>Guardar cambio</button>
+            <button onClick={add} disabled={!form.projectId||!form.descripcion.trim()||!form.responsableId||form.horasEstimadas===''} style={{ ...btnPrimary(), opacity:(!form.projectId||!form.descripcion.trim()||!form.responsableId||form.horasEstimadas==='')?0.5:1 }}>Guardar cambio</button>
           </div>
+          {picker && form.projectId && (
+            <ImpactPicker plans={outlinesFor(form.projectId)} value={form.impacts} accent="#7c3aed" title="Tareas impactadas por el cambio"
+              onConfirm={imps=>{ setForm(f=>({...f, impacts:imps})); setPicker(false); }} onClose={()=>setPicker(false)}/>
+          )}
         </div>
       )}
 
@@ -291,8 +330,8 @@ function TabCambios({ user }: { user: any }) {
       ) : (
         <div style={{ background:'#fff', border:'0.5px solid #e2e8f0', borderRadius:14, overflow:'hidden', boxShadow:'0 1px 6px rgba(0,0,0,.04)' }}>
           {/* Cabecera */}
-          <div style={{ display:'grid', gridTemplateColumns:'92px 80px 72px 1fr 1fr 150px 90px 32px', gap:8, padding:'9px 16px', background:'#fafafa', borderBottom:'0.5px solid #e2e8f0', fontSize:9, color:'#94a3b8', fontWeight:700, textTransform:'uppercase', letterSpacing:'.06em' }}>
-            <span>Fecha</span><span>Proyecto</span><span>Tipo</span><span>Descripción</span><span>Motivo</span><span>Tablas afectadas</span><span>Jira</span><span/>
+          <div style={{ display:'grid', gridTemplateColumns:'80px 72px 66px 1.2fr 1fr 130px 1fr 110px 50px 80px 28px', gap:8, padding:'9px 16px', background:'#fafafa', borderBottom:'0.5px solid #e2e8f0', fontSize:9, color:'#94a3b8', fontWeight:700, textTransform:'uppercase', letterSpacing:'.06em' }}>
+            <span>Fecha</span><span>Proyecto</span><span>Tipo</span><span>Descripción</span><span>Motivo</span><span>Tablas</span><span>Tareas impactadas</span><span>Responsable</span><span>Horas</span><span>Jira</span><span/>
           </div>
           {/* Filas */}
           {filtered.map((e,i)=>{
@@ -300,7 +339,7 @@ function TabCambios({ user }: { user: any }) {
             const proj = PROJECTS.find(p=>p.id===e.projectId);
             return (
               <div key={e.id} style={{
-                display:'grid', gridTemplateColumns:'92px 80px 72px 1fr 1fr 150px 90px 32px',
+                display:'grid', gridTemplateColumns:'80px 72px 66px 1.2fr 1fr 130px 1fr 110px 50px 80px 28px',
                 gap:8, alignItems:'start', padding:'11px 16px',
                 borderBottom: i<filtered.length-1 ? '0.5px solid #f1f5f9' : 'none',
                 borderLeft: `3px solid ${tc.text}50`,
@@ -321,6 +360,9 @@ function TabCambios({ user }: { user: any }) {
                 <span style={{ fontSize:11, color:'#1e293b', lineHeight:1.5 }}>{e.descripcion}</span>
                 <span style={{ fontSize:11, color:'#64748b', lineHeight:1.5 }}>{e.motivo||<em style={{color:'#cbd5e1'}}>—</em>}</span>
                 <span style={{ fontSize:10, color:'#64748b', fontFamily:'monospace', lineHeight:1.5, wordBreak:'break-all' }}>{e.tablasAfectadas||<em style={{color:'#cbd5e1'}}>—</em>}</span>
+                <span>{e.impacts?.length ? <ImpactChips impacts={e.impacts} plans={outlinesFor(e.projectId)} max={3}/> : <em style={{fontSize:10,color:'#cbd5e1'}}>—</em>}</span>
+                <span style={{ fontSize:10, color:'#374151' }}>{e.responsable || <em style={{color:'#cbd5e1'}}>—</em>}</span>
+                <span style={{ fontSize:11, fontWeight:700, color: e.horasEstimadas ? '#6d28d9' : '#cbd5e1', fontVariantNumeric:'tabular-nums' }}>{e.horasEstimadas !== undefined ? `${e.horasEstimadas} h` : '—'}</span>
                 <span>
                   {e.jira
                     ? <a href={`https://jira.bbva.com/browse/${e.jira}`} target="_blank" rel="noreferrer" style={{ fontSize:10, color:'#1d4ed8', fontWeight:600, textDecoration:'none', display:'inline-flex', alignItems:'center', gap:3, background:'#eff6ff', padding:'2px 6px', borderRadius:4, border:'0.5px solid #bfdbfe' }}>
@@ -999,9 +1041,9 @@ export default function Bitacora() {
               <BookOpen size={16} color="#dc2626"/>
             </div>
             <div>
-              <h2 style={{ margin:0, fontSize:18, fontWeight:700, color:'#111', letterSpacing:'-.3px' }}>Alcances del Proyecto</h2>
+              <h2 style={{ margin:0, fontSize:18, fontWeight:700, color:'#111', letterSpacing:'-.3px' }}>Tareas · Cambios funcionales</h2>
               <p style={{ margin:0, fontSize:12, color:'#94a3b8', marginTop:1 }}>
-                Registro de cambios funcionales — redefiniciones de campos, reglas, modelos y ETL
+                Redefiniciones de campos, reglas, modelos y ETL — con responsable, horas estimadas y tareas del plan impactadas
               </p>
             </div>
           </div>

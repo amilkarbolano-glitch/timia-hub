@@ -54,11 +54,23 @@ export interface BbvaAnsConfig {
 
 export interface Holiday { date: string; name: string; type: 'nacional' | 'regional'; }
 
+/** Referencia a una tarea (actividad) o subtarea (etapa) del plan de trabajo */
+export interface PlanImpact {
+  planKey: string;        // projectId o projectId::cronoId
+  entregableId: string;
+  actIdx: number;
+  etapaId?: string;       // subtarea (opcional)
+}
+
 export interface BitacoraEntry {
   id: string; projectId: string; fecha: string;
   quien: string; tipo: 'Campo' | 'Regla' | 'Modelo' | 'ETL' | 'Otro';
   descripcion: string; motivo: string;
   tablasAfectadas: string; jira: string;
+  responsableId?: string;   // usuario responsable del cambio
+  responsable?: string;     // nombre (denormalizado)
+  horasEstimadas?: number;  // horas estimadas al momento de registrar el cambio
+  impacts?: PlanImpact[];   // tareas/subtareas del plan impactadas
 }
 
 export type CircuitoColumna = 'Pendiente' | 'Enviado' | 'En revisión' | 'Observaciones' | 'Aprobado';
@@ -232,13 +244,23 @@ export interface PlanIssue {
   detail?: string;
   startDate: string;               // ISO yyyy-mm-dd — cuándo inicia
   endDate?: string;                // ISO yyyy-mm-dd — cuándo se reporta el fin (undefined = abierta)
-  entregableId?: string;           // impacto: entregable afectado
-  actIdx?: number;                 // impacto: actividad afectada (índice dentro del entregable)
-  etapaId?: string;                // impacto: subtarea/etapa afectada (opcional)
+  /** Tareas/subtareas impactadas (una o varias, incluso de otro cronograma del proyecto) */
+  impacts?: PlanImpact[];
+  /** @deprecated — formato antiguo de impacto único; usar impacts */
+  entregableId?: string;
+  actIdx?: number;
+  etapaId?: string;
   createdBy: string;
   createdAt: string;               // ISO timestamp
   closedBy?: string;
   closedAt?: string;
+}
+
+/** Normaliza los impactos de un issue (soporta el formato antiguo de impacto único) */
+export function issueImpacts(i: PlanIssue): PlanImpact[] {
+  if (i.impacts && i.impacts.length) return i.impacts;
+  if (i.entregableId && i.actIdx !== undefined) return [{ planKey: i.planKey, entregableId: i.entregableId, actIdx: i.actIdx, etapaId: i.etapaId }];
+  return [];
 }
 
 /** Asignados a una actividad específica */
