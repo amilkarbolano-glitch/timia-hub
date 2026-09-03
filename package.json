@@ -17,7 +17,9 @@
     "db:studio": "prisma studio",
     "db:reset": "prisma db push --force-reset && npm run db:seed",
     "start": "NODE_ENV=production node dist/server/index.js",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "smoke": "tsx scripts/smoke.tsx",
+    "check": "vite build && tsx scripts/smoke.tsx"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",
@@ -47,6 +49,7 @@
     "@types/node": "^22.14.0",
     "autoprefixer": "^10.4.21",
     "concurrently": "^9.1.2",
+    "jsdom": "^30.0.1",
     "prisma": "^5.22.0",
     "tailwindcss": "^4.1.14",
     "tsx": "^4.21.0",

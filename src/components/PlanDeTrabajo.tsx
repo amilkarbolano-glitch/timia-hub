@@ -866,9 +866,14 @@ function IssuesPanel({ plan, issues, legacy, userName, onChange }: {
 
 // ─── PlanDetail ───────────────────────────────────────────────────────────────
 
-function loadNotes(projectId: string) {
-  try { return JSON.parse(localStorage.getItem(`timia_notes_${projectId}`) ?? '{"pasos":[],"alertas":[],"bloqueantes":[]}'); }
-  catch { return { pasos:[] as string[], alertas:[] as string[], bloqueantes:[] as string[] }; }
+type PlanNotes = { pasos: string[]; alertas: string[]; bloqueantes: string[] };
+function loadNotes(planKey: string): PlanNotes {
+  // Tolerante a datos viejos/incompletos en localStorage (p.ej. sin 'alertas')
+  try {
+    const raw = JSON.parse(localStorage.getItem(`timia_notes_${planKey}`) ?? '{}') ?? {};
+    const arr = (v: unknown) => Array.isArray(v) ? v.filter(x => typeof x === 'string') as string[] : [];
+    return { pasos: arr(raw.pasos), alertas: arr(raw.alertas), bloqueantes: arr(raw.bloqueantes) };
+  } catch { return { pasos: [], alertas: [], bloqueantes: [] }; }
 }
 function saveNotes(projectId: string, data: { pasos:string[]; alertas:string[]; bloqueantes:string[] }) {
   localStorage.setItem(`timia_notes_${projectId}`, JSON.stringify(data));
