@@ -7,7 +7,7 @@ import {
 import { PROJECTS, useAuth } from '../contexts/AuthContext';
 import { FlowStepper } from './SetupProject';
 import ImpactPicker, { ImpactChips, impactLabel, type PlanOutline } from './ImpactPicker';
-import { snapToBusinessDay, addBusinessDays, computeBusinessWeekIdx, dateToBusinessWeekIdx } from '../lib/businessDays';
+import { snapToBusinessDay, addBusinessDays, computeBusinessWeekIdx, dateToBusinessWeekIdx, businessDaysBetween } from '../lib/businessDays';
 import {
   adminStore,
   type PlanEtapa, type EtapaStates, type PlanHistorialEntry,
@@ -95,7 +95,7 @@ function hexToRgb(hex: string): [number, number, number] {
 
 // ─── GanttCell ────────────────────────────────────────────────────────────────
 
-function GanttCell({ wi, act, effectivePct, isSubtask, todayWeekIdx, issueMark, extWeeks = 0 }: { wi: number; act: PlanActivity; effectivePct: number; isSubtask?: boolean; todayWeekIdx?: number; issueMark?: 'alerta' | 'bloqueante'; extWeeks?: number }) {
+function GanttCell({ wi, act, effectivePct, isSubtask, todayWeekIdx, issueMark, extWeeks = 0, blockWeeks = 0 }: { wi: number; act: PlanActivity; effectivePct: number; isSubtask?: boolean; todayWeekIdx?: number; issueMark?: 'alerta' | 'bloqueante'; extWeeks?: number; blockWeeks?: number }) {
   // Marca de alerta/bloqueante en la semana: franja inferior roja/ámbar
   const markBar = issueMark ? (
     <div style={{ position:'absolute', left:0, right:0, bottom:0, height:3, background: issueMark==='bloqueante' ? '#dc2626' : '#f59e0b', opacity:.9 }}/>
@@ -114,10 +114,17 @@ function GanttCell({ wi, act, effectivePct, isSubtask, todayWeekIdx, issueMark, 
     <div title="Extensión por cambios funcionales" style={{ position:'absolute', top:0, height:'100%', left:`${(Math.max(planEnd, cellStart) - cellStart) * 100}%`, width:`calc(${extOverlap * 100}% + ${extEnd <= cellEnd ? 0 : 2}px)`, minWidth:5,
       background:'repeating-linear-gradient(135deg, #c4b5fd 0 3px, #ede9fe 3px 6px)', borderRadius: extEnd <= cellEnd ? '0 3px 3px 0' : 0, boxShadow: extEnd <= cellEnd ? 'inset -2px 0 0 #7c3aed' : 'none' }}/>
   ) : null;
+  // Segmento de bloqueo (rayado rojo) a continuación de la extensión por cambios
+  const blkStart = extEnd, blkEnd = extEnd + blockWeeks;
+  const blkOverlap = blockWeeks > 0 ? Math.max(0, Math.min(blkEnd, cellEnd) - Math.max(blkStart, cellStart)) : 0;
+  const blkBar = blkOverlap > 0 ? (
+    <div title="Días perdidos por bloqueante" style={{ position:'absolute', top:0, height:'100%', left:`${(Math.max(blkStart, cellStart) - cellStart) * 100}%`, width:`calc(${blkOverlap * 100}% + ${blkEnd <= cellEnd ? 0 : 2}px)`, minWidth:5,
+      background:'repeating-linear-gradient(135deg, #fca5a5 0 3px, #fee2e2 3px 6px)', borderRadius: blkEnd <= cellEnd ? '0 3px 3px 0' : 0, boxShadow: blkEnd <= cellEnd ? 'inset -2px 0 0 #dc2626' : 'none' }}/>
+  ) : null;
   if (planOverlap === 0) return (
     <td style={{ position:'relative', width: CELL_W, minWidth: CELL_W, padding:0, borderLeft: isToday ? '2px solid #16a34a' : '0.5px solid #f1f5f9', background: isToday ? '#f0fdf4' : undefined }}>
       {markBar}
-      {extBar && <div style={{ position:'relative', margin:'3px 1px', height:13 }}>{extBar}</div>}
+      {(extBar || blkBar) && <div style={{ position:'relative', margin:'3px 1px', height:13 }}>{extBar}{blkBar}</div>}
     </td>
   );
   const execOverlap = Math.max(0, Math.min(execEnd, cellEnd) - Math.max(planStart, cellStart));
@@ -132,7 +139,7 @@ function GanttCell({ wi, act, effectivePct, isSubtask, todayWeekIdx, issueMark, 
         <div style={{ position:'absolute', top:0, height:'100%', left:`${(Math.max(planStart, cellStart) - cellStart) * 100}%`, width:`${planOverlap * 100}%`, borderRadius: br, overflow: 'hidden', background: isSubtask ? 'rgba(13,148,136,0.12)' : 'rgba(13,148,136,0.22)' }}>
           <div style={{ width: `${execPct}%`, height: '100%', background: isSubtask ? 'rgba(13,148,136,0.55)' : '#0d9488', transition: 'width .3s' }} />
         </div>
-        {extBar}
+        {extBar}{blkBar}
       </div>
     </td>
   );
@@ -152,7 +159,7 @@ function GanttRow({ act, effectivePct, idx, expanded, onToggle, isSubtask = fals
   /** Cambios funcionales (Tareas/Bitácora) que impactan esta actividad */
   changes?: BitacoraEntry[];
   /** Extensión calculada por cambios (días hábiles, fracción de semana, nueva fecha fin) */
-  ext?: { days: number; extWeeks: number; hours: number; newEndLabel?: string };
+  ext?: { days: number; extWeeks: number; hours: number; newEndLabel?: string; blockDays?: number; blockWeeks?: number; blockers?: PlanIssue[]; changeDays?: number };
 }) {
   const hasBloq  = issues.some(i => i.type === 'bloqueante');
   const hasAlert = issues.some(i => i.type === 'alerta');
@@ -190,9 +197,15 @@ function GanttRow({ act, effectivePct, idx, expanded, onToggle, isSubtask = fals
           {(act as any).optional && <span style={{ fontSize: 8, color: '#94a3b8', flexShrink: 0 }}>(opc.)</span>}
           {(changes?.length ?? 0) > 0 && (
             <span title={[...changes!.map(c => `Δ ${c.fecha} · ${c.descripcion}${c.horasEstimadas ? ` (+${c.horasEstimadas} h${c.modo === 'absorbe' ? ', absorbido' : ''})` : ''}${c.responsable ? ` · ${c.responsable}` : ''}`),
-                ...(ext && ext.days > 0 ? [`→ Fin replanificado: ${ext.newEndLabel ?? ''} (+${ext.days} día${ext.days !== 1 ? 's' : ''} hábil${ext.days !== 1 ? 'es' : ''})`] : [])].join('\n')}
-              style={{ fontSize: 8, padding: '1px 5px', borderRadius: 3, background: '#ede9fe', color: '#6d28d9', fontWeight: 700, flexShrink: 0, whiteSpace: 'nowrap', cursor: 'help', border: ext && ext.days > 0 ? '0.5px solid #c4b5fd' : 'none' }}>
-              Δ{changes!.length > 1 ? changes!.length : ''}{ext && ext.hours > 0 ? ` +${ext.hours}h` : ''}{ext && ext.days > 0 ? ` · +${ext.days}d` : ''}
+                ...(ext && (ext.changeDays ?? 0) > 0 ? [`→ +${ext.changeDays} día${ext.changeDays !== 1 ? 's' : ''} hábil${ext.changeDays !== 1 ? 'es' : ''} por cambios`] : [])].join('\n')}
+              style={{ fontSize: 8, padding: '1px 5px', borderRadius: 3, background: '#ede9fe', color: '#6d28d9', fontWeight: 700, flexShrink: 0, whiteSpace: 'nowrap', cursor: 'help', border: ext && (ext.changeDays ?? 0) > 0 ? '0.5px solid #c4b5fd' : 'none' }}>
+              Δ{changes!.length > 1 ? changes!.length : ''}{ext && ext.hours > 0 ? ` +${ext.hours}h` : ''}{ext && (ext.changeDays ?? 0) > 0 ? ` · +${ext.changeDays}d` : ''}
+            </span>
+          )}
+          {ext && (ext.blockDays ?? 0) > 0 && (
+            <span title={[...(ext.blockers ?? []).map(b => `⛔ ${b.title} · ${b.startDate} → ${b.endDate ?? 'abierto'}`), `→ +${ext.blockDays} día${ext.blockDays !== 1 ? 's' : ''} hábil${ext.blockDays !== 1 ? 'es' : ''} perdidos por bloqueo`, ...(ext.newEndLabel ? [`Fin replanificado: ${ext.newEndLabel} (+${ext.days} d en total)`] : [])].join('\n')}
+              style={{ fontSize: 8, padding: '1px 5px', borderRadius: 3, background: '#fee2e2', color: '#b91c1c', fontWeight: 700, flexShrink: 0, whiteSpace: 'nowrap', cursor: 'help', border: '0.5px solid #fca5a5' }}>
+              ⛔ +{ext.blockDays}d{(ext.blockers ?? []).every(b => b.endDate) ? ' · resuelto' : ''}
             </span>
           )}
           {hasEtapas && !isSubtask && <LayoutList size={10} color="#0d9488" style={{ flexShrink: 0 }}/>}
@@ -214,7 +227,7 @@ function GanttRow({ act, effectivePct, idx, expanded, onToggle, isSubtask = fals
         )}
       </td>
       {Array.from({ length: TOTAL_WEEKS }).map((_, wi) => (
-        <GanttCell key={wi} wi={wi} act={act} effectivePct={effectivePct} isSubtask={isSubtask} todayWeekIdx={todayWeekIdx} issueMark={issueWeeks?.[wi]} extWeeks={ext?.extWeeks ?? 0}/>
+        <GanttCell key={wi} wi={wi} act={act} effectivePct={effectivePct} isSubtask={isSubtask} todayWeekIdx={todayWeekIdx} issueMark={issueWeeks?.[wi]} extWeeks={ext?.extWeeks ?? 0} blockWeeks={ext?.blockWeeks ?? 0}/>
       ))}
     </tr>
   );
@@ -583,12 +596,13 @@ function EntregableSection({ block, projectId, sectionIdx, getActivityPct, setAc
   function changesFor(i: number): BitacoraEntry[] { return (changes ?? []).filter(c => hits(c.impacts ?? [], i)); }
   function extFor(i: number) {
     const a = block.activities[i];
-    const ex = extensionFor(changes, planKey, block.id, i, a.endWeek);
+    const ex = extensionFor(changes, planKey, block.id, i, a.endWeek, issues, holidays);
     const d = holidays ? effectiveEndDate(planStartDate, a.endWeek, ex.days, holidays) : null;
     return { ...ex, newEndLabel: d ? fmtCalDate(d) : undefined };
   }
   function issuesFor(i: number): { list: PlanIssue[]; weeks: Record<number, 'alerta' | 'bloqueante'> } {
-    const list = (issues ?? []).filter(x => !x.endDate && hits(issueImpacts(x), i));
+    // Bloqueantes: abiertos y resueltos (el bloqueo ya ocurrió y queda en el cronograma). Alertas: solo abiertas.
+    const list = (issues ?? []).filter(x => (x.type === 'bloqueante' || !x.endDate) && hits(issueImpacts(x), i));
     const weeks: Record<number, 'alerta' | 'bloqueante'> = {};
     if (planStartDate && holidays) {
       list.forEach(x => {
@@ -610,9 +624,9 @@ function EntregableSection({ block, projectId, sectionIdx, getActivityPct, setAc
     ? parseFloat((block.activities.reduce((s, a) => s + computeActExpPct(a.startWeek, a.endWeek, todayWeekIdx), 0) / block.activities.length).toFixed(1))
     : block.pctExp;
   const dynamicPctExp = block.activities.length > 0 && todayWeekIdx !== undefined
-    ? parseFloat((block.activities.reduce((s, a, i) => s + computeActExpPct(a.startWeek, extensionFor(changes, planKey, block.id, i, a.endWeek).effEndWeek, todayWeekIdx), 0) / block.activities.length).toFixed(1))
+    ? parseFloat((block.activities.reduce((s, a, i) => s + computeActExpPct(a.startWeek, extensionFor(changes, planKey, block.id, i, a.endWeek, issues, holidays).effEndWeek, todayWeekIdx), 0) / block.activities.length).toFixed(1))
     : block.pctExp;
-  const sectionHasExt = block.activities.some((a, i) => extensionFor(changes, planKey, block.id, i, a.endWeek).days > 0);
+  const sectionHasExt = block.activities.some((a, i) => extensionFor(changes, planKey, block.id, i, a.endWeek, issues, holidays).days > 0);
   const dif = parseFloat((effectivePctReal - dynamicPctExp).toFixed(1));
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const toggle = (i: number) => setExpanded(prev => { const n = new Set(prev); n.has(i) ? n.delete(i) : n.add(i); return n; });
@@ -627,7 +641,7 @@ function EntregableSection({ block, projectId, sectionIdx, getActivityPct, setAc
           </span>
           {[{ label:'Avance real', val:`${effectivePctReal}%`, bg:'#374151' },
             { label: sectionHasExt ? 'Esperado · base' : 'Esperado', val:`${basePctExp}%`, bg:'#4b5563' },
-            ...(sectionHasExt ? [{ label:'Esperado · replan. Δ', val:`${dynamicPctExp}%`, bg:'#5b21b6' }] : []),
+            ...(sectionHasExt ? [{ label:'Esperado · replan. Δ⛔', val:`${dynamicPctExp}%`, bg:'#5b21b6' }] : []),
             { label:'Diferencia', val:fmt1(dif), bg:difBg(dif), c:difColor(dif) }].map(b => (
             <div key={b.label} style={{ textAlign:'center', padding:'4px 12px', background: b.bg, borderRadius:7 }}>
               <div style={{ fontSize:8, color: (b as any).c ?? '#9ca3af', marginBottom:1 }}>{b.label}</div>
@@ -682,6 +696,8 @@ function EntregableSection({ block, projectId, sectionIdx, getActivityPct, setAc
                     {[
                       { sw:<div style={{ width:20, height:9, background:'#0d9488', borderRadius:2 }}/>, l:'Ejecutado' },
                       { sw:<div style={{ width:20, height:9, background:'rgba(13,148,136,0.22)', borderRadius:2 }}/>, l:'Planificado' },
+                      { sw:<div style={{ width:20, height:9, background:'repeating-linear-gradient(135deg, #c4b5fd 0 3px, #ede9fe 3px 6px)', borderRadius:2 }}/>, l:'Extensión por cambios (Δ)' },
+                      { sw:<div style={{ width:20, height:9, background:'repeating-linear-gradient(135deg, #fca5a5 0 3px, #fee2e2 3px 6px)', borderRadius:2 }}/>, l:'Días perdidos por bloqueante' },
                       { sw:<span style={{ fontSize:8, padding:'1px 4px', borderRadius:3, background:'#dbeafe', color:'#1d4ed8', fontWeight:700 }}>BBVA</span>, l:'Depende de BBVA' },
                       { sw:<LayoutList size={10} color="#0d9488"/>, l:'Tiene etapas (click)' },
                     ].map(({ sw, l }) => (
@@ -969,33 +985,34 @@ function PlanDetail({ plan, getActivityPct, setActivityPct, onActivityClick, onG
   // overallExp dinámico: promedio de pctExp calculado por semana para cada actividad
   const overallExp = parseFloat((plan.entregables.map(e => {
     if (!e.activities.length) return e.pctExp;
-    return e.activities.reduce((s, a, i) => s + computeActExpPct(a.startWeek, extensionFor(changes, plan.planKey, e.id, i, a.endWeek).effEndWeek, todayWeekIdx), 0) / e.activities.length;
+    return e.activities.reduce((s, a, i) => s + computeActExpPct(a.startWeek, extensionFor(changes, plan.planKey, e.id, i, a.endWeek, issues, holidays).effEndWeek, todayWeekIdx), 0) / e.activities.length;
   }).reduce((s,v)=>s+v,0) / plan.entregables.length).toFixed(1));
   // Esperado sobre la línea base (sin extensión por cambios)
   const overallExpBase = parseFloat((plan.entregables.map(e => {
     if (!e.activities.length) return e.pctExp;
     return e.activities.reduce((s, a) => s + computeActExpPct(a.startWeek, a.endWeek, todayWeekIdx), 0) / e.activities.length;
   }).reduce((s,v)=>s+v,0) / plan.entregables.length).toFixed(1));
-  const planHasExt = plan.entregables.some(e => e.activities.some((a, i) => extensionFor(changes, plan.planKey, e.id, i, a.endWeek).days > 0));
+  const planHasExt = plan.entregables.some(e => e.activities.some((a, i) => extensionFor(changes, plan.planKey, e.id, i, a.endWeek, issues, holidays).days > 0));
 
   const overallDif  = parseFloat((overallReal-overallExp).toFixed(1));
 
   // ── Resumen de cambios funcionales sobre este cronograma ─────────────────
   const planChanges = changes.filter(c => (c.impacts ?? []).some(m => m.planKey === plan.planKey));
+  const planBlockers = issues.filter(i => i.type === 'bloqueante' && issueImpacts(i).some(m => m.planKey === plan.planKey));
   const changeSummary = (() => {
-    if (!planChanges.length) return null;
+    if (!planChanges.length && !planBlockers.length) return null;
     const hours = planChanges.reduce((s, c) => s + (c.horasEstimadas ?? 0), 0);
     const absorbed = planChanges.filter(c => c.modo === 'absorbe').length;
-    let daysTotal = 0, baseEnd = 0, effEnd = 0, tasks = 0;
+    let daysTotal = 0, blockTotal = 0, baseEnd = 0, effEnd = 0, tasks = 0;
     plan.entregables.forEach(e => e.activities.forEach((a, i) => {
-      const ex = extensionFor(changes, plan.planKey, e.id, i, a.endWeek);
+      const ex = extensionFor(changes, plan.planKey, e.id, i, a.endWeek, issues, holidays);
       baseEnd = Math.max(baseEnd, a.endWeek); effEnd = Math.max(effEnd, ex.effEndWeek);
-      if (ex.days > 0) { daysTotal += ex.days; tasks++; }
+      if (ex.days > 0) { daysTotal += ex.changeDays; blockTotal += ex.blockDays; tasks++; }
     }));
     const weeksShift = effEnd - baseEnd;
     const endDate = holidays ? effectiveEndDate(plan.startDate, baseEnd, 0, holidays) : null;
     const newEndDate = weeksShift > 0 && holidays ? effectiveEndDate(plan.startDate, effEnd, 0, holidays) : null;
-    return { n: planChanges.length, hours, absorbed, daysTotal, tasks, weeksShift, endDate, newEndDate };
+    return { n: planChanges.length, hours, absorbed, daysTotal, blockTotal, nBlock: planBlockers.length, nBlockOpen: planBlockers.filter(b => !b.endDate).length, tasks, weeksShift, endDate, newEndDate };
   })();
 
   return (
@@ -1020,7 +1037,7 @@ function PlanDetail({ plan, getActivityPct, setActivityPct, onActivityClick, onG
           {[
             { label:'AVANCE REAL', val:`${overallReal}%`, bg:'#374151', c:'#fff', sc:'#9ca3af' },
             { label: planHasExt ? 'ESPERADO · LÍNEA BASE' : 'AVANCE ESPERADO', val:`${overallExpBase}%`, bg:'#4b5563', c:'#fff', sc:'#9ca3af' },
-            ...(planHasExt ? [{ label:'ESPERADO · REPLAN. Δ', val:`${overallExp}%`, bg:'#5b21b6', c:'#fff', sc:'#c4b5fd' }] : []),
+            ...(planHasExt ? [{ label:'ESPERADO · REPLAN. Δ⛔', val:`${overallExp}%`, bg:'#5b21b6', c:'#fff', sc:'#c4b5fd' }] : []),
             { label:'DIFERENCIA', val:fmt1(overallDif), bg:difBg(overallDif), c:difColor(overallDif), sc:difColor(overallDif) },
           ].map(b => (
             <div key={b.label} style={{ textAlign:'center', padding:'6px 16px', background:b.bg, borderRadius:8 }}>
@@ -1038,7 +1055,7 @@ function PlanDetail({ plan, getActivityPct, setActivityPct, onActivityClick, onG
             : e.pctReal;
           // pctExp dinámico por entregable
           const eExp = e.activities.length
-            ? parseFloat((e.activities.reduce((s,a,i)=>s+computeActExpPct(a.startWeek,extensionFor(changes, plan.planKey, e.id, i, a.endWeek).effEndWeek,todayWeekIdx),0)/e.activities.length).toFixed(1))
+            ? parseFloat((e.activities.reduce((s,a,i)=>s+computeActExpPct(a.startWeek,extensionFor(changes, plan.planKey, e.id, i, a.endWeek, issues, holidays).effEndWeek,todayWeekIdx),0)/e.activities.length).toFixed(1))
             : e.pctExp;
           const dif = parseFloat((ePct-eExp).toFixed(1));
           return (
@@ -1059,10 +1076,16 @@ function PlanDetail({ plan, getActivityPct, setActivityPct, onActivityClick, onG
 
       {/* Resumen de cambios funcionales (Tareas) que impactan este cronograma */}
       {changeSummary && (
-        <div style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 14px', marginBottom:8, background:'#faf5ff', border:'0.5px solid #ddd6fe', borderRadius:10, flexWrap:'wrap' }}>
-          <span style={{ fontSize:11, fontWeight:700, color:'#6d28d9' }}>Δ {changeSummary.n} cambio{changeSummary.n !== 1 ? 's' : ''} funcional{changeSummary.n !== 1 ? 'es' : ''}</span>
-          <span style={{ fontSize:10, color:'#374151' }}>+{changeSummary.hours} h estimadas{changeSummary.absorbed ? ` (${changeSummary.absorbed} absorbido${changeSummary.absorbed !== 1 ? 's' : ''})` : ''}</span>
-          {changeSummary.daysTotal > 0 && <span style={{ fontSize:10, color:'#374151' }}>· +{changeSummary.daysTotal} día{changeSummary.daysTotal !== 1 ? 's' : ''} hábil{changeSummary.daysTotal !== 1 ? 'es' : ''} sobre {changeSummary.tasks} tarea{changeSummary.tasks !== 1 ? 's' : ''}</span>}
+        <div style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 14px', marginBottom:8, background: changeSummary.blockTotal > 0 ? '#fff7f7' : '#faf5ff', border:`0.5px solid ${changeSummary.blockTotal > 0 ? '#fecaca' : '#ddd6fe'}`, borderRadius:10, flexWrap:'wrap' }}>
+          {changeSummary.n > 0 && <>
+            <span style={{ fontSize:11, fontWeight:700, color:'#6d28d9' }}>Δ {changeSummary.n} cambio{changeSummary.n !== 1 ? 's' : ''} funcional{changeSummary.n !== 1 ? 'es' : ''}</span>
+            <span style={{ fontSize:10, color:'#374151' }}>+{changeSummary.hours} h{changeSummary.absorbed ? ` (${changeSummary.absorbed} absorbido${changeSummary.absorbed !== 1 ? 's' : ''})` : ''}{changeSummary.daysTotal > 0 ? ` · +${changeSummary.daysTotal} d hábil${changeSummary.daysTotal !== 1 ? 'es' : ''}` : ''}</span>
+          </>}
+          {changeSummary.nBlock > 0 && <>
+            <span style={{ fontSize:11, fontWeight:700, color:'#b91c1c' }}>⛔ {changeSummary.nBlock} bloqueante{changeSummary.nBlock !== 1 ? 's' : ''}{changeSummary.nBlockOpen ? ` (${changeSummary.nBlockOpen} abierto${changeSummary.nBlockOpen !== 1 ? 's' : ''})` : ' · resueltos'}</span>
+            <span style={{ fontSize:10, color:'#374151' }}>+{changeSummary.blockTotal} d hábil{changeSummary.blockTotal !== 1 ? 'es' : ''} perdidos</span>
+          </>}
+          {changeSummary.tasks > 0 && <span style={{ fontSize:10, color:'#64748b' }}>· {changeSummary.tasks} tarea{changeSummary.tasks !== 1 ? 's' : ''} con fecha corrida</span>}
           <span style={{ marginLeft:'auto', fontSize:10, color: changeSummary.weeksShift > 0 ? '#dc2626' : '#15803d', fontWeight:600 }}>
             {changeSummary.weeksShift > 0
               ? `Fin del cronograma: ${changeSummary.newEndDate ? fmtCalDate(changeSummary.newEndDate) : ''} (+${changeSummary.weeksShift} sem vs. línea base${changeSummary.endDate ? ` ${fmtCalDate(changeSummary.endDate)}` : ''})`
@@ -1172,15 +1195,32 @@ function computeActExpPct(startWeek: number, endWeek: number, todayWeekIdx: numb
 // ─── Extensión por cambios funcionales ───────────────────────────────────────
 // 8 h = 1 día hábil. La línea base (endWeek) no se toca; el fin efectivo es
 // endWeek + días/5 (fracción de semana). Sin cascada a otras tareas.
-interface ActExtension { hours: number; days: number; extWeeks: number; effEndWeek: number; changes: BitacoraEntry[] }
-function extensionFor(changes: BitacoraEntry[] | undefined, planKey: string | undefined, entregableId: string, actIdx: number, endWeek: number): ActExtension {
+interface ActExtension {
+  hours: number; days: number; extWeeks: number; effEndWeek: number; changes: BitacoraEntry[];
+  /** Días hábiles bloqueados (bloqueantes abiertos o resueltos que impactaron la tarea) */
+  blockDays: number; blockWeeks: number; blockers: PlanIssue[];
+  /** Días de cambios funcionales (sin bloqueos) */
+  changeDays: number;
+}
+/** Días hábiles que un bloqueante mantuvo detenida la tarea: desde inicio hasta fin (o hoy si sigue abierto), mínimo 1. */
+function blockerDays(i: PlanIssue, holidays: Set<string>): number {
+  const todayISO = new Date().toISOString().slice(0, 10);
+  const end = i.endDate ?? todayISO;
+  // fin inclusivo: el día en que se reporta el fin también estuvo bloqueado
+  const endNext = new Date(end + 'T12:00:00'); endNext.setDate(endNext.getDate() + 1);
+  return Math.max(1, businessDaysBetween(i.startDate, endNext.toISOString().slice(0, 10), holidays));
+}
+function extensionFor(changes: BitacoraEntry[] | undefined, planKey: string | undefined, entregableId: string, actIdx: number, endWeek: number,
+  issues?: PlanIssue[], holidays?: Set<string>): ActExtension {
   const list = (changes ?? []).filter(c => (c.impacts ?? []).some(m => m.planKey === planKey && m.entregableId === entregableId && m.actIdx === actIdx));
-  const days = changeExtensionDays(list);
+  const changeDays = changeExtensionDays(list);
   const hours = list.filter(c => c.modo !== 'absorbe').reduce((s, c) => s + (c.horasEstimadas ?? 0), 0);
-  const extWeeks = days / 5;
-  // Semana en la que realmente termina (1-indexed, entera): si la extensión entra en la semana siguiente, cuenta esa
-  const effEndWeek = days > 0 ? Math.ceil(endWeek + extWeeks - 1e-9) : endWeek;
-  return { hours, days, extWeeks, effEndWeek, changes: list };
+  const blockers = (issues ?? []).filter(i => i.type === 'bloqueante' && issueImpacts(i).some(m => m.planKey === planKey && m.entregableId === entregableId && m.actIdx === actIdx));
+  const blockDays = holidays ? blockers.reduce((s, i) => s + blockerDays(i, holidays), 0) : 0;
+  const days = changeDays + blockDays;
+  const extWeeks = changeDays / 5, blockWeeks = blockDays / 5;
+  const effEndWeek = days > 0 ? Math.ceil(endWeek + days / 5 - 1e-9) : endWeek;
+  return { hours, days, extWeeks, effEndWeek, changes: list, blockDays, blockWeeks, blockers, changeDays };
 }
 /** Fecha real de fin de una tarea considerando extensión (último día hábil). */
 function effectiveEndDate(planStartDate: string | undefined, endWeek: number, days: number, holidays: Set<string>): Date | null {
@@ -1607,10 +1647,11 @@ const WORK_PLANS: WorkPlan[] = WORK_PLANS_RAW.map(p => ({ ...p, planKey: p.proje
 // Muestra el % ponderado por actividades del proyecto completo, una tarjeta por
 // cronograma y una línea de tiempo calendario donde se ve el solapamiento.
 
-function ConsolidadoView({ plans, holidays, getActivityPct, onOpen, openIssues = [], changes = [] }: {
+function ConsolidadoView({ plans, holidays, getActivityPct, onOpen, openIssues = [], changes = [], allIssues = [] }: {
   plans: WorkPlan[];
   holidays: Set<string>;
   openIssues?: PlanIssue[];
+  allIssues?: PlanIssue[];
   changes?: BitacoraEntry[];
   getActivityPct: (planKey: string, eid: string, ai: number, a: PlanActivity) => number;
   onOpen: (planKey: string) => void;
@@ -1625,7 +1666,7 @@ function ConsolidadoView({ plans, holidays, getActivityPct, onOpen, openIssues =
     let sr = 0, se = 0, n = 0;
     let extDays = 0, baseEndW = 0, effEndW = 0;
     p.entregables.forEach(e => e.activities.forEach((a, i) => {
-      const ex = extensionFor(changes, p.planKey, e.id, i, a.endWeek);
+      const ex = extensionFor(changes, p.planKey, e.id, i, a.endWeek, allIssues, holidays);
       sr += getActivityPct(p.planKey, e.id, i, a); se += computeActExpPct(a.startWeek, ex.effEndWeek, todayIdx); n++;
       extDays += ex.days; baseEndW = Math.max(baseEndW, a.endWeek); effEndW = Math.max(effEndW, ex.effEndWeek);
     }));
@@ -1676,8 +1717,8 @@ function ConsolidadoView({ plans, holidays, getActivityPct, onOpen, openIssues =
           <div style={{ fontSize:20, fontWeight:700, color: difColor(dif) }}>{fmt1(parseFloat(dif.toFixed(1)))}</div>
         </div>
         {totalExtDays > 0 && (
-          <div style={{ textAlign:'right' }} title="Días hábiles agregados por cambios funcionales (Tareas)">
-            <div style={{ fontSize:9, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'.05em' }}>Δ vs. base</div>
+          <div style={{ textAlign:'right' }} title="Días hábiles agregados por cambios funcionales y bloqueantes">
+            <div style={{ fontSize:9, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'.05em' }}>Δ⛔ vs. base</div>
             <div style={{ fontSize:20, fontWeight:700, color:'#6d28d9' }}>+{totalExtDays} d</div>
           </div>
         )}
@@ -2171,7 +2212,7 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
       const todayIdx = computeCurrentWeekIdx(p.startDate, holidays);
       p.entregables.forEach(e => e.activities.forEach((a, i) => {
         sumReal += getActivityPct(p.planKey, e.id, i, a);
-        sumExp  += computeActExpPct(a.startWeek, extensionFor(changes, p.planKey, e.id, i, a.endWeek).effEndWeek, todayIdx);
+        sumExp  += computeActExpPct(a.startWeek, extensionFor(changes, p.planKey, e.id, i, a.endWeek, issues, holidays).effEndWeek, todayIdx);
         n++;
       }));
     });
@@ -2790,7 +2831,7 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
           })}
         </div>
         <div style={{ marginTop:16, padding:'8px 10px', background:'#f8fafc', borderRadius:8, border:'0.5px solid #f1f5f9' }}>
-          {[['⛔','Bloqueado'],['⚠','Con alertas'],['%','En tiempo']].map(([i,l])=>(
+          {[['⛔','Bloqueado'],['⚠','Con alertas'],['%','En tiempo'],['▨','Extensión Δ cambios'],['▧','Días perdidos ⛔']].map(([i,l])=>(
             <div key={l} style={{ display:'flex', alignItems:'center', gap:5, marginBottom:3 }}>
               <span style={{ fontSize:9 }}>{i}</span><span style={{ fontSize:9, color:'#64748b' }}>{l}</span>
             </div>
@@ -2847,6 +2888,7 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
                 plans={projectPlans}
                 holidays={holidays}
                 openIssues={issues.filter(i => !i.endDate)}
+                allIssues={issues}
                 changes={changes}
                 getActivityPct={getActivityPct}
                 onOpen={(key) => { setSelected(key); setConsolidado(false); }}

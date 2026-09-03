@@ -87,3 +87,15 @@ export function dateToBusinessWeekIdx(
   }
   return Math.floor(count / 5);
 }
+
+/**
+ * Días hábiles entre dos fechas ISO: cuenta los días d con a ≤ d < b que no son
+ * fin de semana ni festivo. Si b ≤ a devuelve 0.
+ */
+export function businessDaysBetween(aISO: string, bISO: string, holidays: Set<string>): number {
+  const a = new Date(aISO + 'T12:00:00'), b = new Date(bISO + 'T12:00:00');
+  if (b <= a) return 0;
+  let n = 0; const d = new Date(a);
+  while (d < b) { if (!isBusyDay(d, holidays)) n++; d.setDate(d.getDate() + 1); }
+  return n;
+}
