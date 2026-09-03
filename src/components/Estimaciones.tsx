@@ -756,7 +756,7 @@ export default function Estimaciones({ onViewChange, onBack }: EstimacionesProps
 
   // Cronogramas existentes del proyecto (principal siempre primero, aunque no tenga config guardada)
   const projectCronos = React.useMemo(() => {
-    const extra = Object.entries(configs)
+    const extra = (Object.entries(configs) as [string, PlanConfig][])
       .filter(([, c]) => c.projectId === selectedProjectId && c.cronoId)
       .map(([key, c]) => ({ key, cronoId: c.cronoId as string, name: c.cronoName ?? (c.cronoId as string), generated: !!c.generatedAt }));
     return [{ key: selectedProjectId, cronoId: '', name: CRONO_MAIN_NAME, generated: !!configs[selectedProjectId]?.generatedAt }, ...extra];
