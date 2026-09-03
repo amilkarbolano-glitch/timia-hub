@@ -65,3 +65,25 @@ export function computeBusinessWeekIdx(
   }
   return Math.floor(count / 5);
 }
+
+/**
+ * Semana (0-indexed) en que cae una fecha dada (ISO yyyy-mm-dd), contando días
+ * hábiles desde startDate. Devuelve -1 si la fecha es anterior al inicio.
+ */
+export function dateToBusinessWeekIdx(
+  startDate: string | undefined,
+  dateISO: string,
+  holidays: Set<string>,
+): number {
+  if (!startDate) return -1;
+  const s1 = snapToBusinessDay(new Date(startDate + 'T12:00:00'), holidays);
+  const target = new Date(dateISO + 'T12:00:00');
+  if (target < s1) return -1;
+  const d = new Date(s1);
+  let count = 0;
+  while (d < target) {
+    if (!isBusyDay(d, holidays)) count++;
+    d.setDate(d.getDate() + 1);
+  }
+  return Math.floor(count / 5);
+}

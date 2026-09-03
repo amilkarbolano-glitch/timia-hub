@@ -177,6 +177,14 @@
     {"id":"imp-sdm-03","projectId":"SDM1","jiraId":"DESDM1-0130","summary":"Mallas Control-M SDM1 — orquestación carga incremental",   "type":"Enabler Delivery","status":"Test",        "assigneeIds":["u-diego"],                         "month":"Mayo",   "weeks":"",      "q":"Q2-2026",   "phase":"Codificación",    "hoursEst":40,  "hoursImputed":16,  "context":"SDM1-Q2-2026",                            "createdBy":"Diego Sánchez","createdAt":"2026-05-01"}
   ],
 
+  "_comment_issues": "Alertas y bloqueantes con fecha de inicio/fin e impacto (planKey + entregableId + actIdx [+ etapaId]). endDate ausente = abierta.",
+  "timia_plan_issues": [
+    {"id":"is-cro-01","planKey":"CRONOS","type":"bloqueante","title":"Acceso Control-M distribuido sin aprobar por BBVA","detail":"Ticket de acceso abierto desde el 18/08. Sin acceso no se pueden construir las mallas.","startDate":"2026-08-18","entregableId":"auto","actIdx":0,"createdBy":"Juan Pablo Arévalo","createdAt":"2026-08-18T14:00:00.000Z"},
+    {"id":"is-cro-02","planKey":"CRONOS","type":"alerta","title":"Circuito validación Gobierno Técnico sin respuesta","detail":"Enviado el 11/08, BBVA no ha dado feedback. Riesgo de retrasar despliegue de esquemas.","startDate":"2026-08-11","entregableId":"doc","actIdx":2,"createdBy":"Juan Pablo Arévalo","createdAt":"2026-08-11T09:30:00.000Z"},
+    {"id":"is-cro-03","planKey":"CRONOS","type":"alerta","title":"Datos de prueba insuficientes en Sandbox","startDate":"2026-07-27","endDate":"2026-08-05","entregableId":"ada","actIdx":3,"createdBy":"Sergio David Rodriguez","createdAt":"2026-07-27T10:00:00.000Z","closedBy":"Juan Pablo Arévalo","closedAt":"2026-08-05T16:00:00.000Z"},
+    {"id":"is-fico-rnd-01","planKey":"FICO::randomico","type":"alerta","title":"Certificación QLT en curso — WO0000102642840 pendiente de cierre","startDate":"2026-08-12","entregableId":"desarrollo-d-1","actIdx":9,"createdBy":"Amilkar José Bolaño","createdAt":"2026-08-12T11:00:00.000Z"},
+    {"id":"is-fico-inp-01","planKey":"FICO::input","type":"bloqueante","title":"Solicitud de esquemas Live sin desplegar","detail":"Depende de BBVA Gobierno. Bloquea generación de datos en Sandbox.","startDate":"2026-08-25","entregableId":"documentaci-","actIdx":6,"createdBy":"Amilkar José Bolaño","createdAt":"2026-08-25T08:45:00.000Z"}
+  ],
   "timia_plan_configs": {
     "CRONOS": {
       "projectId": "CRONOS",

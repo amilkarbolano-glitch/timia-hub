@@ -6,11 +6,11 @@ import {
 } from 'lucide-react';
 import { PROJECTS, useAuth } from '../contexts/AuthContext';
 import { FlowStepper } from './SetupProject';
-import { snapToBusinessDay, addBusinessDays, computeBusinessWeekIdx } from '../lib/businessDays';
+import { snapToBusinessDay, addBusinessDays, computeBusinessWeekIdx, dateToBusinessWeekIdx } from '../lib/businessDays';
 import {
   adminStore,
   type PlanEtapa, type EtapaStates, type PlanHistorialEntry,
-  type ActivityAssignees, type AdminUser, type PlanConfig,
+  type ActivityAssignees, type AdminUser, type PlanConfig, type PlanIssue,
   makePlanKey, splitPlanKey, planKeyOf, CRONO_MAIN_NAME,
 } from '../lib/adminStore';
 
@@ -94,21 +94,26 @@ function hexToRgb(hex: string): [number, number, number] {
 
 // ─── GanttCell ────────────────────────────────────────────────────────────────
 
-function GanttCell({ wi, act, effectivePct, isSubtask, todayWeekIdx }: { wi: number; act: PlanActivity; effectivePct: number; isSubtask?: boolean; todayWeekIdx?: number }) {
+function GanttCell({ wi, act, effectivePct, isSubtask, todayWeekIdx, issueMark }: { wi: number; act: PlanActivity; effectivePct: number; isSubtask?: boolean; todayWeekIdx?: number; issueMark?: 'alerta' | 'bloqueante' }) {
+  // Marca de alerta/bloqueante en la semana: franja inferior roja/ámbar
+  const markBar = issueMark ? (
+    <div style={{ position:'absolute', left:0, right:0, bottom:0, height:3, background: issueMark==='bloqueante' ? '#dc2626' : '#f59e0b', opacity:.9 }}/>
+  ) : null;
   const planStart = act.startWeek - 1, planEnd = act.endWeek, totalSpan = planEnd - planStart;
   const execEnd = planStart + (effectivePct / 100) * totalSpan;
   const cellStart = wi, cellEnd = wi + 1;
   const planOverlap = Math.max(0, Math.min(planEnd, cellEnd) - Math.max(planStart, cellStart));
   const isToday = todayWeekIdx !== undefined && todayWeekIdx >= 0 && wi === todayWeekIdx;
   const todayStyle = isToday ? { borderLeft: '2px solid #16a34a', background: '#f0fdf4' } : {};
-  if (planOverlap === 0) return <td style={{ width: CELL_W, minWidth: CELL_W, borderLeft: isToday ? '2px solid #16a34a' : '0.5px solid #f1f5f9', background: isToday ? '#f0fdf4' : undefined }} />;
+  if (planOverlap === 0) return <td style={{ position:'relative', width: CELL_W, minWidth: CELL_W, borderLeft: isToday ? '2px solid #16a34a' : '0.5px solid #f1f5f9', background: isToday ? '#f0fdf4' : undefined }}>{markBar}</td>;
   const execOverlap = Math.max(0, Math.min(execEnd, cellEnd) - Math.max(planStart, cellStart));
   const execPct = (execOverlap / planOverlap) * 100;
   const isFirst = planStart >= cellStart && planStart < cellEnd;
   const isLast  = planEnd > cellStart && planEnd <= cellEnd;
   const br = `${isFirst?3:0}px ${isLast?3:0}px ${isLast?3:0}px ${isFirst?3:0}px`;
   return (
-    <td style={{ width: CELL_W, minWidth: CELL_W, borderLeft: isToday ? '2px solid #16a34a' : '0.5px solid #f1f5f9', ...todayStyle }}>
+    <td style={{ position:'relative', width: CELL_W, minWidth: CELL_W, borderLeft: isToday ? '2px solid #16a34a' : '0.5px solid #f1f5f9', ...todayStyle }}>
+      {markBar}
       <div style={{ margin: '3px 1px', height: 13, borderRadius: br, overflow: 'hidden', background: isSubtask ? 'rgba(13,148,136,0.12)' : 'rgba(13,148,136,0.22)' }}>
         <div style={{ width: `${execPct}%`, height: '100%', background: isSubtask ? 'rgba(13,148,136,0.55)' : '#0d9488', transition: 'width .3s' }} />
       </div>
@@ -118,12 +123,19 @@ function GanttCell({ wi, act, effectivePct, isSubtask, todayWeekIdx }: { wi: num
 
 // ─── GanttRow ─────────────────────────────────────────────────────────────────
 
-function GanttRow({ act, effectivePct, idx, expanded, onToggle, isSubtask = false, onPctChange, onActivityClick, todayWeekIdx, doneDateLabel }: {
+function GanttRow({ act, effectivePct, idx, expanded, onToggle, isSubtask = false, onPctChange, onActivityClick, todayWeekIdx, doneDateLabel, issues = [], issueWeeks }: {
   act: PlanActivity; effectivePct: number; idx: number; expanded: boolean;
   onToggle: () => void; isSubtask?: boolean;
   onPctChange?: (n: number) => void; onActivityClick?: () => void;
   todayWeekIdx?: number; doneDateLabel?: string;
+  /** Alertas/bloqueantes abiertos que impactan esta actividad */
+  issues?: PlanIssue[];
+  /** Por índice de semana (0-based), la marca a dibujar en la celda */
+  issueWeeks?: Record<number, 'alerta' | 'bloqueante'>;
 }) {
+  const hasBloq  = issues.some(i => i.type === 'bloqueante');
+  const hasAlert = issues.some(i => i.type === 'alerta');
+  const issueColor = hasBloq ? '#dc2626' : hasAlert ? '#f59e0b' : undefined;
   const hasSubtasks = (act.subtasks?.length ?? 0) > 0;
   const hasEtapas   = (act.etapas?.length ?? 0) > 0;
   const [editing, setEditing] = useState(false);
@@ -133,10 +145,14 @@ function GanttRow({ act, effectivePct, idx, expanded, onToggle, isSubtask = fals
   function confirmEdit() { const n = Math.max(0, Math.min(100, parseInt(inputVal) || 0)); onPctChange?.(n); setEditing(false); }
 
   return (
-    <tr style={{ background: isSubtask ? '#f8fffb' : idx % 2 === 0 ? '#fff' : '#fafafe' }}
+    <tr style={{ background: hasBloq ? '#fff5f5' : hasAlert ? '#fffbeb' : isSubtask ? '#f8fffb' : idx % 2 === 0 ? '#fff' : '#fafafe' }}
         onClick={!editing && onActivityClick && !isSubtask ? onActivityClick : undefined}>
-      <td style={{ padding: isSubtask ? '4px 8px 4px 24px' : '5px 10px', fontSize: isSubtask ? 10 : 11, color: '#374151', borderRight: '0.5px solid #e2e8f0', minWidth: 230, maxWidth: 230, cursor: onActivityClick && !isSubtask ? 'pointer' : 'default' }}>
+      <td style={{ padding: isSubtask ? '4px 8px 4px 24px' : '5px 10px', fontSize: isSubtask ? 10 : 11, color: '#374151', borderRight: '0.5px solid #e2e8f0', borderLeft: issueColor ? `3px solid ${issueColor}` : undefined, minWidth: 230, maxWidth: 230, cursor: onActivityClick && !isSubtask ? 'pointer' : 'default' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+          {issueColor && (
+            <span title={issues.map(i => `${i.type === 'bloqueante' ? '⛔' : '⚠'} ${i.title} (desde ${i.startDate})`).join('\n')}
+              style={{ fontSize: 10, flexShrink: 0, cursor: 'help' }}>{hasBloq ? '⛔' : '⚠'}</span>
+          )}
           {hasSubtasks && !isSubtask && (
             <button onClick={e => { e.stopPropagation(); onToggle(); }} style={{ border: 'none', background: 'none', cursor: 'pointer', padding: 0, flexShrink: 0, color: '#0d9488', display: 'flex', alignItems: 'center' }}>
               {expanded ? <ChevronDown size={12}/> : <ChevronRight size={12}/>}
@@ -170,7 +186,7 @@ function GanttRow({ act, effectivePct, idx, expanded, onToggle, isSubtask = fals
         )}
       </td>
       {Array.from({ length: TOTAL_WEEKS }).map((_, wi) => (
-        <GanttCell key={wi} wi={wi} act={act} effectivePct={effectivePct} isSubtask={isSubtask} todayWeekIdx={todayWeekIdx}/>
+        <GanttCell key={wi} wi={wi} act={act} effectivePct={effectivePct} isSubtask={isSubtask} todayWeekIdx={todayWeekIdx} issueMark={issueWeeks?.[wi]}/>
       ))}
     </tr>
   );
@@ -186,6 +202,7 @@ interface ActivityDrawerProps {
   jiraId?: string;
   weekLabels?: string[];
   planLabel?: string;
+  issues?: PlanIssue[];
   planStartDate?: string;
   holidays: Set<string>;
   onEtapaToggle: (etapaId: string) => void;
@@ -195,7 +212,7 @@ interface ActivityDrawerProps {
   onClose: () => void;
 }
 
-function ActivityDrawer({ projectId, entregableId, actIdx, act, effectivePct, etapaStates, historial, assigneeIds, allUsers, canMark, jiraId, weekLabels, planLabel, planStartDate, holidays, onEtapaToggle, onAssigneeAdd, onAssigneeRemove, onJiraSave, onClose }: ActivityDrawerProps) {
+function ActivityDrawer({ projectId, entregableId, actIdx, act, effectivePct, etapaStates, historial, assigneeIds, allUsers, canMark, jiraId, weekLabels, planLabel, issues = [], planStartDate, holidays, onEtapaToggle, onAssigneeAdd, onAssigneeRemove, onJiraSave, onClose }: ActivityDrawerProps) {
   const [search, setSearch]         = useState('');
   const [searchFocused, setFocused] = useState(false);
   const [editJira, setEditJira]     = useState(false);
@@ -292,6 +309,26 @@ function ActivityDrawer({ projectId, entregableId, actIdx, act, effectivePct, et
             })()}
           </div>
         </div>
+
+        {/* Alertas / bloqueantes que impactan esta actividad */}
+        {issues.length > 0 && (
+          <div style={{ padding:'7px 18px', borderBottom:'1px solid #f1f5f9', flexShrink:0, background: issues.some(i=>i.type==='bloqueante') ? '#fff5f5' : '#fffbeb' }}>
+            {issues.map(i => {
+              const st = ISSUE_STYLE[i.type];
+              const et = i.etapaId ? act.etapas?.find(e => e.id === i.etapaId)?.label : undefined;
+              return (
+                <div key={i.id} style={{ display:'flex', alignItems:'flex-start', gap:6, fontSize:10, color:'#374151', lineHeight:1.4, margin:'2px 0' }}>
+                  <span>{st.icon}</span>
+                  <span style={{ flex:1 }}>
+                    <strong style={{ color: st.tc }}>{i.title}</strong>
+                    {et && <span style={{ color:'#64748b' }}> · {et}</span>}
+                    <span style={{ color:'#94a3b8' }}> · desde {fmtShort(i.startDate)} ({daysBetween(i.startDate, new Date().toISOString().slice(0,10))} d)</span>
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
 
         {/* Jira ticket */}
         <div style={{ padding:'7px 18px', borderBottom:'1px solid #f1f5f9', flexShrink:0, display:'flex', alignItems:'center', gap:8, minHeight:32 }}>
@@ -491,8 +528,25 @@ function EntregableSection({ block, projectId, sectionIdx, getActivityPct, setAc
   planStartDate?: string;
   holidays?: Set<string>;
   weekLabels?: string[];
+  issues?: PlanIssue[];
 }) {
   const effectiveActivities = block.activities.map((a, i) => ({ ...a, pct: getActivityPct(i) }));
+  // Issues abiertos por actividad + semanas afectadas (desde inicio hasta fin o hoy)
+  const todayISO = new Date().toISOString().slice(0, 10);
+  function issuesFor(i: number): { list: PlanIssue[]; weeks: Record<number, 'alerta' | 'bloqueante'> } {
+    const list = (issues ?? []).filter(x => !x.endDate && x.entregableId === block.id && x.actIdx === i);
+    const weeks: Record<number, 'alerta' | 'bloqueante'> = {};
+    if (planStartDate && holidays) {
+      list.forEach(x => {
+        const a = dateToBusinessWeekIdx(planStartDate, x.startDate, holidays);
+        const b = dateToBusinessWeekIdx(planStartDate, x.endDate ?? todayISO, holidays);
+        for (let w = Math.max(0, a); w <= Math.max(a, b) && w < TOTAL_WEEKS; w++) {
+          if (x.type === 'bloqueante' || !weeks[w]) weeks[w] = x.type;
+        }
+      });
+    }
+    return { list, weeks };
+  }
   const effectivePctReal = block.activities.length > 0
     ? parseFloat((effectiveActivities.reduce((s, a) => s + a.pct, 0) / effectiveActivities.length).toFixed(1))
     : block.pctReal;
@@ -553,7 +607,8 @@ function EntregableSection({ block, projectId, sectionIdx, getActivityPct, setAc
                 <React.Fragment key={i}>
                   <GanttRow act={act} effectivePct={act.pct} idx={i} expanded={expanded.has(i)} onToggle={() => toggle(i)}
                     onPctChange={v => setActivityPct(i, v)} onActivityClick={() => onActivityClick(i, block.activities[i])}
-                    todayWeekIdx={todayWeekIdx} doneDateLabel={getDoneDate?.(i)}/>
+                    todayWeekIdx={todayWeekIdx} doneDateLabel={getDoneDate?.(i)}
+                    issues={issuesFor(i).list} issueWeeks={issuesFor(i).weeks}/>
                   {expanded.has(i) && act.subtasks?.map((sub, si) => (
                     <GanttRow key={`sub-${si}`} act={{ name:sub.name, pct:sub.pct, pctExp:sub.pct, startWeek:act.startWeek, endWeek:act.endWeek, ...(sub.optional?{optional:true}as any:{}) }} effectivePct={sub.pct} idx={si} expanded={false} onToggle={() => {}} isSubtask/>
                   ))}
@@ -626,6 +681,189 @@ function PlanNotesModal({ item, onClose, onDelete }: { item: NoteItem; onClose: 
   );
 }
 
+// ─── IssuesPanel — alertas y bloqueantes con inicio/fin e impacto ─────────────
+
+const ISSUE_STYLE = {
+  alerta:     { icon:'⚠', label:'Alerta',     tc:'#a16207', bg:'#fef9c3', bc:'#fde68a', solid:'#f59e0b' },
+  bloqueante: { icon:'⛔', label:'Bloqueante', tc:'#dc2626', bg:'#fef2f2', bc:'#fecaca', solid:'#dc2626' },
+} as const;
+
+function daysBetween(aISO: string, bISO: string): number {
+  const a = new Date(aISO + 'T12:00:00').getTime(), b = new Date(bISO + 'T12:00:00').getTime();
+  return Math.max(0, Math.round((b - a) / 86400000));
+}
+function fmtShort(iso: string): string {
+  const d = new Date(iso + 'T12:00:00');
+  return `${d.getDate()} ${['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'][d.getMonth()]}`;
+}
+
+function IssuesPanel({ plan, issues, legacy, userName, onChange }: {
+  plan: WorkPlan;
+  issues: PlanIssue[];
+  legacy: { type: 'alerta' | 'bloqueante'; text: string }[];
+  userName: string;
+  onChange: (next: PlanIssue[]) => void;
+}) {
+  const todayISO = new Date().toISOString().slice(0, 10);
+  const [adding, setAdding]       = useState<null | 'alerta' | 'bloqueante'>(null);
+  const [showClosed, setShowClosed] = useState(false);
+  const [resolving, setResolving] = useState<string | null>(null);
+  const [resolveDate, setResolveDate] = useState(todayISO);
+  const empty = { title:'', detail:'', startDate: todayISO, target:'', etapaId:'' };
+  const [form, setForm] = useState(empty);
+
+  const open   = issues.filter(i => !i.endDate).sort((a,b) => (a.type === b.type ? a.startDate.localeCompare(b.startDate) : a.type === 'bloqueante' ? -1 : 1));
+  const closed = issues.filter(i => !!i.endDate).sort((a,b) => (b.endDate ?? '').localeCompare(a.endDate ?? ''));
+
+  // Opciones de impacto: "entregableId|actIdx"
+  const targets = plan.entregables.flatMap(e => e.activities.map((a, i) => ({ v:`${e.id}|${i}`, label:`${e.name.replace(/^[IVX]+\.\s*/, '')} › ${a.name}`, etapas: a.etapas ?? [] })));
+  const selTarget = targets.find(t => t.v === form.target);
+
+  function actLabel(i: PlanIssue): string | null {
+    if (!i.entregableId || i.actIdx === undefined) return null;
+    const e = plan.entregables.find(x => x.id === i.entregableId); const a = e?.activities[i.actIdx];
+    if (!a) return null;
+    const et = i.etapaId ? a.etapas?.find(x => x.id === i.etapaId)?.label : undefined;
+    return et ? `${a.name} › ${et}` : a.name;
+  }
+
+  function submit() {
+    if (!adding || !form.title.trim()) return;
+    const [entregableId, actIdxStr] = form.target ? form.target.split('|') : [undefined, undefined];
+    const it: PlanIssue = {
+      id: `is-${Date.now()}-${Math.random().toString(36).slice(2,6)}`,
+      planKey: plan.planKey, type: adding, title: form.title.trim(), detail: form.detail.trim() || undefined,
+      startDate: form.startDate || todayISO,
+      entregableId, actIdx: actIdxStr !== undefined ? parseInt(actIdxStr) : undefined,
+      etapaId: form.etapaId || undefined,
+      createdBy: userName, createdAt: new Date().toISOString(),
+    };
+    onChange([...issues, it]); setAdding(null); setForm(empty);
+  }
+  function resolve(id: string) {
+    onChange(issues.map(i => i.id === id ? { ...i, endDate: resolveDate || todayISO, closedBy: userName, closedAt: new Date().toISOString() } : i));
+    setResolving(null);
+  }
+  function reopen(id: string) { onChange(issues.map(i => i.id === id ? { ...i, endDate: undefined, closedBy: undefined, closedAt: undefined } : i)); }
+  function remove(id: string) { if (window.confirm('¿Eliminar este registro?')) onChange(issues.filter(i => i.id !== id)); }
+
+  const nBloq = open.filter(i => i.type === 'bloqueante').length, nAlert = open.filter(i => i.type === 'alerta').length;
+  const headBg = nBloq ? '#fef2f2' : nAlert ? '#fef9c3' : '#f8fafc';
+  const headBc = nBloq ? '#fecaca' : nAlert ? '#fde68a' : '#e2e8f0';
+
+  const row = (i: PlanIssue) => {
+    const st = ISSUE_STYLE[i.type]; const isOpen = !i.endDate;
+    const days = daysBetween(i.startDate, i.endDate ?? todayISO);
+    const target = actLabel(i);
+    return (
+      <div key={i.id} style={{ display:'flex', alignItems:'flex-start', gap:7, padding:'6px 8px', margin:'3px 0', borderRadius:7, background: isOpen ? '#fff' : '#f8fafc', border:`0.5px solid ${isOpen ? st.bc : '#e2e8f0'}`, opacity: isOpen ? 1 : .75 }}>
+        <span style={{ fontSize:12, flexShrink:0, marginTop:1 }}>{st.icon}</span>
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ fontSize:11, color:'#111', fontWeight:600, lineHeight:1.4 }}>{i.title}</div>
+          {i.detail && <div style={{ fontSize:10, color:'#64748b', lineHeight:1.4, marginTop:1 }}>{i.detail}</div>}
+          <div style={{ display:'flex', alignItems:'center', gap:6, marginTop:4, flexWrap:'wrap' }}>
+            <span style={{ fontSize:9, color: st.tc, fontWeight:600, background: st.bg, borderRadius:4, padding:'1px 5px' }}>
+              {fmtShort(i.startDate)} → {i.endDate ? fmtShort(i.endDate) : 'abierta'} · {days} día{days!==1?'s':''}
+            </span>
+            {target
+              ? <span title="Tarea impactada" style={{ fontSize:9, color:'#374151', background:'#f1f5f9', borderRadius:4, padding:'1px 5px', maxWidth:260, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>↳ {target}</span>
+              : <span style={{ fontSize:9, color:'#94a3b8' }}>sin tarea asociada</span>}
+            <span style={{ fontSize:9, color:'#94a3b8' }}>· {i.createdBy.split(' ')[0]}{i.closedBy ? ` · cerró ${i.closedBy.split(' ')[0]}` : ''}</span>
+          </div>
+          {resolving === i.id && (
+            <div style={{ display:'flex', alignItems:'center', gap:5, marginTop:6 }}>
+              <span style={{ fontSize:10, color:'#374151' }}>Fecha de fin:</span>
+              <input type="date" value={resolveDate} min={i.startDate} max={todayISO} onChange={e => setResolveDate(e.target.value)}
+                style={{ fontSize:10, padding:'2px 5px', border:'0.5px solid #e2e8f0', borderRadius:5 }}/>
+              <button onClick={() => resolve(i.id)} style={{ fontSize:10, padding:'3px 9px', background:'#15803d', color:'#fff', border:'none', borderRadius:5, cursor:'pointer', fontWeight:600 }}>Confirmar fin</button>
+              <button onClick={() => setResolving(null)} style={{ fontSize:10, padding:'3px 7px', background:'#f1f5f9', border:'none', borderRadius:5, cursor:'pointer' }}>Cancelar</button>
+            </div>
+          )}
+        </div>
+        <div style={{ display:'flex', gap:3, flexShrink:0 }}>
+          {isOpen
+            ? <button onClick={() => { setResolving(i.id); setResolveDate(todayISO); }} title="Reportar fin" style={{ fontSize:9, padding:'2px 7px', background:'#f0fdf4', color:'#15803d', border:'0.5px solid #bbf7d0', borderRadius:5, cursor:'pointer', fontWeight:600 }}>Resolver</button>
+            : <button onClick={() => reopen(i.id)} title="Reabrir" style={{ fontSize:9, padding:'2px 7px', background:'#fff', color:'#64748b', border:'0.5px solid #e2e8f0', borderRadius:5, cursor:'pointer' }}>Reabrir</button>}
+          <button onClick={() => remove(i.id)} style={{ border:'none', background:'none', cursor:'pointer', color:'#cbd5e1', padding:2, display:'flex' }}><Trash2 size={10}/></button>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div style={{ background: headBg, borderRadius:10, padding:'10px 14px', border:`0.5px solid ${headBc}` }}>
+      <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8, flexWrap:'wrap' }}>
+        <p style={{ margin:0, fontSize:11, fontWeight:600, color: nBloq ? '#dc2626' : nAlert ? '#a16207' : '#94a3b8', display:'flex', alignItems:'center', gap:5, flex:1 }}>
+          <AlertTriangle size={12}/> Alertas y bloqueantes
+          {open.length > 0 && <span style={{ marginLeft:4, background:'rgba(0,0,0,0.08)', borderRadius:10, padding:'0 6px', fontSize:10 }}>{nBloq ? `${nBloq} ⛔ ` : ''}{nAlert ? `${nAlert} ⚠` : ''}</span>}
+        </p>
+        <button onClick={() => { setAdding('alerta'); setForm(empty); }} style={{ border:'0.5px solid #fde68a', background:'#fef9c3', cursor:'pointer', color:'#a16207', borderRadius:6, padding:'2px 7px', display:'flex', alignItems:'center', gap:3, fontSize:10, fontWeight:600 }}><Plus size={10}/> Alerta</button>
+        <button onClick={() => { setAdding('bloqueante'); setForm(empty); }} style={{ border:'0.5px solid #fecaca', background:'#fef2f2', cursor:'pointer', color:'#dc2626', borderRadius:6, padding:'2px 7px', display:'flex', alignItems:'center', gap:3, fontSize:10, fontWeight:600 }}><Plus size={10}/> Bloqueante</button>
+      </div>
+
+      {adding && (() => { const st = ISSUE_STYLE[adding]; return (
+        <div style={{ background:'#fff', border:`0.5px solid ${st.bc}`, borderRadius:8, padding:'10px 12px', marginBottom:8 }}>
+          <p style={{ margin:'0 0 8px', fontSize:10, fontWeight:600, color:st.tc }}>{st.icon} Nuevo {st.label.toLowerCase()}</p>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 130px', gap:6, marginBottom:6 }}>
+            <input autoFocus value={form.title} onChange={e => setForm(f => ({ ...f, title:e.target.value }))} placeholder="¿Qué está pasando?"
+              onKeyDown={e => { if (e.key==='Enter') submit(); if (e.key==='Escape') setAdding(null); }}
+              style={{ padding:'6px 9px', fontSize:11, border:'0.5px solid #e2e8f0', borderRadius:6 }}/>
+            <label style={{ display:'flex', flexDirection:'column', gap:2 }}>
+              <span style={{ fontSize:8, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'.05em' }}>Inicio</span>
+              <input type="date" value={form.startDate} max={todayISO} onChange={e => setForm(f => ({ ...f, startDate:e.target.value }))}
+                style={{ padding:'4px 6px', fontSize:10, border:'0.5px solid #e2e8f0', borderRadius:6 }}/>
+            </label>
+          </div>
+          <div style={{ display:'grid', gridTemplateColumns: selTarget?.etapas.length ? '1fr 1fr' : '1fr', gap:6, marginBottom:6 }}>
+            <label style={{ display:'flex', flexDirection:'column', gap:2 }}>
+              <span style={{ fontSize:8, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'.05em' }}>Tarea impactada</span>
+              <select value={form.target} onChange={e => setForm(f => ({ ...f, target:e.target.value, etapaId:'' }))}
+                style={{ padding:'5px 6px', fontSize:10, border:'0.5px solid #e2e8f0', borderRadius:6, background:'#fff' }}>
+                <option value="">— Sin tarea específica (afecta al plan en general) —</option>
+                {targets.map(t => <option key={t.v} value={t.v}>{t.label}</option>)}
+              </select>
+            </label>
+            {selTarget && selTarget.etapas.length > 0 && (
+              <label style={{ display:'flex', flexDirection:'column', gap:2 }}>
+                <span style={{ fontSize:8, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'.05em' }}>Subtarea (opcional)</span>
+                <select value={form.etapaId} onChange={e => setForm(f => ({ ...f, etapaId:e.target.value }))}
+                  style={{ padding:'5px 6px', fontSize:10, border:'0.5px solid #e2e8f0', borderRadius:6, background:'#fff' }}>
+                  <option value="">— Toda la tarea —</option>
+                  {selTarget.etapas.map(et => <option key={et.id} value={et.id}>{et.label}</option>)}
+                </select>
+              </label>
+            )}
+          </div>
+          <textarea value={form.detail} onChange={e => setForm(f => ({ ...f, detail:e.target.value }))} rows={2} placeholder="Detalle / contexto (opcional)"
+            style={{ width:'100%', padding:'5px 8px', fontSize:10, border:'0.5px solid #e2e8f0', borderRadius:6, resize:'vertical', boxSizing:'border-box', lineHeight:1.5, marginBottom:6 }}/>
+          <div style={{ display:'flex', gap:4 }}>
+            <button onClick={submit} disabled={!form.title.trim()} style={{ padding:'4px 12px', fontSize:10, background: form.title.trim() ? st.solid : '#e2e8f0', color:'#fff', border:'none', borderRadius:5, cursor: form.title.trim() ? 'pointer' : 'default', fontWeight:600 }}>Registrar</button>
+            <button onClick={() => setAdding(null)} style={{ padding:'4px 8px', fontSize:10, background:'#f1f5f9', border:'none', borderRadius:5, cursor:'pointer', color:'#374151' }}>Cancelar</button>
+          </div>
+        </div>
+      ); })()}
+
+      {open.length === 0 && legacy.length === 0 && !adding && <p style={{ margin:0, fontSize:11, color:'#94a3b8' }}>Sin alertas ni bloqueantes activos</p>}
+      {open.map(row)}
+      {legacy.map((l, i) => (
+        <div key={`lg-${i}`} style={{ display:'flex', alignItems:'flex-start', gap:6, padding:'4px 8px', margin:'3px 0', borderRadius:6, background:'rgba(255,255,255,0.6)', border:'0.5px dashed #e2e8f0' }}>
+          <span style={{ fontSize:11 }}>{ISSUE_STYLE[l.type].icon}</span>
+          <span style={{ fontSize:11, color:'#374151', flex:1 }}>{l.text}</span>
+          <span style={{ fontSize:8, color:'#94a3b8', whiteSpace:'nowrap' }}>sin fechas · registro antiguo</span>
+        </div>
+      ))}
+      {closed.length > 0 && (
+        <div style={{ marginTop:6 }}>
+          <button onClick={() => setShowClosed(v => !v)} style={{ border:'none', background:'none', cursor:'pointer', fontSize:10, color:'#64748b', padding:0, display:'flex', alignItems:'center', gap:3 }}>
+            {showClosed ? <ChevronDown size={11}/> : <ChevronRight size={11}/>} {closed.length} resuelta{closed.length!==1?'s':''}
+          </button>
+          {showClosed && closed.map(row)}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── PlanDetail ───────────────────────────────────────────────────────────────
 
 function loadNotes(projectId: string) {
@@ -636,8 +874,11 @@ function saveNotes(projectId: string, data: { pasos:string[]; alertas:string[]; 
   localStorage.setItem(`timia_notes_${projectId}`, JSON.stringify(data));
 }
 
-function PlanDetail({ plan, getActivityPct, setActivityPct, onActivityClick, onGoEstimaciones, getDoneDate, holidays }: {
+function PlanDetail({ plan, getActivityPct, setActivityPct, onActivityClick, onGoEstimaciones, getDoneDate, holidays, issues, onIssuesChange, userName }: {
   plan: WorkPlan;
+  issues: PlanIssue[];
+  onIssuesChange: (next: PlanIssue[]) => void;
+  userName: string;
   getActivityPct: (eid: string, ai: number, a: PlanActivity) => number;
   setActivityPct: (eid: string, ai: number, pct: number) => void;
   onActivityClick: (eid: string, ai: number, a: PlanActivity) => void;
@@ -734,12 +975,10 @@ function PlanDetail({ plan, getActivityPct, setActivityPct, onActivityClick, onG
         })}
       </div>
 
-      {/* Pasos / Alertas / Bloqueantes — editables */}
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:8, marginBottom:20 }}>
+      {/* Pasos (editables) + Alertas / Bloqueantes con fechas e impacto */}
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 2fr', gap:8, marginBottom:20 }}>
         {([
           { type:'pasos'      as const, icon:<CheckCircle size={12}/>, title:'Siguientes pasos', static:plan.pasos,       bg:'#f0fdf4', tc:'#15803d', bc:'#bbf7d0', em:'Sin pasos por iniciar', mk:'•'  },
-          { type:'alertas'    as const, icon:<AlertTriangle size={12}/>, title:'Alertas',         static:plan.alertas,     bg:'#fef9c3', tc:'#a16207', bc:'#fde68a', em:'Sin alertas activas',  mk:'⚠'  },
-          { type:'bloqueantes'as const, icon:<Clock size={12}/>,        title:'Bloqueantes',      static:plan.bloqueantes, bg:'#fef2f2', tc:'#dc2626', bc:'#fecaca', em:'Sin bloqueantes',       mk:'⛔' },
         ] as const).map(s => {
           const allItems = [...s.static, ...extraNotes[s.type]];
           const hasItems = allItems.length > 0;
@@ -755,11 +994,10 @@ function PlanDetail({ plan, getActivityPct, setActivityPct, onActivityClick, onG
                   <Plus size={10}/> Add
                 </button>
               </div>
-              {/* Inline add form */}
               {addingTo===s.type && (
                 <div style={{ marginBottom:8 }}>
                   <textarea value={addText} onChange={e=>setAddText(e.target.value)} rows={2} autoFocus
-                    placeholder={`Nuevo ${s.type==='pasos'?'paso':s.type==='alertas'?'alerta':'bloqueante'}…`}
+                    placeholder="Nuevo paso…"
                     style={{ width:'100%', padding:'5px 8px', fontSize:11, border:`0.5px solid ${s.bc}`, borderRadius:6, background:'#fff', resize:'vertical', boxSizing:'border-box', outline:'none', lineHeight:1.5 }}
                     onKeyDown={e=>{ if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();addNote(s.type);} if(e.key==='Escape') setAddingTo(null); }}
                   />
@@ -769,7 +1007,6 @@ function PlanDetail({ plan, getActivityPct, setActivityPct, onActivityClick, onG
                   </div>
                 </div>
               )}
-              {/* Items */}
               {hasItems ? allItems.map((item,i) => {
                 const isCustom = i >= s.static.length;
                 const customIdx = isCustom ? i - s.static.length : -1;
@@ -787,6 +1024,14 @@ function PlanDetail({ plan, getActivityPct, setActivityPct, onActivityClick, onG
             </div>
           );
         })}
+        <IssuesPanel
+          plan={plan}
+          issues={issues.filter(i => i.planKey === plan.planKey)}
+          legacy={[...plan.alertas.map(t => ({ type:'alerta' as const, text:t })), ...plan.bloqueantes.map(t => ({ type:'bloqueante' as const, text:t })),
+                   ...extraNotes.alertas.map((t:string) => ({ type:'alerta' as const, text:t })), ...extraNotes.bloqueantes.map((t:string) => ({ type:'bloqueante' as const, text:t }))]}
+          userName={userName}
+          onChange={next => onIssuesChange([...issues.filter(i => i.planKey !== plan.planKey), ...next])}
+        />
       </div>
       {/* Note detail modal */}
       {noteModal && (
@@ -807,6 +1052,7 @@ function PlanDetail({ plan, getActivityPct, setActivityPct, onActivityClick, onG
             planStartDate={plan.startDate}
             holidays={holidays}
             weekLabels={plan.weekLabels}
+            issues={issues}
           />
         ));
       })()}
@@ -1241,9 +1487,10 @@ const WORK_PLANS: WorkPlan[] = WORK_PLANS_RAW.map(p => ({ ...p, planKey: p.proje
 // Muestra el % ponderado por actividades del proyecto completo, una tarjeta por
 // cronograma y una línea de tiempo calendario donde se ve el solapamiento.
 
-function ConsolidadoView({ plans, holidays, getActivityPct, onOpen }: {
+function ConsolidadoView({ plans, holidays, getActivityPct, onOpen, openIssues = [] }: {
   plans: WorkPlan[];
   holidays: Set<string>;
+  openIssues?: PlanIssue[];
   getActivityPct: (planKey: string, eid: string, ai: number, a: PlanActivity) => number;
   onOpen: (planKey: string) => void;
 }) {
@@ -1343,7 +1590,9 @@ function ConsolidadoView({ plans, holidays, getActivityPct, onOpen }: {
                 <span style={{ fontSize:11, fontWeight:600, color:'#111', flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
                   {r.p.cronoId ? (r.p.cronoName ?? r.p.cronoId) : CRONO_MAIN_NAME}
                 </span>
-                {r.p.bloqueantes.length > 0 ? <span style={{ fontSize:10 }}>⛔</span> : r.p.alertas.length > 0 ? <span style={{ fontSize:10 }}>⚠</span> : null}
+                {(() => { const oi = openIssues.filter(i => i.planKey === r.p.planKey);
+                  const nb = oi.filter(i=>i.type==='bloqueante').length + r.p.bloqueantes.length, na = oi.filter(i=>i.type==='alerta').length + r.p.alertas.length;
+                  return nb > 0 ? <span style={{ fontSize:10 }} title={`${nb} bloqueante(s)`}>⛔{nb>1?nb:''}</span> : na > 0 ? <span style={{ fontSize:10 }} title={`${na} alerta(s)`}>⚠{na>1?na:''}</span> : null; })()}
               </div>
               <div style={{ display:'flex', alignItems:'baseline', gap:6, marginBottom:4 }}>
                 <span style={{ fontSize:18, fontWeight:700, color:'#111' }}>{r.real.toFixed(1)}%</span>
@@ -1721,6 +1970,9 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
   const [pctOverrides,      setPctOverrides]      = useState<Record<string,number>>(()=> adminStore.getPlanPcts());
   const [activityJiras,     setActivityJiras]     = useState<Record<string,string>>(()=> adminStore.getActivityJiras());
   const [activityDoneDates, setActivityDoneDates] = useState<Record<string,string>>(()=> adminStore.getActivityDoneDates());
+  const [issues,            setIssues]            = useState<PlanIssue[]>(() => adminStore.getPlanIssues());
+  function handleIssuesChange(next: PlanIssue[]) { setIssues(next); adminStore.savePlanIssues(next); }
+  const openIssuesOf = (planKey: string) => issues.filter(i => i.planKey === planKey && !i.endDate);
   const [selected,          setSelected]          = useState<string>(() => {
     // Si vienen de Estimaciones con un proyecto recién generado, auto-seleccionarlo
     const lastGen = localStorage.getItem('timia_last_plan_project');
@@ -2370,7 +2622,8 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
             // % consolidado ponderado por actividades (todos los cronogramas del proyecto)
             const agg = aggregatePlans(group);
             const overall = Math.round(agg.real);
-            const hasBloq = group.some(p=>p.bloqueantes.length>0), hasAlert = group.some(p=>p.alertas.length>0);
+            const hasBloq = group.some(p=>p.bloqueantes.length>0 || openIssuesOf(p.planKey).some(i=>i.type==='bloqueante'));
+            const hasAlert = group.some(p=>p.alertas.length>0 || openIssuesOf(p.planKey).some(i=>i.type==='alerta'));
             return (
               <button key={pid} onClick={()=>{ setSelected(group[0].planKey); setConsolidado(group.length>1); }} style={{ display:'flex', alignItems:'center', gap:6, padding:'7px 10px', background:isActive?`${color}15`:'transparent', border:isActive?`0.5px solid ${color}50`:'0.5px solid transparent', borderRadius:8, cursor:'pointer', textAlign:'left', transition:'all .12s' }}>
                 <div style={{ width:5, height:5, borderRadius:'50%', background:color, flexShrink:0 }}/>
@@ -2445,6 +2698,7 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
               <ConsolidadoView
                 plans={projectPlans}
                 holidays={holidays}
+                openIssues={issues.filter(i => !i.endDate)}
                 getActivityPct={getActivityPct}
                 onOpen={(key) => { setSelected(key); setConsolidado(false); }}
               />
@@ -2457,6 +2711,9 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
               onGoEstimaciones={onGoEstimaciones}
               getDoneDate={(eid,ai)=>getDoneDateLabel(plan.planKey,eid,ai)}
               holidays={holidays}
+              issues={issues}
+              onIssuesChange={handleIssuesChange}
+              userName={user?.name ?? 'Usuario'}
             />
             )}
           </>
@@ -2476,6 +2733,7 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
           weekLabels={effectivePlans.find(p => p.planKey === drawer.projectId)?.weekLabels}
           planStartDate={effectivePlans.find(p => p.planKey === drawer.projectId)?.startDate}
           planLabel={(() => { const p = effectivePlans.find(p => p.planKey === drawer.projectId); return p ? planLabel(p) : drawer.projectId; })()}
+          issues={issues.filter(i => !i.endDate && i.planKey === drawer.projectId && i.entregableId === drawer.entregableId && i.actIdx === drawer.actIdx)}
           holidays={holidays}
           onEtapaToggle={handleEtapaToggle}
           onAssigneeAdd={handleAssigneeAdd}

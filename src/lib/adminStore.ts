@@ -223,6 +223,24 @@ export interface PlanHistorialEntry {
   timestamp: string;    // ISO
 }
 
+/** Alerta o bloqueante con ventana de tiempo e impacto sobre el plan */
+export interface PlanIssue {
+  id: string;
+  planKey: string;                 // projectId o projectId::cronoId
+  type: 'alerta' | 'bloqueante';
+  title: string;
+  detail?: string;
+  startDate: string;               // ISO yyyy-mm-dd — cuándo inicia
+  endDate?: string;                // ISO yyyy-mm-dd — cuándo se reporta el fin (undefined = abierta)
+  entregableId?: string;           // impacto: entregable afectado
+  actIdx?: number;                 // impacto: actividad afectada (índice dentro del entregable)
+  etapaId?: string;                // impacto: subtarea/etapa afectada (opcional)
+  createdBy: string;
+  createdAt: string;               // ISO timestamp
+  closedBy?: string;
+  closedAt?: string;
+}
+
 /** Asignados a una actividad específica */
 export type ActivityAssignees = Record<string, string[]>;
 // key: `${projectId}__${entregableId}__${actIdx}`, value: array de user IDs
@@ -521,6 +539,10 @@ export const adminStore = {
   saveActivityAssignees: (a: ActivityAssignees)      => save('activity_assignees', a),
 
   // Tickets Jira por actividad: key = `${projectId}__${entregableId}__${actIdx}`
+  // Alertas / bloqueantes con fechas e impacto
+  getPlanIssues:  (): PlanIssue[]     => load('plan_issues', []),
+  savePlanIssues: (i: PlanIssue[])    => save('plan_issues', i),
+
   getActivityJiras:  (): Record<string, string>      => load('activity_jiras', {}),
   saveActivityJiras: (j: Record<string, string>)     => save('activity_jiras', j),
 
