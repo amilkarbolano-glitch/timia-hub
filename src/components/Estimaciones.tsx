@@ -4,7 +4,7 @@ import {
   LayoutList, Clock, CalendarDays, Settings2, CheckSquare, Users,
 } from 'lucide-react';
 import { PROJECTS, useAuth } from '../contexts/AuthContext';
-import { adminStore, type PlanEtapa, type PlanActivityConfig, type PlanEntregableConfig, type PlanConfig } from '../lib/adminStore';
+import { adminStore, makePlanKey, CRONO_MAIN_NAME, type PlanEtapa, type PlanActivityConfig, type PlanEntregableConfig, type PlanConfig } from '../lib/adminStore';
 import type { View } from './Layout';
 import { FlowStepper } from './SetupProject';
 import { snapToBusinessDay, addBusinessDays } from '../lib/businessDays';
@@ -717,6 +717,11 @@ export default function Estimaciones({ onViewChange, onBack }: EstimacionesProps
     return visibleProjects[0]?.id ?? 'FICO';
   });
   const [configs, setConfigs] = useState<Record<string, PlanConfig>>(() => adminStore.getPlanConfigs());
+  // Cronograma seleccionado dentro del proyecto ('' = principal)
+  const [selectedCronoId, setSelectedCronoId] = useState<string>('');
+  const [newCronoOpen, setNewCronoOpen] = useState(false);
+  const [newCronoName, setNewCronoName] = useState('');
+  const [newCronoTpl,  setNewCronoTpl]  = useState<'copy' | 'blank'>('copy');
   const [dirty, setDirty]     = useState(false);
   const [saved, setSaved]     = useState(false);
   // inFlow: true cuando venimos del wizard de creación de proyecto
@@ -745,15 +750,65 @@ export default function Estimaciones({ onViewChange, onBack }: EstimacionesProps
   // Get or bootstrap the config for the selected project.
   // getDefaultPlanConfig selecciona FICO_DEFAULT, PROCESAMIENTO_TEMPLATE, INGESTA_TEMPLATE,
   // HIBRIDO_TEMPLATE o BLANK_TEMPLATE según el tipo de proyecto creado en SetupProject.
-  const currentConfig: PlanConfig = configs[selectedProjectId] ?? getDefaultPlanConfig(selectedProjectId);
+  // planKey = projectId (principal) o projectId::cronoId — es la key de `configs` y de todo el storage del plan.
+  const planKey = makePlanKey(selectedProjectId, selectedCronoId || undefined);
+  const currentConfig: PlanConfig = configs[planKey] ?? getDefaultPlanConfig(selectedProjectId);
+
+  // Cronogramas existentes del proyecto (principal siempre primero, aunque no tenga config guardada)
+  const projectCronos = React.useMemo(() => {
+    const extra = Object.entries(configs)
+      .filter(([, c]) => c.projectId === selectedProjectId && c.cronoId)
+      .map(([key, c]) => ({ key, cronoId: c.cronoId as string, name: c.cronoName ?? (c.cronoId as string), generated: !!c.generatedAt }));
+    return [{ key: selectedProjectId, cronoId: '', name: CRONO_MAIN_NAME, generated: !!configs[selectedProjectId]?.generatedAt }, ...extra];
+  }, [configs, selectedProjectId]);
 
   useEffect(() => {
     setDirty(false);
     setSaved(false);
-  }, [selectedProjectId]);
+  }, [selectedProjectId, selectedCronoId]);
+
+  // Al cambiar de proyecto, volver al cronograma principal
+  useEffect(() => { setSelectedCronoId(''); setNewCronoOpen(false); }, [selectedProjectId]);
+
+  function slugCrono(name: string): string {
+    const base = name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 24) || 'crono';
+    let id = base, n = 2;
+    while (configs[makePlanKey(selectedProjectId, id)]) id = `${base}-${n++}`;
+    return id;
+  }
+
+  function createCronograma() {
+    const name = newCronoName.trim();
+    if (!name) return;
+    const cronoId = slugCrono(name);
+    const principal = configs[selectedProjectId] ?? getDefaultPlanConfig(selectedProjectId);
+    // Copiar estructura del principal (fases, actividades y etapas) con IDs nuevos, o partir en blanco
+    const entregables: PlanEntregableConfig[] = newCronoTpl === 'copy'
+      ? principal.entregables.map(e => ({ ...e, id: uid('ent'), activities: e.activities.map(a => ({ ...a, etapas: a.etapas?.map(et => ({ ...et })) })) }))
+      : [];
+    const cfg: PlanConfig = {
+      projectId: selectedProjectId, cronoId, cronoName: name,
+      totalWeeks: principal.totalWeeks, startDate: today, entregables, generatedAt: '',
+    };
+    const key = makePlanKey(selectedProjectId, cronoId);
+    const next = { ...configs, [key]: cfg };
+    setConfigs(next);
+    adminStore.savePlanConfigs(next);
+    setSelectedCronoId(cronoId);
+    setNewCronoOpen(false); setNewCronoName(''); setNewCronoTpl('copy');
+  }
+
+  function deleteCronograma(key: string) {
+    if (!configs[key]?.cronoId) return; // el principal no se elimina
+    if (!window.confirm(`¿Eliminar el cronograma "${configs[key].cronoName}"? Se perderá su estimación.`)) return;
+    const next = { ...configs }; delete next[key];
+    setConfigs(next);
+    adminStore.savePlanConfigs(next);
+    setSelectedCronoId('');
+  }
 
   function updateConfig(patch: Partial<PlanConfig>) {
-    const next = { ...configs, [selectedProjectId]: { ...currentConfig, ...patch } };
+    const next = { ...configs, [planKey]: { ...currentConfig, ...patch } };
     setConfigs(next);
     setDirty(true);
     setSaved(false);
@@ -763,7 +818,7 @@ export default function Estimaciones({ onViewChange, onBack }: EstimacionesProps
     const labels = computeWeekLabels(startDate, currentConfig.totalWeeks, holidayDates);
     const updated = {
       ...configs,
-      [selectedProjectId]: {
+      [planKey]: {
         ...currentConfig,
         startDate,
         weekLabels: labels,
@@ -782,7 +837,7 @@ export default function Estimaciones({ onViewChange, onBack }: EstimacionesProps
     const labels = computeWeekLabels(startDate, currentConfig.totalWeeks, holidayDates);
     const updated = {
       ...configs,
-      [selectedProjectId]: {
+      [planKey]: {
         ...currentConfig,
         startDate,
         weekLabels: labels,
@@ -792,8 +847,8 @@ export default function Estimaciones({ onViewChange, onBack }: EstimacionesProps
     setConfigs(updated);
     adminStore.savePlanConfigs(updated);
     setDirty(false);
-    // Marca el proyecto para que PlanDeTrabajo lo auto-seleccione al montar
-    localStorage.setItem('timia_last_plan_project', selectedProjectId);
+    // Marca el plan (planKey) para que PlanDeTrabajo lo auto-seleccione al montar
+    localStorage.setItem('timia_last_plan_project', planKey);
     // Avanza al paso 3 del flujo de creación
     if (inFlow) {
       localStorage.setItem('timia_setup_flow', '3');
@@ -906,7 +961,10 @@ export default function Estimaciones({ onViewChange, onBack }: EstimacionesProps
               <span style={{ fontSize: 15, fontWeight: 700, color }}>{selectedProjectId.slice(0,2)}</span>
             </div>
             <div>
-              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#111' }}>Estimaciones · {selectedProjectId}</h3>
+              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#111' }}>
+                Estimaciones · {selectedProjectId}
+                {selectedCronoId && <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 600, color, background: color + '15', border: `0.5px solid ${color}40`, borderRadius: 12, padding: '2px 9px' }}>Cronograma · {currentConfig.cronoName ?? selectedCronoId}</span>}
+              </h3>
               <p style={{ margin: 0, fontSize: 10, color: '#94a3b8' }}>
                 {currentConfig.entregables.length} entregables · {totalActivities} actividades · {totalEtapas} etapas definidas
               </p>
@@ -1008,6 +1066,57 @@ export default function Estimaciones({ onViewChange, onBack }: EstimacionesProps
               <ArrowRight size={14}/> Generar Plan de Trabajo
             </button>
           </div>
+        </div>
+
+        {/* ── Cronogramas del proyecto ─────────────────────────────────────── */}
+        <div style={{ marginBottom: 14, padding: '10px 16px', background: '#fff', border: '0.5px solid #e2e8f0', borderRadius: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '.06em', fontWeight: 600, marginRight: 4 }}>Cronogramas</span>
+            {projectCronos.map(c => {
+              const active = c.cronoId === selectedCronoId;
+              return (
+                <button key={c.key} onClick={() => setSelectedCronoId(c.cronoId)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 11px', fontSize: 11, fontWeight: active ? 600 : 500,
+                    background: active ? color : '#fff', color: active ? '#fff' : '#374151',
+                    border: `0.5px solid ${active ? color : '#e2e8f0'}`, borderRadius: 20, cursor: 'pointer' }}>
+                  {c.name}
+                  <span style={{ fontSize: 8, opacity: .7 }}>{c.generated ? '✓' : '—'}</span>
+                </button>
+              );
+            })}
+            <button onClick={() => setNewCronoOpen(v => !v)}
+              style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '5px 10px', fontSize: 11, fontWeight: 600, color: '#7c3aed',
+                background: '#f5f3ff', border: '0.5px dashed #c4b5fd', borderRadius: 20, cursor: 'pointer' }}>
+              + Cronograma
+            </button>
+            {selectedCronoId && (
+              <button onClick={() => deleteCronograma(planKey)} title="Eliminar este cronograma"
+                style={{ marginLeft: 'auto', padding: '4px 9px', fontSize: 10, color: '#dc2626', background: '#fff', border: '0.5px solid #fecaca', borderRadius: 7, cursor: 'pointer' }}>
+                Eliminar cronograma
+              </button>
+            )}
+          </div>
+          {newCronoOpen && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, padding: '10px 12px', background: '#fafafe', border: '0.5px solid #ede9fe', borderRadius: 8, flexWrap: 'wrap' }}>
+              <input autoFocus value={newCronoName} onChange={e => setNewCronoName(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') createCronograma(); if (e.key === 'Escape') setNewCronoOpen(false); }}
+                placeholder="Nombre · ej: Input, Output, Randómico, FICO 2.0…"
+                style={{ flex: 1, minWidth: 220, padding: '7px 10px', fontSize: 11, border: '0.5px solid #e2e8f0', borderRadius: 7 }}/>
+              <select value={newCronoTpl} onChange={e => setNewCronoTpl(e.target.value as 'copy' | 'blank')}
+                style={{ padding: '7px 8px', fontSize: 11, border: '0.5px solid #e2e8f0', borderRadius: 7, background: '#fff' }}>
+                <option value="copy">Copiar fases del principal</option>
+                <option value="blank">En blanco</option>
+              </select>
+              <button onClick={createCronograma} disabled={!newCronoName.trim()}
+                style={{ padding: '7px 14px', fontSize: 11, fontWeight: 600, color: '#fff', background: newCronoName.trim() ? '#7c3aed' : '#c4b5fd', border: 'none', borderRadius: 7, cursor: newCronoName.trim() ? 'pointer' : 'default' }}>
+                Crear
+              </button>
+              <button onClick={() => setNewCronoOpen(false)} style={{ padding: '7px 10px', fontSize: 11, color: '#64748b', background: 'none', border: 'none', cursor: 'pointer' }}>Cancelar</button>
+              <p style={{ width: '100%', margin: 0, fontSize: 9, color: '#94a3b8' }}>
+                Un cronograma es un sub-plan del proyecto con su propia fecha de inicio y semanas (ej. un procesamiento, un tablón, una migración). El % del proyecto se pondera por actividades entre todos sus cronogramas.
+              </p>
+            </div>
+          )}
         </div>
 
         {/* ── Panel Gestionar Equipo — visible para pm / tech_lead / project_lead ── */}

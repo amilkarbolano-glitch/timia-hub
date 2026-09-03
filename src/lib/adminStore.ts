@@ -92,6 +92,7 @@ export interface KanbanTask {
   assigneeIds: string[];  // AdminUser IDs
   jiraId?: string;
   projectId?: string;
+  cronoId?: string;       // cronograma dentro del proyecto (undefined = principal)
   entregableId?: string;
   actIdx?: number;
   fromPlan?: boolean;
@@ -243,11 +244,31 @@ export interface PlanEntregableConfig {
 
 export interface PlanConfig {
   projectId: string;
+  /** Cronograma dentro del proyecto. undefined/'' = cronograma principal. */
+  cronoId?: string;
+  cronoName?: string;
   totalWeeks: number;
   weekLabels?: string[];
   startDate?: string;   // ISO date — anchor for week label computation
   entregables: PlanEntregableConfig[];
   generatedAt: string;  // ISO
+}
+
+// ─── Cronogramas — helpers de planKey ────────────────────────────────────────
+// planKey identifica un plan: `${projectId}` (principal) o `${projectId}::${cronoId}`.
+// Todas las keys de %, etapas, asignados, jiras, notas usan planKey en lugar de projectId,
+// lo que mantiene 100% compatible la data existente (principal ⇒ planKey === projectId).
+export const CRONO_SEP = '::';
+export const CRONO_MAIN_NAME = 'Principal';
+export function makePlanKey(projectId: string, cronoId?: string): string {
+  return cronoId ? `${projectId}${CRONO_SEP}${cronoId}` : projectId;
+}
+export function splitPlanKey(planKey: string): { projectId: string; cronoId?: string } {
+  const i = planKey.indexOf(CRONO_SEP);
+  return i < 0 ? { projectId: planKey } : { projectId: planKey.slice(0, i), cronoId: planKey.slice(i + CRONO_SEP.length) };
+}
+export function planKeyOf(cfg: Pick<PlanConfig, 'projectId' | 'cronoId'>): string {
+  return makePlanKey(cfg.projectId, cfg.cronoId);
 }
 
 // ─── Datos por defecto ────────────────────────────────────────────────────────
@@ -503,17 +524,25 @@ export const adminStore = {
   getActivityJiras:  (): Record<string, string>      => load('activity_jiras', {}),
   saveActivityJiras: (j: Record<string, string>)     => save('activity_jiras', j),
 
-  // Configuración de planes generados desde Estimaciones (keyed by projectId)
+  // Configuración de planes generados desde Estimaciones (keyed by planKey)
   getPlanConfigs:  (): Record<string, PlanConfig>   => load('plan_configs', {}),
   savePlanConfigs: (c: Record<string, PlanConfig>)  => save('plan_configs', c),
-  getPlanConfig:   (projectId: string): PlanConfig | null => {
+  getPlanConfig:   (planKey: string): PlanConfig | null => {
     const all = load<Record<string, PlanConfig>>('plan_configs', {});
-    return all[projectId] ?? null;
+    return all[planKey] ?? null;
   },
-  savePlanConfig: (projectId: string, config: PlanConfig) => {
+  savePlanConfig: (planKey: string, config: PlanConfig) => {
     const all = load<Record<string, PlanConfig>>('plan_configs', {});
-    all[projectId] = config;
+    all[planKey] = config;
     save('plan_configs', all);
+  },
+  /** Cronogramas configurados para un proyecto (principal primero). */
+  getProjectCronogramas: (projectId: string): { planKey: string; cronoId?: string; name: string; cfg: PlanConfig }[] => {
+    const all = load<Record<string, PlanConfig>>('plan_configs', {});
+    return Object.entries(all)
+      .filter(([, c]) => c.projectId === projectId)
+      .map(([planKey, cfg]) => ({ planKey, cronoId: cfg.cronoId, name: cfg.cronoId ? (cfg.cronoName ?? cfg.cronoId) : CRONO_MAIN_NAME, cfg }))
+      .sort((a, b) => (a.cronoId ? 1 : 0) - (b.cronoId ? 1 : 0));
   },
 
   // Kanban tasks — merges new default tasks on every load (migration-safe)
@@ -542,9 +571,11 @@ export const adminStore = {
   },
 
   // Sync a specific plan-activity assignee to its kanban card
-  syncKanbanAssignees: (projectId: string, entregableId: string, actIdx: number, assigneeIds: string[]) => {
+  // planKey puede ser `${projectId}` o `${projectId}::${cronoId}`
+  syncKanbanAssignees: (planKey: string, entregableId: string, actIdx: number, assigneeIds: string[]) => {
+    const { projectId, cronoId } = splitPlanKey(planKey);
     const tasks = load<KanbanTask[]>('kanban_tasks', DEFAULT_KANBAN_TASKS);
-    const idx = tasks.findIndex(t => t.projectId === projectId && t.entregableId === entregableId && t.actIdx === actIdx);
+    const idx = tasks.findIndex(t => t.projectId === projectId && (t.cronoId ?? undefined) === cronoId && t.entregableId === entregableId && t.actIdx === actIdx);
     if (idx >= 0) {
       tasks[idx] = { ...tasks[idx], assigneeIds };
       save('kanban_tasks', tasks);

@@ -11,6 +11,7 @@ import {
   adminStore,
   type PlanEtapa, type EtapaStates, type PlanHistorialEntry,
   type ActivityAssignees, type AdminUser, type PlanConfig,
+  makePlanKey, splitPlanKey, planKeyOf, CRONO_MAIN_NAME,
 } from '../lib/adminStore';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -23,7 +24,19 @@ interface PlanActivity {
   bbva?: boolean; subtasks?: PlanSubtask[]; etapas?: PlanEtapa[];
 }
 interface PlanEntregable { id: string; name: string; pctReal: number; pctExp: number; activities: PlanActivity[]; }
-interface WorkPlan { projectId: string; respBBVA: string; respTimia: string; pasos: string[]; alertas: string[]; bloqueantes: string[]; entregables: PlanEntregable[]; startDate?: string; weekLabels?: string[]; }
+interface WorkPlan {
+  projectId: string;
+  /** Identidad del plan: projectId (principal) o projectId::cronoId. Todas las keys de storage usan esto. */
+  planKey: string;
+  cronoId?: string;
+  cronoName?: string;
+  respBBVA: string; respTimia: string; pasos: string[]; alertas: string[]; bloqueantes: string[];
+  entregables: PlanEntregable[]; startDate?: string; weekLabels?: string[];
+}
+/** Etiqueta corta de un cronograma: "FICO" o "FICO · Input" */
+function planLabel(p: Pick<WorkPlan, 'projectId' | 'cronoName' | 'cronoId'>): string {
+  return p.cronoId ? `${p.projectId} · ${p.cronoName ?? p.cronoId}` : p.projectId;
+}
 
 // ─── Semanas ──────────────────────────────────────────────────────────────────
 
@@ -172,6 +185,7 @@ interface ActivityDrawerProps {
   assigneeIds: string[]; allUsers: AdminUser[]; canMark: boolean;
   jiraId?: string;
   weekLabels?: string[];
+  planLabel?: string;
   planStartDate?: string;
   holidays: Set<string>;
   onEtapaToggle: (etapaId: string) => void;
@@ -181,7 +195,7 @@ interface ActivityDrawerProps {
   onClose: () => void;
 }
 
-function ActivityDrawer({ projectId, entregableId, actIdx, act, effectivePct, etapaStates, historial, assigneeIds, allUsers, canMark, jiraId, weekLabels, planStartDate, holidays, onEtapaToggle, onAssigneeAdd, onAssigneeRemove, onJiraSave, onClose }: ActivityDrawerProps) {
+function ActivityDrawer({ projectId, entregableId, actIdx, act, effectivePct, etapaStates, historial, assigneeIds, allUsers, canMark, jiraId, weekLabels, planLabel, planStartDate, holidays, onEtapaToggle, onAssigneeAdd, onAssigneeRemove, onJiraSave, onClose }: ActivityDrawerProps) {
   const [search, setSearch]         = useState('');
   const [searchFocused, setFocused] = useState(false);
   const [editJira, setEditJira]     = useState(false);
@@ -227,7 +241,7 @@ function ActivityDrawer({ projectId, entregableId, actIdx, act, effectivePct, et
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 10 }}>
             <div style={{ flex: 1, minWidth: 0 }}>
               <p style={{ margin: '0 0 3px', fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '.06em', fontWeight: 600 }}>
-                {projectId} · {entregableId.toUpperCase()}
+                {planLabel ?? projectId} · {entregableId.toUpperCase()}
                 {act.bbva && <span style={{ marginLeft: 6, fontSize: 8, padding: '1px 5px', borderRadius: 3, background: '#dbeafe', color: '#1d4ed8', fontWeight: 700 }}>BBVA</span>}
               </p>
               <h3 style={{ margin: 0, fontSize: 13, fontWeight: 700, color: '#111', lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{act.name}</h3>
@@ -633,11 +647,11 @@ function PlanDetail({ plan, getActivityPct, setActivityPct, onActivityClick, onG
 }) {
   const color = PROJECTS.find(p => p.id === plan.projectId)?.color ?? '#64748b';
   // ── Extra notes (persisted) ─────────────────────────────────────────────────
-  const [extraNotes, setExtraNotes] = useState(() => loadNotes(plan.projectId));
+  const [extraNotes, setExtraNotes] = useState(() => loadNotes(plan.planKey));
   const [noteModal,  setNoteModal]  = useState<NoteItem | null>(null);
   const [addingTo,   setAddingTo]   = useState<'pasos'|'alertas'|'bloqueantes'|null>(null);
   const [addText,    setAddText]    = useState('');
-  function saveExtra(next: typeof extraNotes) { setExtraNotes(next); saveNotes(plan.projectId, next); }
+  function saveExtra(next: typeof extraNotes) { setExtraNotes(next); saveNotes(plan.planKey, next); }
   function addNote(type: 'pasos'|'alertas'|'bloqueantes') {
     const t = addText.trim(); if (!t) return;
     const next = { ...extraNotes, [type]: [...extraNotes[type], t] };
@@ -670,7 +684,10 @@ function PlanDetail({ plan, getActivityPct, setActivityPct, onActivityClick, onG
             <span style={{ fontSize:15, fontWeight:700, color }}>{plan.projectId.slice(0,2)}</span>
           </div>
           <div>
-            <h3 style={{ margin:0, fontSize:15, fontWeight:600, color:'#111' }}>Proyecto {plan.projectId}</h3>
+            <h3 style={{ margin:0, fontSize:15, fontWeight:600, color:'#111' }}>
+              Proyecto {plan.projectId}
+              {plan.cronoId && <span style={{ marginLeft:8, fontSize:11, fontWeight:600, color, background:`${color}15`, border:`0.5px solid ${color}40`, borderRadius:12, padding:'2px 9px' }}>Cronograma · {plan.cronoName ?? plan.cronoId}</span>}
+            </h3>
             <p style={{ margin:0, fontSize:10, color:'#94a3b8' }}>
               Resp. Timia: <strong style={{ color:'#64748b' }}>{plan.respTimia}</strong>
               {plan.respBBVA !== 'N/A · Credicorp Capital' && <> · BBVA: <strong style={{ color:'#64748b' }}>{plan.respBBVA}</strong></>}
@@ -812,6 +829,9 @@ function computeActExpPct(startWeek: number, endWeek: number, todayWeekIdx: numb
 function planConfigToWorkPlan(cfg: PlanConfig): WorkPlan {
   return {
     projectId: cfg.projectId,
+    planKey:   planKeyOf(cfg),
+    cronoId:   cfg.cronoId || undefined,
+    cronoName: cfg.cronoId ? (cfg.cronoName ?? cfg.cronoId) : undefined,
     startDate: cfg.startDate,
     weekLabels: cfg.weekLabels,
     respBBVA:  'Por definir',
@@ -841,7 +861,7 @@ function planConfigToWorkPlan(cfg: PlanConfig): WorkPlan {
 // Nota: actividades marcadas "BBVA" son tareas que TIMIA INICIA
 // pero que dependen de BBVA para completarse (aprobaciones, accesos, etc.)
 
-const WORK_PLANS: WorkPlan[] = [
+const WORK_PLANS_RAW: Omit<WorkPlan,'planKey'>[] = [
   {
     projectId: 'FICO',
     startDate: '2026-05-04',
@@ -1215,6 +1235,135 @@ const WORK_PLANS: WorkPlan[] = [
   { projectId:'QA',      respBBVA:'TBD · BBVA',              respTimia:'Juan Pablo Arévalo',    pasos:[], alertas:[], bloqueantes:[], entregables:[{id:'doc',name:'I. Documentación',pctReal:0,pctExp:0,activities:[]},{id:'comp',name:'II. Componentes QA',pctReal:0,pctExp:0,activities:[]}] },
   { projectId:'FABRICA', respBBVA:'N/A · Credicorp Capital', respTimia:'David Huamán',          pasos:[], alertas:[], bloqueantes:[], entregables:[{id:'doc',name:'I. Documentación',pctReal:0,pctExp:0,activities:[]},{id:'comp',name:'II. Componentes',pctReal:0,pctExp:0,activities:[]},{id:'ent',name:'III. Entregables',pctReal:0,pctExp:0,activities:[]}] },
 ];
+const WORK_PLANS: WorkPlan[] = WORK_PLANS_RAW.map(p => ({ ...p, planKey: p.projectId }));
+
+// ─── ConsolidadoView — vista de proyecto con varios cronogramas ───────────────
+// Muestra el % ponderado por actividades del proyecto completo, una tarjeta por
+// cronograma y una línea de tiempo calendario donde se ve el solapamiento.
+
+function ConsolidadoView({ plans, holidays, getActivityPct, onOpen }: {
+  plans: WorkPlan[];
+  holidays: Set<string>;
+  getActivityPct: (planKey: string, eid: string, ai: number, a: PlanActivity) => number;
+  onOpen: (planKey: string) => void;
+}) {
+  const projectId = plans[0].projectId;
+  const color = PROJECTS.find(p => p.id === projectId)?.color ?? '#64748b';
+  const today = new Date(); today.setHours(12,0,0,0);
+
+  type Row = { p: WorkPlan; real: number; exp: number; n: number; start: Date | null; end: Date | null; weeks: number; todayIdx: number };
+  const rows: Row[] = plans.map(p => {
+    const todayIdx = computeCurrentWeekIdx(p.startDate, holidays);
+    let sr = 0, se = 0, n = 0;
+    p.entregables.forEach(e => e.activities.forEach((a, i) => { sr += getActivityPct(p.planKey, e.id, i, a); se += computeActExpPct(a.startWeek, a.endWeek, todayIdx); n++; }));
+    const weeks = p.weekLabels?.length ?? Math.max(TOTAL_WEEKS, ...p.entregables.flatMap(e => e.activities.map(a => a.endWeek)));
+    const start = weekToActualDate(p.startDate, 1, holidays);
+    const end   = weekToActualDate(p.startDate, weeks + 1, holidays);
+    return { p, real: n ? sr / n : 0, exp: n ? se / n : 0, n, start, end, weeks, todayIdx };
+  });
+  const totalN = rows.reduce((s, r) => s + r.n, 0);
+  const real = totalN ? rows.reduce((s, r) => s + r.real * r.n, 0) / totalN : 0;
+  const exp  = totalN ? rows.reduce((s, r) => s + r.exp  * r.n, 0) / totalN : 0;
+  const dif  = real - exp;
+
+  // Eje de tiempo común
+  const starts = rows.map(r => r.start).filter(Boolean) as Date[];
+  const ends   = rows.map(r => r.end).filter(Boolean) as Date[];
+  const axisMin = starts.length ? new Date(Math.min(...starts.map(d => d.getTime()))) : today;
+  const axisMax = ends.length   ? new Date(Math.max(...ends.map(d => d.getTime()), today.getTime())) : today;
+  const span = Math.max(1, axisMax.getTime() - axisMin.getTime());
+  const pos = (d: Date) => Math.min(100, Math.max(0, ((d.getTime() - axisMin.getTime()) / span) * 100));
+  const fmt = (d: Date | null) => d ? `${d.getDate()} ${['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'][d.getMonth()]}` : '—';
+  // Marcas de mes en el eje
+  const months: { label: string; left: number }[] = [];
+  { const c = new Date(axisMin.getFullYear(), axisMin.getMonth(), 1);
+    while (c <= axisMax) { if (c >= axisMin) months.push({ label: fmt(c).split(' ')[1], left: pos(c) }); c.setMonth(c.getMonth() + 1); } }
+
+  return (
+    <div>
+      {/* Cabecera consolidada */}
+      <div style={{ display:'flex', alignItems:'center', gap:14, padding:'14px 18px', background:'#fff', border:'0.5px solid #e2e8f0', borderRadius:12, marginBottom:12 }}>
+        <div style={{ width:40, height:40, borderRadius:10, background:`${color}15`, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+          <span style={{ fontSize:15, fontWeight:700, color }}>{projectId.slice(0,2)}</span>
+        </div>
+        <div style={{ flex:1 }}>
+          <h3 style={{ margin:0, fontSize:15, fontWeight:600, color:'#111' }}>Proyecto {projectId} · Consolidado</h3>
+          <p style={{ margin:'2px 0 0', fontSize:10, color:'#64748b' }}>{plans.length} cronogramas · {totalN} actividades · ponderado por actividad</p>
+        </div>
+        {[['Real', real, '#111'], ['Esperado', exp, '#64748b']].map(([l, v, c]) => (
+          <div key={l as string} style={{ textAlign:'right' }}>
+            <div style={{ fontSize:9, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'.05em' }}>{l as string}</div>
+            <div style={{ fontSize:20, fontWeight:700, color: c as string }}>{(v as number).toFixed(1)}%</div>
+          </div>
+        ))}
+        <div style={{ textAlign:'right' }}>
+          <div style={{ fontSize:9, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'.05em' }}>Dif.</div>
+          <div style={{ fontSize:20, fontWeight:700, color: difColor(dif) }}>{fmt1(parseFloat(dif.toFixed(1)))}</div>
+        </div>
+      </div>
+
+      {/* Línea de tiempo calendario */}
+      <div style={{ background:'#fff', border:'0.5px solid #e2e8f0', borderRadius:12, padding:'12px 18px 14px', marginBottom:12 }}>
+        <p style={{ margin:'0 0 10px', fontSize:10, fontWeight:600, color:'#374151' }}>Cronogramas en el tiempo</p>
+        <div style={{ position:'relative', marginLeft:150 }}>
+          {/* eje meses */}
+          <div style={{ position:'relative', height:14, borderBottom:'0.5px solid #e2e8f0', marginBottom:6 }}>
+            {months.map(m => <span key={m.label + m.left} style={{ position:'absolute', left:`${m.left}%`, fontSize:8, color:'#94a3b8', textTransform:'uppercase' }}>{m.label}</span>)}
+          </div>
+          {rows.map(r => (
+            <div key={r.p.planKey} style={{ position:'relative', height:26, marginBottom:4 }}>
+              <div style={{ position:'absolute', left:-150, width:142, top:5, fontSize:10, fontWeight:600, color:'#374151', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', cursor:'pointer' }}
+                onClick={() => onOpen(r.p.planKey)} title={r.p.cronoName ?? CRONO_MAIN_NAME}>
+                {r.p.cronoId ? (r.p.cronoName ?? r.p.cronoId) : CRONO_MAIN_NAME}
+              </div>
+              {r.start && r.end && (
+                <div onClick={() => onOpen(r.p.planKey)} title={`${fmt(r.start)} → ${fmt(r.end)} · ${r.weeks} semanas`}
+                  style={{ position:'absolute', left:`${pos(r.start)}%`, width:`${Math.max(1.5, pos(r.end) - pos(r.start))}%`, top:4, height:18, borderRadius:5,
+                    background:`${color}22`, border:`0.5px solid ${color}55`, overflow:'hidden', cursor:'pointer' }}>
+                  <div style={{ width:`${Math.min(100, r.real)}%`, height:'100%', background:color, opacity:.75 }}/>
+                  <span style={{ position:'absolute', left:6, top:2, fontSize:9, fontWeight:600, color: r.real > 15 ? '#fff' : '#374151' }}>{r.real.toFixed(0)}%</span>
+                </div>
+              )}
+            </div>
+          ))}
+          {/* hoy */}
+          <div style={{ position:'absolute', top:0, bottom:0, left:`${pos(today)}%`, width:2, background:'#16a34a', opacity:.8 }}/>
+          <span style={{ position:'absolute', top:-14, left:`${pos(today)}%`, transform:'translateX(-50%)', fontSize:7, fontWeight:800, color:'#16a34a', letterSpacing:'.05em' }}>HOY</span>
+        </div>
+      </div>
+
+      {/* Tarjetas por cronograma */}
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(230px, 1fr))', gap:8 }}>
+        {rows.map(r => {
+          const d = r.real - r.exp;
+          return (
+            <button key={r.p.planKey} onClick={() => onOpen(r.p.planKey)}
+              style={{ textAlign:'left', background:'#fff', border:'0.5px solid #e2e8f0', borderRadius:10, padding:'10px 14px', cursor:'pointer', transition:'all .12s' }}>
+              <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:6 }}>
+                <span style={{ fontSize:11, fontWeight:600, color:'#111', flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                  {r.p.cronoId ? (r.p.cronoName ?? r.p.cronoId) : CRONO_MAIN_NAME}
+                </span>
+                {r.p.bloqueantes.length > 0 ? <span style={{ fontSize:10 }}>⛔</span> : r.p.alertas.length > 0 ? <span style={{ fontSize:10 }}>⚠</span> : null}
+              </div>
+              <div style={{ display:'flex', alignItems:'baseline', gap:6, marginBottom:4 }}>
+                <span style={{ fontSize:18, fontWeight:700, color:'#111' }}>{r.real.toFixed(1)}%</span>
+                <span style={{ fontSize:10, color:'#94a3b8' }}>real · {r.exp.toFixed(1)}% esp.</span>
+                <span style={{ fontSize:11, fontWeight:700, color:difColor(d), marginLeft:'auto' }}>{fmt1(parseFloat(d.toFixed(1)))}</span>
+              </div>
+              <div style={{ height:5, background:'#f1f5f9', borderRadius:4, overflow:'hidden', marginBottom:6 }}>
+                <div style={{ width:`${Math.min(r.real,100)}%`, height:'100%', background:color }}/>
+              </div>
+              <div style={{ fontSize:9, color:'#64748b' }}>
+                {fmt(r.start)} → {fmt(r.end)} · {r.weeks} sem · {r.n} act.
+                {r.todayIdx >= 0 && r.todayIdx < r.weeks && <span style={{ marginLeft:4, color:'#16a34a', fontWeight:600 }}>S{r.todayIdx + 1}</span>}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 // ─── PPTX Export ──────────────────────────────────────────────────────────────
 
@@ -1222,7 +1371,7 @@ async function exportPlanPPTX(plan: WorkPlan, getActivityPct: (eid: string, ai: 
   const pptxgen = (await import('pptxgenjs')).default;
   const pptx = new pptxgen();
   pptx.layout = 'LAYOUT_WIDE';
-  pptx.title = `Plan de Trabajo · ${plan.projectId}`;
+  pptx.title = `Plan de Trabajo · ${planLabel(plan)}`;
 
   // ── Paleta ───────────────────────────────────────────────────────────────────
   const BG_DARK  = '0F172A';                   // portada y última slide
@@ -1291,7 +1440,7 @@ async function exportPlanPPTX(plan: WorkPlan, getActivityPct: (eid: string, ai: 
   s1.addShape('rect'as any,{x:0,y:0,w:0.07,h:5.63,fill:{color:RED}});
   s1.addText('TIMIA',{x:0.4,y:0.28,w:3,fontSize:12,bold:true,color:RED,align:'left'});
   s1.addText('Plan de Trabajo',{x:0.4,y:1.05,w:9,fontSize:22,bold:false,color:GRAY,align:'left'});
-  s1.addText(`Proyecto ${plan.projectId}`,{x:0.4,y:1.55,w:9,fontSize:50,bold:true,color:WHITE,align:'left'});
+  s1.addText(`Proyecto ${planLabel(plan)}`,{x:0.4,y:1.55,w:9,fontSize:50,bold:true,color:WHITE,align:'left'});
   s1.addText(today,{x:0.4,y:2.85,w:9,fontSize:12,color:GRAY,align:'left'});
   [{label:'AVANCE REAL',val:`${overallReal}%`,col:WHITE},{label:'AVANCE ESPERADO',val:`${overallExp}%`,col:WHITE},{label:'DIFERENCIA',val:`${dif>=0?'+':''}${dif}%`,col:dif>=0?GREEN_L:ERR}].forEach((c,ci)=>{
     const x=0.4+ci*3.1;
@@ -1503,7 +1652,7 @@ async function exportPlanPPTX(plan: WorkPlan, getActivityPct: (eid: string, ai: 
   });
   sL.addText('Generado por Timia Hub',{x:0.4,y:5.1,w:9,fontSize:8,color:MUT,align:'center'});
 
-  await pptx.writeFile({fileName:`Plan_${plan.projectId}_${new Date().toISOString().slice(0,10)}.pptx`});
+  await pptx.writeFile({fileName:`Plan_${plan.planKey.replace('::','_')}_${new Date().toISOString().slice(0,10)}.pptx`});
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
@@ -1527,23 +1676,33 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
       if (raw) startDateOverrides = JSON.parse(raw);
     } catch { /* ignorar */ }
 
-    // Mapa de planes generados (projectId → WorkPlan)
+    // Mapa de planes generados (planKey → WorkPlan). planKey = projectId (principal) o projectId::cronoId
     const generatedMap: Record<string, WorkPlan> = {};
-    Object.values(storedConfigs).forEach(c => {
+    Object.entries(storedConfigs).forEach(([key, c]) => {
       if (c.generatedAt && c.entregables.length > 0) {
-        generatedMap[c.projectId] = planConfigToWorkPlan(c);
+        const wp = planConfigToWorkPlan(c);
+        // La key del storage manda (por si cronoId no está en el objeto)
+        const { cronoId } = splitPlanKey(key);
+        generatedMap[key] = cronoId && !wp.cronoId ? { ...wp, planKey: key, cronoId, cronoName: c.cronoName ?? cronoId } : wp;
       }
     });
-    // Prioridad: generated sobre static; aplica startDate override si existe
+    // Prioridad: generated sobre static; aplica startDate override si existe (solo principal)
     const merged = WORK_PLANS.map(p => {
-      const base = generatedMap[p.projectId] ?? p;
-      const override = startDateOverrides[p.projectId];
+      const base = generatedMap[p.planKey] ?? p;
+      const override = startDateOverrides[p.planKey];
       return override ? { ...base, startDate: override } : base;
     });
-    // Agregar planes generados para proyectos sin plan estático
-    const staticIds = new Set(WORK_PLANS.map(p => p.projectId));
-    const extra = Object.values(generatedMap).filter(g => !staticIds.has(g.projectId));
-    return [...merged, ...extra];
+    // Agregar planes generados sin plan estático: proyectos nuevos y cronogramas adicionales.
+    // Los cronogramas se insertan justo después de su proyecto para mantener el orden.
+    const staticKeys = new Set(WORK_PLANS.map(p => p.planKey));
+    const extra = Object.values(generatedMap).filter(g => !staticKeys.has(g.planKey));
+    const out: WorkPlan[] = [];
+    merged.forEach(p => {
+      out.push(p);
+      extra.filter(e => e.projectId === p.projectId).forEach(e => out.push(e));
+    });
+    extra.filter(e => !merged.some(m => m.projectId === e.projectId)).forEach(e => out.push(e));
+    return out;
   }
 
   const [effectivePlans, setEffectivePlans] = useState<WorkPlan[]>(buildEffectivePlans);
@@ -1570,11 +1729,13 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
       return lastGen;
     }
     // Para no-PM, arrancar en el primer proyecto asignado
-    if (!user || user.role === 'pm') return WORK_PLANS[0].projectId;
+    if (!user || user.role === 'pm') return WORK_PLANS[0].planKey;
     const firstAssigned = WORK_PLANS.find(p => (user.projectIds ?? []).includes(p.projectId));
-    return firstAssigned?.projectId ?? WORK_PLANS[0].projectId;
+    return firstAssigned?.planKey ?? WORK_PLANS[0].planKey;
   });
   const [drawer,            setDrawer]            = useState<DrawerState | null>(null);
+  // Vista consolidada del proyecto (solo aplica si tiene varios cronogramas)
+  const [consolidado,       setConsolidado]       = useState<boolean>(false);
   const [exportingPptx,     setExportingPptx]     = useState(false);
   const [exportingPdf,      setExportingPdf]      = useState(false);
   const [exportError,       setExportError]       = useState<string>('');
@@ -1595,10 +1756,36 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
     }
   }, []);
 
-  // El plan activo: buscar primero en effectivePlans
-  const plan = effectivePlans.find(p => p.projectId === selected);
+  // El plan activo (selected = planKey). Si el planKey ya no existe, cae al principal del proyecto.
+  const plan = effectivePlans.find(p => p.planKey === selected)
+    ?? effectivePlans.find(p => p.projectId === splitPlanKey(selected).projectId);
+
+  // Cronogramas del proyecto activo (principal + adicionales) — para tabs y consolidado
+  const projectPlans = plan ? effectivePlans.filter(p => p.projectId === plan.projectId) : [];
+
+  // % real / esperado ponderado por actividades sobre uno o varios cronogramas (modelo del Excel:
+  // cada actividad pesa igual sin importar el cronograma al que pertenece).
+  function aggregatePlans(plans: WorkPlan[]): { real: number; exp: number; nActs: number } {
+    let sumReal = 0, sumExp = 0, n = 0;
+    plans.forEach(p => {
+      const todayIdx = computeCurrentWeekIdx(p.startDate, holidays);
+      p.entregables.forEach(e => e.activities.forEach((a, i) => {
+        sumReal += getActivityPct(p.planKey, e.id, i, a);
+        sumExp  += computeActExpPct(a.startWeek, a.endWeek, todayIdx);
+        n++;
+      }));
+    });
+    if (n === 0) {
+      // Sin actividades: promedio de pctReal/pctExp estáticos de entregables
+      const ents = plans.flatMap(p => p.entregables);
+      if (!ents.length) return { real: 0, exp: 0, nActs: 0 };
+      return { real: ents.reduce((s,e)=>s+e.pctReal,0)/ents.length, exp: ents.reduce((s,e)=>s+e.pctExp,0)/ents.length, nActs: 0 };
+    }
+    return { real: sumReal / n, exp: sumExp / n, nActs: n };
+  }
 
   // ── Effective pct: fallback to act.pct if no etapa states set yet ──────────
+  // NOTA: el primer parámetro es el planKey del cronograma (projectId para el principal).
   function getActivityPct(projectId: string, entregableId: string, actIdx: number, act: PlanActivity): number {
     if (act.etapas?.length) {
       // Check if user has interacted with any etapa for this activity
@@ -1755,7 +1942,7 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
         }
       }
 
-      await exportPlanPPTX(plan, (eid,ai,a) => getActivityPct(plan.projectId,eid,ai,a), screenshots);
+      await exportPlanPPTX(plan, (eid,ai,a) => getActivityPct(plan.planKey,eid,ai,a), screenshots);
     } catch (err) {
       console.error('PPTX export error:', err);
       const msg = (err instanceof Error) ? err.message : String(err);
@@ -1804,7 +1991,7 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
       pdf.text('Plan de Trabajo', ML + 3, 50);
       // nombre proyecto grande
       pdf.setFontSize(42); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(255, 255, 255);
-      pdf.text(plan.projectId, ML + 3, 80);
+      pdf.text(planLabel(plan), ML + 3, 80);
       // info
       pdf.setFontSize(8.5); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(148, 163, 184);
       pdf.text(dateStr, ML + 3, 94);
@@ -1816,7 +2003,7 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
       // barra progreso global
       const totalPct = plan.entregables.reduce((s, e) => {
         const p = e.activities.length
-          ? e.activities.reduce((ss, a, i) => ss + getActivityPct(plan.projectId, e.id, i, a), 0) / e.activities.length
+          ? e.activities.reduce((ss, a, i) => ss + getActivityPct(plan.planKey, e.id, i, a), 0) / e.activities.length
           : e.pctReal;
         return s + p;
       }, 0) / plan.entregables.length;
@@ -1834,7 +2021,7 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
       plan.entregables.forEach((e, i) => {
         const [er, eg, eb] = hexToRgb(ENT_COLORS[i % ENT_COLORS.length]);
         const ePct = e.activities.length
-          ? e.activities.reduce((s, a, ai) => s + getActivityPct(plan.projectId, e.id, ai, a), 0) / e.activities.length
+          ? e.activities.reduce((s, a, ai) => s + getActivityPct(plan.planKey, e.id, ai, a), 0) / e.activities.length
           : e.pctReal;
         const cH = 22;
         pdf.setFillColor(Math.min(255, er * 0.15 + 32), Math.min(255, eg * 0.1 + 30), Math.min(255, eb * 0.1 + 50));
@@ -1878,7 +2065,7 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
 
         // estadísticas (derecha)
         const ePct = ent.activities.length
-          ? ent.activities.reduce((s, a, ai) => s + getActivityPct(plan.projectId, ent.id, ai, a), 0) / ent.activities.length
+          ? ent.activities.reduce((s, a, ai) => s + getActivityPct(plan.planKey, ent.id, ai, a), 0) / ent.activities.length
           : ent.pctReal;
         const dif = ePct - ent.pctExp;
         const difClr: [number, number, number] = dif >= 0 ? [34, 197, 94] : dif < -5 ? [220, 38, 38] : [245, 158, 11];
@@ -1921,7 +2108,7 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
         // filas de actividades
         ent.activities.forEach((act, ai) => {
           const ry = tY + TBL_HDR_H + ai * ROW_H;
-          const rowPct = getActivityPct(plan.projectId, ent.id, ai, act);
+          const rowPct = getActivityPct(plan.planKey, ent.id, ai, act);
 
           // fondo alternado
           pdf.setFillColor(ai % 2 === 0 ? 255 : 249, ai % 2 === 0 ? 255 : 250, ai % 2 === 0 ? 255 : 252);
@@ -2008,7 +2195,7 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
         pdf.text(`Pág. ${ei + 2} / ${plan.entregables.length + 1}`, ML, PH - 5);
       });
 
-      pdf.save(`Plan_${plan.projectId}_${new Date().toISOString().slice(0,10)}.pdf`);
+      pdf.save(`Plan_${plan.planKey.replace('::','_')}_${new Date().toISOString().slice(0,10)}.pdf`);
     } catch (err) {
       console.error('PDF export error:', err);
       const msg = (err instanceof Error) ? err.message : String(err);
@@ -2177,16 +2364,23 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
       <div id="timia-plan-sidebar" data-print-hide style={{ width: 128, flexShrink: 0 }}>
         <p style={{ margin:'0 0 8px', fontSize:9, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'.06em', fontWeight:600 }}>Proyectos</p>
         <div style={{ display:'flex', flexDirection:'column', gap:3 }}>
-          {visiblePlans.map(p => {
-            const proj=PROJECTS.find(pr=>pr.id===p.projectId), color=proj?.color??'#64748b', isActive=p.projectId===selected;
-            const overall=Math.round(p.entregables.map(e=>e.activities.length?e.activities.reduce((s,a,i)=>s+getActivityPct(p.projectId,e.id,i,a),0)/e.activities.length:e.pctReal).reduce((s,v)=>s+v,0)/p.entregables.length);
+          {Array.from(new Set(visiblePlans.map(p => p.projectId))).map(pid => {
+            const group = visiblePlans.filter(p => p.projectId === pid);
+            const proj=PROJECTS.find(pr=>pr.id===pid), color=proj?.color??'#64748b', isActive=plan?.projectId===pid;
+            // % consolidado ponderado por actividades (todos los cronogramas del proyecto)
+            const agg = aggregatePlans(group);
+            const overall = Math.round(agg.real);
+            const hasBloq = group.some(p=>p.bloqueantes.length>0), hasAlert = group.some(p=>p.alertas.length>0);
             return (
-              <button key={p.projectId} onClick={()=>setSelected(p.projectId)} style={{ display:'flex', alignItems:'center', gap:6, padding:'7px 10px', background:isActive?`${color}15`:'transparent', border:isActive?`0.5px solid ${color}50`:'0.5px solid transparent', borderRadius:8, cursor:'pointer', textAlign:'left', transition:'all .12s' }}>
+              <button key={pid} onClick={()=>{ setSelected(group[0].planKey); setConsolidado(group.length>1); }} style={{ display:'flex', alignItems:'center', gap:6, padding:'7px 10px', background:isActive?`${color}15`:'transparent', border:isActive?`0.5px solid ${color}50`:'0.5px solid transparent', borderRadius:8, cursor:'pointer', textAlign:'left', transition:'all .12s' }}>
                 <div style={{ width:5, height:5, borderRadius:'50%', background:color, flexShrink:0 }}/>
-                <span style={{ fontSize:11, fontWeight:isActive?600:400, color:isActive?color:'#374151', flex:1 }}>{p.projectId}</span>
-                {p.bloqueantes.length>0
+                <span style={{ fontSize:11, fontWeight:isActive?600:400, color:isActive?color:'#374151', flex:1 }}>
+                  {pid}
+                  {group.length>1 && <span style={{ marginLeft:4, fontSize:8, color:'#94a3b8', fontWeight:500 }}>×{group.length}</span>}
+                </span>
+                {hasBloq
                   ? <span style={{ fontSize:9 }}>⛔</span>
-                  : p.alertas.length>0
+                  : hasAlert
                     ? <span style={{ fontSize:9 }}>⚠</span>
                     : <span style={{ fontSize:9, color:'#94a3b8' }}>{overall}%</span>
                 }
@@ -2221,15 +2415,50 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
                 </div>
               )}
             </div>
+            {/* ── Tabs de cronograma (solo si el proyecto tiene más de uno) ── */}
+            {projectPlans.length > 1 && (
+              <div data-print-hide style={{ display:'flex', alignItems:'center', gap:4, marginBottom:12, flexWrap:'wrap' }}>
+                <span style={{ fontSize:9, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'.06em', fontWeight:600, marginRight:4 }}>Cronogramas</span>
+                {(() => {
+                  const color = PROJECTS.find(pr=>pr.id===plan.projectId)?.color ?? '#64748b';
+                  const tab = (key: string, label: string, active: boolean, onClick: () => void, sub?: string) => (
+                    <button key={key} onClick={onClick} style={{ display:'flex', alignItems:'center', gap:5, padding:'5px 11px', fontSize:11, fontWeight:active?600:500,
+                      background: active ? color : '#fff', color: active ? '#fff' : '#374151',
+                      border: `0.5px solid ${active ? color : '#e2e8f0'}`, borderRadius: 20, cursor:'pointer', transition:'all .12s' }}>
+                      {label}
+                      {sub && <span style={{ fontSize:9, opacity:.75 }}>{sub}</span>}
+                    </button>
+                  );
+                  return [
+                    tab('__all', 'Consolidado', consolidado, () => setConsolidado(true), `${Math.round(aggregatePlans(projectPlans).real)}%`),
+                    ...projectPlans.map(p => {
+                      const a = aggregatePlans([p]);
+                      return tab(p.planKey, p.cronoId ? (p.cronoName ?? p.cronoId) : CRONO_MAIN_NAME, !consolidado && p.planKey === plan.planKey,
+                        () => { setSelected(p.planKey); setConsolidado(false); }, `${Math.round(a.real)}%`);
+                    }),
+                  ];
+                })()}
+              </div>
+            )}
+
+            {consolidado && projectPlans.length > 1 ? (
+              <ConsolidadoView
+                plans={projectPlans}
+                holidays={holidays}
+                getActivityPct={getActivityPct}
+                onOpen={(key) => { setSelected(key); setConsolidado(false); }}
+              />
+            ) : (
             <PlanDetail
               plan={plan}
-              getActivityPct={(eid,ai,a)=>getActivityPct(plan.projectId,eid,ai,a)}
+              getActivityPct={(eid,ai,a)=>getActivityPct(plan.planKey,eid,ai,a)}
               setActivityPct={(eid,ai,pct)=>setActivityPctManual(eid,ai,pct)}
-              onActivityClick={(eid,ai,a)=>setDrawer({projectId:plan.projectId,entregableId:eid,actIdx:ai,act:a})}
+              onActivityClick={(eid,ai,a)=>setDrawer({projectId:plan.planKey,entregableId:eid,actIdx:ai,act:a})}
               onGoEstimaciones={onGoEstimaciones}
-              getDoneDate={(eid,ai)=>getDoneDateLabel(plan.projectId,eid,ai)}
+              getDoneDate={(eid,ai)=>getDoneDateLabel(plan.planKey,eid,ai)}
               holidays={holidays}
             />
+            )}
           </>
         ) : (
           <div style={{ textAlign:'center', padding:'60px', color:'#94a3b8', fontSize:13 }}>Selecciona un proyecto</div>
@@ -2244,8 +2473,9 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
           etapaStates={etapaStates} historial={historial}
           assigneeIds={drawerAssigneeIds} allUsers={allUsers} canMark={canMark}
           jiraId={activityJiras[drawerKey]}
-          weekLabels={effectivePlans.find(p => p.projectId === drawer.projectId)?.weekLabels}
-          planStartDate={effectivePlans.find(p => p.projectId === drawer.projectId)?.startDate}
+          weekLabels={effectivePlans.find(p => p.planKey === drawer.projectId)?.weekLabels}
+          planStartDate={effectivePlans.find(p => p.planKey === drawer.projectId)?.startDate}
+          planLabel={(() => { const p = effectivePlans.find(p => p.planKey === drawer.projectId); return p ? planLabel(p) : drawer.projectId; })()}
           holidays={holidays}
           onEtapaToggle={handleEtapaToggle}
           onAssigneeAdd={handleAssigneeAdd}

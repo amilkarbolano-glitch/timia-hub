@@ -2,6 +2,7 @@
   "_version": "1.0.0",
   "_note": "Fuente de verdad del app Timia Hub. Editar aquí y hacer commit para actualizar datos en todas las instancias.",
 
+  "_comment_cronogramas": "Cronogramas adicionales: key = projectId::cronoId dentro de timia_plan_configs. El principal usa key = projectId. FICO trae 5 cronogramas tomados del Excel SDATOOL-53017.",
   "_comment_startdates": "startDate de planes por proyecto. Sobrescribe el hardcodeado en WORK_PLANS sin recompilar. Hoy = 2026-06-26.",
   "timia_plan_startdates": {
     "FICO":     "2026-05-04",
@@ -234,6 +235,276 @@
             {"label": "Estabilización en producción",          "startWeek": 12, "endWeek": 13}
           ]
         }
+      ]
+    },
+    "FICO::input": {
+      "projectId":"FICO", "cronoId":"input", "cronoName":"Input · t_kbrb_input_data_co_proactivo",
+      "startDate":"2026-06-08", "totalWeeks":8, "generatedAt":"2026-08-20T12:00:00.000Z",
+      "entregables":[
+        {"id":"documentaci-", "label":"I. Documentación y Gobierno",
+         "activities":[
+          {"label": "Análisis y resolución de dudas", "startWeek": 1, "endWeek": 3},
+          {"label": "Circuito de validación Gobierno Técnico", "startWeek": 1, "endWeek": 2, "bbva": true},
+          {"label": "Ajuste de documentación técnica (mapeo de campos y ETL)", "startWeek": 3, "endWeek": 3},
+          {"label": "Ajuste Modelo de Solución del Dato (MSD)", "startWeek": 1, "endWeek": 1},
+          {"label": "Circuito de validación Modelo de Solución del Dato (MSD)", "startWeek": 2, "endWeek": 3, "bbva": true},
+          {"label": "Despliegue de esquemas en entorno previo (Work)", "startWeek": 3, "endWeek": 3},
+          {"label": "Solicitud y despliegue de esquemas en entornos Productivo (Live)", "startWeek": 6, "endWeek": 6, "bbva": true}
+        ]},
+        {"id":"desarrollo-d-1", "label":"II. Desarrollo de Procesamientos",
+         "activities":[
+          {"label": "Gestión de repositorios Bitbucket - Procesamiento", "startWeek": 1, "endWeek": 1},
+          {"label": "Estandarización del procesamiento (de Path a Table)", "startWeek": 2, "endWeek": 2},
+          {"label": "Ajuste en la construcción de procesamiento Spark - Scala", "startWeek": 3, "endWeek": 4},
+          {"label": "Construcción de Test unitarios y Test de Aceptación", "startWeek": 4, "endWeek": 4},
+          {"label": "Pruebas en entorno local", "startWeek": 4, "endWeek": 4},
+          {"label": "Despliegue y pruebas en entornos previos (Work)", "startWeek": 4, "endWeek": 4},
+          {"label": "Generación de Datos - Sandbox - Acompañamiento en validación de Datos", "startWeek": 4, "endWeek": 5, "bbva": true},
+          {"label": "Certificación de calidad por el equipo de QA", "startWeek": 5, "endWeek": 6, "bbva": true},
+          {"label": "Despliegue en producción de componentes ADA", "startWeek": 6, "endWeek": 6},
+          {"label": "Estabilización de procesos en producción", "startWeek": 6, "endWeek": 6}
+        ]},
+        {"id":"migration-to-2", "label":"III. Migration Tool",
+         "activities":[
+          {"label": "Gestión de repositorios Bitbucket - Migration Tool", "startWeek": 2, "endWeek": 3},
+          {"label": "Construcción Migration tool", "startWeek": 3, "endWeek": 3},
+          {"label": "Pruebas en ambientes previos", "startWeek": 4, "endWeek": 4},
+          {"label": "Certificación de calidad por el equipo de QA.", "startWeek": 4, "endWeek": 5, "bbva": true},
+          {"label": "Construcción malla temporal", "startWeek": 5, "endWeek": 6},
+          {"label": "Ejecución históricos - Migration tool", "startWeek": 6, "endWeek": 6},
+          {"label": "Validación de Datos - Migration tool", "startWeek": 6, "endWeek": 6}
+        ]}
+      ]
+    },
+    "FICO::output": {
+      "projectId":"FICO", "cronoId":"output", "cronoName":"Output · t_kbrb_output_data_co_proactivo",
+      "startDate":"2026-06-22", "totalWeeks":8, "generatedAt":"2026-08-20T12:00:00.000Z",
+      "entregables":[
+        {"id":"documentaci-", "label":"I. Documentación y Gobierno",
+         "activities":[
+          {"label": "Análisis y resolución de dudas", "startWeek": 3, "endWeek": 3},
+          {"label": "Circuito de validación Gobierno Técnico", "startWeek": 2, "endWeek": 2, "bbva": true},
+          {"label": "Despliegue de esquemas en entorno previo (Work)", "startWeek": 2, "endWeek": 2},
+          {"label": "Solicitud y despliegue de esquemas en entornos Productivo (Live)", "startWeek": 6, "endWeek": 6, "bbva": true}
+        ]},
+        {"id":"desarrollo-d-1", "label":"II. Desarrollo de Procesamientos",
+         "activities":[
+          {"label": "Gestión de repositorios Bitbucket - Procesamiento", "startWeek": 2, "endWeek": 2},
+          {"label": "Implementación componentes aprovisionados Holding", "startWeek": 4, "endWeek": 4},
+          {"label": "Despliegue y pruebas en entornos previos (Work)", "startWeek": 4, "endWeek": 4},
+          {"label": "Generación de Datos - Acompañamiento en validación de Datos", "startWeek": 4, "endWeek": 5, "bbva": true},
+          {"label": "Certificación de calidad por el equipo de QA", "startWeek": 5, "endWeek": 6, "bbva": true},
+          {"label": "Despliegue en producción de componentes ADA", "startWeek": 6, "endWeek": 6},
+          {"label": "Acompañamiento en validación de Datos - ADA Live", "startWeek": 6, "endWeek": 6, "bbva": true}
+        ]},
+        {"id":"migration-to-2", "label":"III. Migration Tool",
+         "activities":[
+          {"label": "Gestión de repositorios Bitbucket - Migration Tool", "startWeek": 2, "endWeek": 3},
+          {"label": "Construcción Migration tool", "startWeek": 4, "endWeek": 4},
+          {"label": "Pruebas en ambientes previos", "startWeek": 4, "endWeek": 4},
+          {"label": "Certificación de calidad por el equipo de QA.", "startWeek": 4, "endWeek": 5, "bbva": true},
+          {"label": "Construcción malla temporal", "startWeek": 4, "endWeek": 5},
+          {"label": "Ejecución históricos - Migration tool", "startWeek": 6, "endWeek": 6},
+          {"label": "Validación de Datos - Migration tool", "startWeek": 6, "endWeek": 6}
+        ]}
+      ]
+    },
+    "FICO::fico2": {
+      "projectId":"FICO", "cronoId":"fico2", "cronoName":"FICO 2.0 · Tablones KFCA",
+      "startDate":"2026-05-04", "totalWeeks":16, "generatedAt":"2026-08-20T12:00:00.000Z",
+      "entregables":[
+        {"id":"documentaci-", "label":"I. Documentación y Gobierno",
+         "activities":[
+          {"label": "Análisis y resolución de dudas", "startWeek": 1, "endWeek": 5},
+          {"label": "Elaboración diccionario técnico 5 procesamiento 552 campos", "startWeek": 1, "endWeek": 3},
+          {"label": "Inicialización en Nebula", "startWeek": 1, "endWeek": 1},
+          {"label": "Circuito de validación Gobierno Técnico", "startWeek": 3, "endWeek": 4, "bbva": true},
+          {"label": "Construcción Modelo de Solución del Dato (MSD)", "startWeek": 4, "endWeek": 4},
+          {"label": "Circuito de validación Modelo de Solución del Dato (MSD)", "startWeek": 5, "endWeek": 6, "bbva": true},
+          {"label": "Despliegue de esquemas en entorno previo (Work)", "startWeek": 5, "endWeek": 5},
+          {"label": "Solicitud de ACLs", "startWeek": 5, "endWeek": 5, "bbva": true},
+          {"label": "Solicitud y despliegue de esquemas en entornos Productivo (Live)", "startWeek": 11, "endWeek": 11, "bbva": true}
+        ]},
+        {"id":"desarrollo-d-1", "label":"II. Desarrollo de Procesamientos · t_kfca_input_data_card",
+         "activities":[
+          {"label": "Gestión de repositorios Bitbucket - Procesamiento", "startWeek": 1, "endWeek": 2},
+          {"label": "Homologación FICO a DATA CARD", "startWeek": 2, "endWeek": 2},
+          {"label": "Creación de documentación técnica (mapeo de campos y ETL)", "startWeek": 4, "endWeek": 4},
+          {"label": "Construcción de procesamiento Spark - Scala", "startWeek": 4, "endWeek": 5},
+          {"label": "Construcción de Test unitarios y Test de Aceptación", "startWeek": 6, "endWeek": 6},
+          {"label": "Despliegue y pruebas en entornos previos (Work)", "startWeek": 6, "endWeek": 7},
+          {"label": "Generación de Datos - Sandbox/Test - Acompañamiento en validación de Datos", "startWeek": 6, "endWeek": 7, "bbva": true},
+          {"label": "Construcción reglas de calidad MVP (Hammurabi)", "startWeek": 7, "endWeek": 7},
+          {"label": "Construcción de Smart Cleaner para procesamiento", "startWeek": 7, "endWeek": 7},
+          {"label": "Pruebas en entorno local", "startWeek": 6, "endWeek": 7},
+          {"label": "Certificación de calidad por el equipo de QA", "startWeek": 7, "endWeek": 8, "bbva": true},
+          {"label": "Despliegue en producción de componentes ADA", "startWeek": 8, "endWeek": 8}
+        ]},
+        {"id":"desarrollo-d-2", "label":"III. Desarrollo de Procesamientos · t_kfca_input_data_client",
+         "activities":[
+          {"label": "Gestión de repositorios Bitbucket - Procesamiento", "startWeek": 1, "endWeek": 2},
+          {"label": "Homologación FICO a DATA CLIENT", "startWeek": 2, "endWeek": 2},
+          {"label": "Creación de documentación técnica (mapeo de campos y ETL)", "startWeek": 3, "endWeek": 3},
+          {"label": "Construcción de procesamiento Spark - Scala", "startWeek": 3, "endWeek": 6},
+          {"label": "Construcción de Test unitarios y Test de Aceptación", "startWeek": 6, "endWeek": 6},
+          {"label": "Despliegue y pruebas en entornos previos (Work)", "startWeek": 6, "endWeek": 7},
+          {"label": "Generación de Datos - Sandbox/Test - Acompañamiento en validación de Datos", "startWeek": 7, "endWeek": 8, "bbva": true},
+          {"label": "Construcción reglas de calidad MVP (Hammurabi)", "startWeek": 8, "endWeek": 8},
+          {"label": "Construcción de Smart Cleaner para procesamiento", "startWeek": 8, "endWeek": 8},
+          {"label": "Pruebas en entorno local", "startWeek": 8, "endWeek": 8},
+          {"label": "Certificación de calidad por el equipo de QA", "startWeek": 9, "endWeek": 10, "bbva": true},
+          {"label": "Despliegue en producción de componentes ADA", "startWeek": 10, "endWeek": 10}
+        ]},
+        {"id":"desarrollo-d-3", "label":"IV. Desarrollo de Procesamientos · t_kfca_input_data_proposal",
+         "activities":[
+          {"label": "Gestión de repositorios Bitbucket - Procesamiento", "startWeek": 1, "endWeek": 2},
+          {"label": "Homologación FICO a DATA PROPOSAL", "startWeek": 2, "endWeek": 2},
+          {"label": "Creación de documentación técnica (mapeo de campos y ETL)", "startWeek": 3, "endWeek": 3},
+          {"label": "Construcción de procesamiento Spark - Scala", "startWeek": 4, "endWeek": 5},
+          {"label": "Construcción de Test unitarios y Test de Aceptación", "startWeek": 6, "endWeek": 6},
+          {"label": "Despliegue y pruebas en entornos previos (Work)", "startWeek": 6, "endWeek": 7},
+          {"label": "Generación de Datos - Sandbox/Test - Acompañamiento en validación de Datos", "startWeek": 8, "endWeek": 9, "bbva": true},
+          {"label": "Construcción reglas de calidad MVP (Hammurabi)", "startWeek": 8, "endWeek": 8},
+          {"label": "Construcción de Smart Cleaner para procesamiento", "startWeek": 8, "endWeek": 8},
+          {"label": "Pruebas en entorno local", "startWeek": 9, "endWeek": 9},
+          {"label": "Certificación de calidad por el equipo de QA", "startWeek": 9, "endWeek": 10, "bbva": true},
+          {"label": "Despliegue en producción de componentes ADA", "startWeek": 10, "endWeek": 10}
+        ]},
+        {"id":"desarrollo-d-4", "label":"V. Desarrollo de Procesamientos · t_kfca_input_data_contract",
+         "activities":[
+          {"label": "Gestión de repositorios Bitbucket - Procesamiento", "startWeek": 1, "endWeek": 2},
+          {"label": "Homologación FICO a DATA CONTRACT", "startWeek": 2, "endWeek": 2},
+          {"label": "Creación de documentación técnica (mapeo de campos y ETL)", "startWeek": 6, "endWeek": 6},
+          {"label": "Construcción de procesamiento Spark - Scala", "startWeek": 7, "endWeek": 9},
+          {"label": "Construcción de Test unitarios y Test de Aceptación", "startWeek": 9, "endWeek": 9},
+          {"label": "Despliegue y pruebas en entornos previos (Work)", "startWeek": 9, "endWeek": 10},
+          {"label": "Generación de Datos - Sandbox/Test - Acompañamiento en validación de Datos", "startWeek": 10, "endWeek": 11, "bbva": true},
+          {"label": "Construcción reglas de calidad MVP (Hammurabi)", "startWeek": 11, "endWeek": 11},
+          {"label": "Construcción de Smart Cleaner para procesamiento", "startWeek": 11, "endWeek": 11},
+          {"label": "Pruebas en entorno local", "startWeek": 11, "endWeek": 11},
+          {"label": "Certificación de calidad por el equipo de QA", "startWeek": 11, "endWeek": 12, "bbva": true},
+          {"label": "Despliegue en producción de componentes ADA", "startWeek": 12, "endWeek": 12}
+        ]},
+        {"id":"desarrollo-d-5", "label":"VI. Desarrollo de Procesamientos · t_kfca_output_data_optimizer",
+         "activities":[
+          {"label": "Gestión de repositorios Bitbucket - Componentes", "startWeek": 1, "endWeek": 2},
+          {"label": "Implementación de componentes Kirby", "startWeek": 9, "endWeek": 9},
+          {"label": "Implementación de componentes Hammurabi", "startWeek": 10, "endWeek": 10},
+          {"label": "Construcción de Smart Cleaner para procesamiento", "startWeek": 10, "endWeek": 10},
+          {"label": "Pruebas en entornos previos (Work)", "startWeek": 10, "endWeek": 10},
+          {"label": "Generación de Datos - Sandbox/Test - Acompañamiento en validación de Datos (Si es viable)", "startWeek": 10, "endWeek": 11, "bbva": true},
+          {"label": "Certificación de calidad por el equipo de QA", "startWeek": 11, "endWeek": 12, "bbva": true},
+          {"label": "Despliegue en producción de componentes ADA", "startWeek": 12, "endWeek": 12}
+        ]},
+        {"id":"automatizaci-6", "label":"VII. Automatización y Orquestación",
+         "activities":[
+          {"label": "Gestión de accesos a Control-M distribuido", "startWeek": 7, "endWeek": 7},
+          {"label": "Definición automatización", "startWeek": 8, "endWeek": 9},
+          {"label": "Construcción de Mallas en Control-M distribuido.", "startWeek": 10, "endWeek": 12},
+          {"label": "Pruebas en entornos previos (Work) - Mallas Control-M distribuido", "startWeek": 11, "endWeek": 12},
+          {"label": "Elaboración de documentación - Mallas Control-M distribuido (ADA)", "startWeek": 12, "endWeek": 13},
+          {"label": "Certificación de mallas Control-M Distribuido", "startWeek": 14, "endWeek": 16, "bbva": true},
+          {"label": "Instalación de mallas Control-M en ambiente de producción", "startWeek": 16, "endWeek": 16},
+          {"label": "Estabilización de procesos en producción", "startWeek": 16, "endWeek": 16}
+        ]}
+      ]
+    },
+    "FICO::randomico": {
+      "projectId":"FICO", "cronoId":"randomico", "cronoName":"Randómico · t_ccrt_pl_cli_campania",
+      "startDate":"2026-07-13", "totalWeeks":12, "generatedAt":"2026-08-20T12:00:00.000Z",
+      "entregables":[
+        {"id":"documentaci-", "label":"I. Documentación y Gobierno",
+         "activities":[
+          {"label": "Análisis y resolución de dudas", "startWeek": 1, "endWeek": 2},
+          {"label": "Construcción Diccionario Técnico - 5 campos aprox", "startWeek": 1, "endWeek": 1},
+          {"label": "Suscripción t_kbrb_input_data_co_proactivo", "startWeek": 1, "endWeek": 1},
+          {"label": "Circuito de validación Gobierno Técnico", "startWeek": 1, "endWeek": 2, "bbva": true},
+          {"label": "Construcción/ Modificación Modelo de Solución del Dato (MSD)", "startWeek": 2, "endWeek": 2},
+          {"label": "Circuito de validación Modelo de Solución del Dato (MSD)", "startWeek": 2, "endWeek": 3, "bbva": true},
+          {"label": "Construcción/Modificación de documentación técnica (mapeo de campos y ETL)", "startWeek": 2, "endWeek": 2},
+          {"label": "Despliegue de esquemas en entorno previo (Work)", "startWeek": 3, "endWeek": 3},
+          {"label": "Solicitud de ACLs", "startWeek": 3, "endWeek": 3, "bbva": true},
+          {"label": "Solicitud y despliegue de esquemas en entornos Productivo (Live)", "startWeek": 5, "endWeek": 5, "bbva": true}
+        ]},
+        {"id":"desarrollo-d-1", "label":"II. Desarrollo de Procesamientos",
+         "activities":[
+          {"label": "Gestión de repositorios Bitbucket", "startWeek": 2, "endWeek": 3},
+          {"label": "Construcción de procesamiento Spark - Scala", "startWeek": 3, "endWeek": 4},
+          {"label": "Construcción de Test unitarios y Test de Aceptación", "startWeek": 4, "endWeek": 4},
+          {"label": "Pruebas en entorno local", "startWeek": 4, "endWeek": 4},
+          {"label": "Ajuste procesamiento t_kbrb_input_data_co_proactivo", "startWeek": 5, "endWeek": 5},
+          {"label": "Despliegue y pruebas en entornos previos (Work)", "startWeek": 5, "endWeek": 7},
+          {"label": "Generación de Datos - Sandbox/Test - Acompañamiento en validación de Datos", "startWeek": 5, "endWeek": 6, "bbva": true},
+          {"label": "Construcción reglas de calidad MVP (Hammurabi)", "startWeek": 7, "endWeek": 7},
+          {"label": "Construcción de Smart Cleaner para procesamiento", "startWeek": 7, "endWeek": 7},
+          {"label": "Certificación de calidad por el equipo de QA", "startWeek": 7, "endWeek": 7, "bbva": true},
+          {"label": "Despliegue en producción de componentes ADA", "startWeek": 8, "endWeek": 8}
+        ]},
+        {"id":"migration-to-2", "label":"III. Migration Tool",
+         "activities":[
+          {"label": "Gestión de repositorios Bitbucket - Migration Tool", "startWeek": 1, "endWeek": 1},
+          {"label": "Construcción Migration tool", "startWeek": 3, "endWeek": 3},
+          {"label": "Pruebas en ambientes previos", "startWeek": 3, "endWeek": 3},
+          {"label": "Certificación de calidad por el equipo de QA.", "startWeek": 3, "endWeek": 4, "bbva": true},
+          {"label": "Construcción malla temporal", "startWeek": 4, "endWeek": 4},
+          {"label": "Ejecución históricos - Migration tool", "startWeek": 4, "endWeek": 5},
+          {"label": "Validación de Datos - Migration tool", "startWeek": 4, "endWeek": 5}
+        ]},
+        {"id":"automatizaci-3", "label":"IV. Automatización y Orquestación",
+         "activities":[
+          {"label": "Gestión de accesos a Control-M distribuido", "startWeek": 1, "endWeek": 1},
+          {"label": "Definición automatización", "startWeek": 6, "endWeek": 6},
+          {"label": "Construcción/Modificación de Mallas en Control-M distribuido.", "startWeek": 6, "endWeek": 6},
+          {"label": "Pruebas en entornos previos (Work) - Mallas Control-M distribuido", "startWeek": 7, "endWeek": 7},
+          {"label": "Elaboración de documentación - Mallas Control-M distribuido (ADA)", "startWeek": 8, "endWeek": 8},
+          {"label": "Certificación de mallas Control-M Distribuido", "startWeek": 8, "endWeek": 9, "bbva": true},
+          {"label": "Instalación de mallas Control-M en ambiente de producción", "startWeek": 9, "endWeek": 10}
+        ]}
+      ]
+    },
+    "FICO::comportamental": {
+      "projectId":"FICO", "cronoId":"comportamental", "cronoName":"Base Comportamental",
+      "startDate":"2026-08-03", "totalWeeks":13, "generatedAt":"2026-08-20T12:00:00.000Z",
+      "entregables":[
+        {"id":"documentaci-", "label":"I. Documentación y Gobierno",
+         "activities":[
+          {"label": "Análisis y resolución de dudas", "startWeek": 1, "endWeek": 2},
+          {"label": "Construcción Diccionario Técnico - 74 campos", "startWeek": 1, "endWeek": 3},
+          {"label": "Circuito de validación Gobierno Técnico", "startWeek": 2, "endWeek": 3, "bbva": true},
+          {"label": "Construcción Modelo de Solución del Dato (MSD)", "startWeek": 3, "endWeek": 3},
+          {"label": "Circuito de validación Modelo de Solución del Dato (MSD)", "startWeek": 4, "endWeek": 5, "bbva": true},
+          {"label": "Modificación de documentación técnica (mapeo de campos y ETL) (6 procesamientos)", "startWeek": 2, "endWeek": 3},
+          {"label": "Despliegue de esquemas en entorno previo (Work)", "startWeek": 4, "endWeek": 4},
+          {"label": "Solicitud de ACLs", "startWeek": 4, "endWeek": 4, "bbva": true},
+          {"label": "Solicitud y despliegue de esquemas en entornos Productivo (Live)", "startWeek": 6, "endWeek": 6, "bbva": true}
+        ]},
+        {"id":"desarrollo-d-1", "label":"II. Desarrollo de Componentes Ada",
+         "activities":[
+          {"label": "Gestión de repositorios Bitbucket (3 Procesamientos 1 Libreria 1 Hammurabi)", "startWeek": 1, "endWeek": 2},
+          {"label": "Migracion repositorios antiguos a nuevos repositorios (3 Procesamientos y 1 Libreria)", "startWeek": 3, "endWeek": 4},
+          {"label": "Migración del procesamiento a objetos tipo table (5 Procesamientos)", "startWeek": 4, "endWeek": 6},
+          {"label": "Ajuste escritura de Tmp a Table (1 Procesamiento)", "startWeek": 4, "endWeek": 4},
+          {"label": "Ajuste lectura t_cdar_pl_base_comportamental Spark - Scala (5 Procesamientos)", "startWeek": 5, "endWeek": 6},
+          {"label": "Construcción/Modificación de Test unitarios y Test de Aceptación (6 procesamientos)", "startWeek": 6, "endWeek": 7},
+          {"label": "Pruebas en entorno local (6 procesamientos)", "startWeek": 7, "endWeek": 7},
+          {"label": "Construcción reglas de calidad MVP (Hammurabi) t_kbrb_input_data_co_proactivo", "startWeek": 2, "endWeek": 2},
+          {"label": "Despliegue y pruebas en entornos previos (Work) (6 Procesamientos 1 Hammurabi)", "startWeek": 6, "endWeek": 7},
+          {"label": "Generación de Datos - Sandbox/Test - Acompañamiento en validación de Datos (6 procesamientos)", "startWeek": 8, "endWeek": 9, "bbva": true},
+          {"label": "Certificación de calidad por el equipo de QA (6 procesamientos 1 Hammurabi)", "startWeek": 8, "endWeek": 11, "bbva": true},
+          {"label": "Despliegue en producción de componentes ADA (6 procesamientos 1 Hammurabi)", "startWeek": 10, "endWeek": 11},
+          {"label": "Estabilización de procesos en producción", "startWeek": 11, "endWeek": 12}
+        ]},
+        {"id":"automatizaci-2", "label":"III. Automatización y Orquestación",
+         "activities":[
+          {"label": "Gestión de accesos a Control-M distribuido", "startWeek": 1, "endWeek": 1},
+          {"label": "Definición automatización", "startWeek": 3, "endWeek": 3},
+          {"label": "Construcción/Modificación de Mallas en Control-M distribuido.", "startWeek": 6, "endWeek": 7},
+          {"label": "Pruebas en entornos previos (Work) - Mallas Control-M distribuido", "startWeek": 7, "endWeek": 7},
+          {"label": "Elaboración de documentación - Mallas Control-M distribuido (ADA)", "startWeek": 8, "endWeek": 8},
+          {"label": "Certificación de mallas Control-M Distribuido", "startWeek": 9, "endWeek": 10, "bbva": true},
+          {"label": "Instalación de mallas Control-M en ambiente de producción", "startWeek": 11, "endWeek": 11},
+          {"label": "Estabilización de procesos en producción", "startWeek": 11, "endWeek": 12}
+        ]}
       ]
     }
   },

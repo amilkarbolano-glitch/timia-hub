@@ -6,7 +6,7 @@ import {
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth, PROJECTS } from '../contexts/AuthContext';
-import { adminStore, type KanbanTask, type KanbanStatus, type AdminUser, type Priority } from '../lib/adminStore';
+import { adminStore, makePlanKey, type KanbanTask, type KanbanStatus, type AdminUser, type Priority } from '../lib/adminStore';
 
 // ─── Permisos por rol ─────────────────────────────────────────────────────────
 
@@ -450,7 +450,7 @@ export default function KanbanBoard({ userRole }: KanbanBoardProps) {
     save(updated);
     // Sincronizar asignados de vuelta al Plan de Trabajo si es tarea de plan
     if (t.fromPlan && t.projectId && t.entregableId !== undefined && t.actIdx !== undefined) {
-      adminStore.syncKanbanAssignees(t.projectId, t.entregableId, t.actIdx, t.assigneeIds);
+      adminStore.syncKanbanAssignees(makePlanKey(t.projectId, t.cronoId), t.entregableId, t.actIdx, t.assigneeIds);
     }
     setDrawer(updated.find(x => x.id === t.id) ?? null);
   }
