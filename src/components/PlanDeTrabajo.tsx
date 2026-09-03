@@ -106,24 +106,33 @@ function GanttCell({ wi, act, effectivePct, isSubtask, todayWeekIdx, issueMark, 
   const planOverlap = Math.max(0, Math.min(planEnd, cellEnd) - Math.max(planStart, cellStart));
   const isToday = todayWeekIdx !== undefined && todayWeekIdx >= 0 && wi === todayWeekIdx;
   const todayStyle = isToday ? { borderLeft: '2px solid #16a34a', background: '#f0fdf4' } : {};
-  // Segmento de extensión por cambios (rayado morado) entre planEnd y planEnd+extWeeks
+  // Segmento de extensión por cambios (rayado morado) entre planEnd y planEnd+extWeeks.
+  // Se dibuja dentro del mismo marco (margen 3px 1px) que la barra planificada para que quede alineado.
   const extEnd = planEnd + extWeeks;
   const extOverlap = extWeeks > 0 ? Math.max(0, Math.min(extEnd, cellEnd) - Math.max(planEnd, cellStart)) : 0;
   const extBar = extOverlap > 0 ? (
-    <div title={`Extensión por cambios funcionales`} style={{ position:'absolute', top:3, height:13, left:`${(Math.max(planEnd, cellStart) - cellStart) * 100}%`, width:`${extOverlap * 100}%`,
-      background:'repeating-linear-gradient(135deg, #c4b5fd 0 3px, #ede9fe 3px 6px)', borderRadius: extEnd <= cellEnd ? '0 3px 3px 0' : 0, borderRight: extEnd <= cellEnd ? '2px solid #7c3aed' : 'none' }}/>
+    <div title="Extensión por cambios funcionales" style={{ position:'absolute', top:0, height:'100%', left:`${(Math.max(planEnd, cellStart) - cellStart) * 100}%`, width:`calc(${extOverlap * 100}% + ${extEnd <= cellEnd ? 0 : 2}px)`, minWidth:5,
+      background:'repeating-linear-gradient(135deg, #c4b5fd 0 3px, #ede9fe 3px 6px)', borderRadius: extEnd <= cellEnd ? '0 3px 3px 0' : 0, boxShadow: extEnd <= cellEnd ? 'inset -2px 0 0 #7c3aed' : 'none' }}/>
   ) : null;
-  if (planOverlap === 0) return <td style={{ position:'relative', width: CELL_W, minWidth: CELL_W, borderLeft: isToday ? '2px solid #16a34a' : '0.5px solid #f1f5f9', background: isToday ? '#f0fdf4' : undefined }}>{markBar}{extBar}</td>;
+  if (planOverlap === 0) return (
+    <td style={{ position:'relative', width: CELL_W, minWidth: CELL_W, padding:0, borderLeft: isToday ? '2px solid #16a34a' : '0.5px solid #f1f5f9', background: isToday ? '#f0fdf4' : undefined }}>
+      {markBar}
+      {extBar && <div style={{ position:'relative', margin:'3px 1px', height:13 }}>{extBar}</div>}
+    </td>
+  );
   const execOverlap = Math.max(0, Math.min(execEnd, cellEnd) - Math.max(planStart, cellStart));
   const execPct = (execOverlap / planOverlap) * 100;
   const isFirst = planStart >= cellStart && planStart < cellEnd;
   const isLast  = planEnd > cellStart && planEnd <= cellEnd;
   const br = `${isFirst?3:0}px ${isLast?3:0}px ${isLast?3:0}px ${isFirst?3:0}px`;
   return (
-    <td style={{ position:'relative', width: CELL_W, minWidth: CELL_W, borderLeft: isToday ? '2px solid #16a34a' : '0.5px solid #f1f5f9', ...todayStyle }}>
-      {markBar}{extBar}
-      <div style={{ margin: '3px 1px', height: 13, borderRadius: br, overflow: 'hidden', background: isSubtask ? 'rgba(13,148,136,0.12)' : 'rgba(13,148,136,0.22)' }}>
-        <div style={{ width: `${execPct}%`, height: '100%', background: isSubtask ? 'rgba(13,148,136,0.55)' : '#0d9488', transition: 'width .3s' }} />
+    <td style={{ position:'relative', width: CELL_W, minWidth: CELL_W, padding:0, borderLeft: isToday ? '2px solid #16a34a' : '0.5px solid #f1f5f9', ...todayStyle }}>
+      {markBar}
+      <div style={{ position:'relative', margin:'3px 1px', height:13 }}>
+        <div style={{ position:'absolute', top:0, height:'100%', left:`${(Math.max(planStart, cellStart) - cellStart) * 100}%`, width:`${planOverlap * 100}%`, borderRadius: br, overflow: 'hidden', background: isSubtask ? 'rgba(13,148,136,0.12)' : 'rgba(13,148,136,0.22)' }}>
+          <div style={{ width: `${execPct}%`, height: '100%', background: isSubtask ? 'rgba(13,148,136,0.55)' : '#0d9488', transition: 'width .3s' }} />
+        </div>
+        {extBar}
       </div>
     </td>
   );
@@ -596,9 +605,14 @@ function EntregableSection({ block, projectId, sectionIdx, getActivityPct, setAc
     ? parseFloat((effectiveActivities.reduce((s, a) => s + a.pct, 0) / effectiveActivities.length).toFixed(1))
     : block.pctReal;
   // pctExp dinámico: promedio de lo que debería estar completado hoy según el Gantt
+  // Esperado sobre la línea base y esperado replanificado (fin corrido por cambios funcionales)
+  const basePctExp = block.activities.length > 0 && todayWeekIdx !== undefined
+    ? parseFloat((block.activities.reduce((s, a) => s + computeActExpPct(a.startWeek, a.endWeek, todayWeekIdx), 0) / block.activities.length).toFixed(1))
+    : block.pctExp;
   const dynamicPctExp = block.activities.length > 0 && todayWeekIdx !== undefined
     ? parseFloat((block.activities.reduce((s, a, i) => s + computeActExpPct(a.startWeek, extensionFor(changes, planKey, block.id, i, a.endWeek).effEndWeek, todayWeekIdx), 0) / block.activities.length).toFixed(1))
     : block.pctExp;
+  const sectionHasExt = block.activities.some((a, i) => extensionFor(changes, planKey, block.id, i, a.endWeek).days > 0);
   const dif = parseFloat((effectivePctReal - dynamicPctExp).toFixed(1));
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const toggle = (i: number) => setExpanded(prev => { const n = new Set(prev); n.has(i) ? n.delete(i) : n.add(i); return n; });
@@ -611,7 +625,10 @@ function EntregableSection({ block, projectId, sectionIdx, getActivityPct, setAc
           <span style={{ fontSize: 9, color: '#94a3b8', marginRight: 2, display: 'flex', alignItems: 'center', gap: 3 }}>
             <LayoutList size={10}/> Click actividad para etapas
           </span>
-          {[{ label:'Avance real', val:`${effectivePctReal}%`, bg:'#374151' },{ label:'Esperado', val:`${dynamicPctExp}%`, bg:'#4b5563' },{ label:'Diferencia', val:fmt1(dif), bg:difBg(dif), c:difColor(dif) }].map(b => (
+          {[{ label:'Avance real', val:`${effectivePctReal}%`, bg:'#374151' },
+            { label: sectionHasExt ? 'Esperado · base' : 'Esperado', val:`${basePctExp}%`, bg:'#4b5563' },
+            ...(sectionHasExt ? [{ label:'Esperado · replan. Δ', val:`${dynamicPctExp}%`, bg:'#5b21b6' }] : []),
+            { label:'Diferencia', val:fmt1(dif), bg:difBg(dif), c:difColor(dif) }].map(b => (
             <div key={b.label} style={{ textAlign:'center', padding:'4px 12px', background: b.bg, borderRadius:7 }}>
               <div style={{ fontSize:8, color: (b as any).c ?? '#9ca3af', marginBottom:1 }}>{b.label}</div>
               <div style={{ fontSize:15, fontWeight:700, color: (b as any).c ?? '#fff' }}>{b.val}</div>
@@ -954,6 +971,12 @@ function PlanDetail({ plan, getActivityPct, setActivityPct, onActivityClick, onG
     if (!e.activities.length) return e.pctExp;
     return e.activities.reduce((s, a, i) => s + computeActExpPct(a.startWeek, extensionFor(changes, plan.planKey, e.id, i, a.endWeek).effEndWeek, todayWeekIdx), 0) / e.activities.length;
   }).reduce((s,v)=>s+v,0) / plan.entregables.length).toFixed(1));
+  // Esperado sobre la línea base (sin extensión por cambios)
+  const overallExpBase = parseFloat((plan.entregables.map(e => {
+    if (!e.activities.length) return e.pctExp;
+    return e.activities.reduce((s, a) => s + computeActExpPct(a.startWeek, a.endWeek, todayWeekIdx), 0) / e.activities.length;
+  }).reduce((s,v)=>s+v,0) / plan.entregables.length).toFixed(1));
+  const planHasExt = plan.entregables.some(e => e.activities.some((a, i) => extensionFor(changes, plan.planKey, e.id, i, a.endWeek).days > 0));
 
   const overallDif  = parseFloat((overallReal-overallExp).toFixed(1));
 
@@ -996,7 +1019,8 @@ function PlanDetail({ plan, getActivityPct, setActivityPct, onActivityClick, onG
         <div style={{ display:'flex', gap:8, flexShrink:0 }}>
           {[
             { label:'AVANCE REAL', val:`${overallReal}%`, bg:'#374151', c:'#fff', sc:'#9ca3af' },
-            { label:'AVANCE ESPERADO', val:`${overallExp}%`, bg:'#4b5563', c:'#fff', sc:'#9ca3af' },
+            { label: planHasExt ? 'ESPERADO · LÍNEA BASE' : 'AVANCE ESPERADO', val:`${overallExpBase}%`, bg:'#4b5563', c:'#fff', sc:'#9ca3af' },
+            ...(planHasExt ? [{ label:'ESPERADO · REPLAN. Δ', val:`${overallExp}%`, bg:'#5b21b6', c:'#fff', sc:'#c4b5fd' }] : []),
             { label:'DIFERENCIA', val:fmt1(overallDif), bg:difBg(overallDif), c:difColor(overallDif), sc:difColor(overallDif) },
           ].map(b => (
             <div key={b.label} style={{ textAlign:'center', padding:'6px 16px', background:b.bg, borderRadius:8 }}>
