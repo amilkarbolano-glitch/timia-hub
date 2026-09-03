@@ -94,6 +94,50 @@ export interface CircuitoCard {
   historial: { fecha: string; columna: string; nota: string }[];
 }
 
+// ─── Activity Report (TR) — features SDA y horas imputadas ───────────────────
+
+/** Fases del Activity Report SDA (equivalencia con estados Jira) */
+export const SDA_PHASES = [
+  'Ideación',
+  'Viabilidad y modelo de solución',
+  'Análisis y diseño',
+  'Desarrollo / Gestión datos',
+  'Pruebas',
+  'Despliegue',
+  'Operación',
+  'Gestión de proyecto',
+  'Ceremonias Agile',
+] as const;
+export type SdaPhase = typeof SDA_PHASES[number];
+
+/** Feature Jira (DECRONOS-xxxx) con horas planificadas por fase — se define al inicio */
+export interface TrFeature {
+  id: string;                 // DECRONOS-2169
+  projectId: string;
+  title: string;              // CRONOS-Q3 2026 DATCAL01 Disponibilizar tablas intermedias FICO
+  q: string;                  // Q3-2026
+  hoursByPhase: Partial<Record<SdaPhase, number>>;
+  defaultPhase?: SdaPhase;    // fase sugerida al cargar TR
+  assigneeIds: string[];
+  active: boolean;
+  createdAt: string;
+}
+
+/** Horas imputadas por persona/día/feature/fase (cargadas desde capturas del TR o a mano) */
+export interface TrEntry {
+  id: string;
+  userId: string;
+  userName: string;
+  date: string;               // yyyy-mm-dd
+  featureId: string;          // DECRONOS-xxxx
+  phase: SdaPhase;
+  hours: number;
+  actividad?: string;         // línea "Tecnología 'DATIO (Dataproc)'" del TR
+  source: 'ocr' | 'manual';
+  createdAt: string;
+}
+export const TR_HOURS_PER_DAY = 8;
+
 // ─── Kanban — tareas del tablero ──────────────────────────────────────────────
 
 export type KanbanStatus = 'backlog' | 'in-progress' | 'review' | 'done';
@@ -572,6 +616,12 @@ export const adminStore = {
   saveActivityAssignees: (a: ActivityAssignees)      => save('activity_assignees', a),
 
   // Tickets Jira por actividad: key = `${projectId}__${entregableId}__${actIdx}`
+  // Activity Report (TR)
+  getTrFeatures:  (): TrFeature[]     => load('tr_features', []),
+  saveTrFeatures: (f: TrFeature[])    => save('tr_features', f),
+  getTrEntries:   (): TrEntry[]       => load('tr_entries', []),
+  saveTrEntries:  (e: TrEntry[])      => save('tr_entries', e),
+
   // Alertas / bloqueantes con fechas e impacto
   getPlanIssues:  (): PlanIssue[]     => load('plan_issues', []),
   savePlanIssues: (i: PlanIssue[])    => save('plan_issues', i),

@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { TimiaMark, TimiaWordmark } from './TimiaLogo';
 
-export type View = 'setup-project' | 'setup-team' | 'setup-tasks' | 'dashboard' | 'standards' | 'analytics' | 'audit' | 'bank-status' | 'notifications' | 'roles-permissions' | 'project-templates' | 'admin' | 'circuitos-bbva' | 'bitacora' | 'estimaciones' | 'plan-trabajo' | 'imputaciones' | 'inventario' | 'links' | 'proyectos';
+export type View = 'setup-project' | 'setup-team' | 'setup-tasks' | 'dashboard' | 'standards' | 'analytics' | 'audit' | 'bank-status' | 'notifications' | 'roles-permissions' | 'project-templates' | 'admin' | 'circuitos-bbva' | 'bitacora' | 'estimaciones' | 'plan-trabajo' | 'imputaciones' | 'inventario' | 'links' | 'proyectos' | 'activity-report';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -48,7 +48,7 @@ export default function Layout({ children, currentView, onViewChange, userRole }
   const herramientasViews: View[] = ['roles-permissions','audit','project-templates'];
   const herramientasActive = herramientasViews.includes(currentView);
 
-  const repoViews: View[] = ['imputaciones','inventario','links'];
+  const repoViews: View[] = ['imputaciones','activity-report','inventario','links'];
   const repoActive = repoViews.includes(currentView);
 
   return (
@@ -127,6 +127,10 @@ export default function Layout({ children, currentView, onViewChange, userRole }
                     <button onClick={() => { setShowRepo(false); onViewChange('imputaciones'); }}
                       className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm text-left transition-colors ${currentView==='imputaciones'?'bg-primary/10 text-primary font-semibold':'text-slate-600 hover:bg-slate-50'}`}>
                       <Layers size={13}/> Imputaciones Jira
+                    </button>
+                    <button onClick={() => { setShowRepo(false); onViewChange('activity-report'); }}
+                      className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm text-left transition-colors ${currentView==='activity-report'?'bg-primary/10 text-primary font-semibold':'text-slate-600 hover:bg-slate-50'}`}>
+                      <Layers size={13}/> Activity Report (TR)
                     </button>
                     <button onClick={() => { setShowRepo(false); onViewChange('inventario'); }}
                       className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm text-left transition-colors ${currentView==='inventario'?'bg-primary/10 text-primary font-semibold':'text-slate-600 hover:bg-slate-50'}`}>

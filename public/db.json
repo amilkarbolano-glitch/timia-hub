@@ -177,6 +177,26 @@
     {"id":"imp-sdm-03","projectId":"SDM1","jiraId":"DESDM1-0130","summary":"Mallas Control-M SDM1 — orquestación carga incremental",   "type":"Enabler Delivery","status":"Test",        "assigneeIds":["u-diego"],                         "month":"Mayo",   "weeks":"",      "q":"Q2-2026",   "phase":"Codificación",    "hoursEst":40,  "hoursImputed":16,  "context":"SDM1-Q2-2026",                            "createdBy":"Diego Sánchez","createdAt":"2026-05-01"}
   ],
 
+  "_comment_tr": "Activity Report (TR): features Jira con horas planificadas por fase SDA y horas imputadas por persona/día leídas de las capturas del TR.",
+  "timia_tr_features": [
+    {"id":"DECRONOS-2169","projectId":"CRONOS","title":"CRONOS-Q3 2026 DATCAL01 Disponibilizar tablas intermedias FICO","q":"Q3-2026","hoursByPhase":{"Análisis y diseño":16,"Desarrollo / Gestión datos":64,"Pruebas":24,"Despliegue":8},"defaultPhase":"Desarrollo / Gestión datos","assigneeIds":["u-juan","u-sergio"],"active":true,"createdAt":"2026-07-01T12:00:00.000Z"},
+    {"id":"DECRONOS-2238","projectId":"CRONOS","title":"CRONOS-Q3 2026 DATCAL01 Cambio de tablon temporal","q":"Q3-2026","hoursByPhase":{"Análisis y diseño":8,"Desarrollo / Gestión datos":40,"Pruebas":16,"Despliegue":8},"defaultPhase":"Desarrollo / Gestión datos","assigneeIds":["u-sergio"],"active":true,"createdAt":"2026-07-15T12:00:00.000Z"},
+    {"id":"DECRONOS-2343","projectId":"CRONOS","title":"CRONOS-Q3 2026 DATCAL01 Cambio de tablon temporal - Validación","q":"Q3-2026","hoursByPhase":{"Desarrollo / Gestión datos":24,"Pruebas":32,"Despliegue":8},"defaultPhase":"Pruebas","assigneeIds":["u-juan"],"active":true,"createdAt":"2026-08-01T12:00:00.000Z"}
+  ],
+  "timia_tr_entries": [
+    {"id":"tr-1","userId":"u-sergio","userName":"Sergio David Rodriguez","date":"2026-08-26","featureId":"DECRONOS-2169","phase":"Desarrollo / Gestión datos","hours":3,"actividad":"DATIO (Dataproc)","source":"ocr","createdAt":"2026-08-26T18:00:00.000Z"},
+    {"id":"tr-2","userId":"u-sergio","userName":"Sergio David Rodriguez","date":"2026-08-26","featureId":"DECRONOS-2238","phase":"Desarrollo / Gestión datos","hours":3,"actividad":"DATIO (Dataproc)","source":"ocr","createdAt":"2026-08-26T18:00:00.000Z"},
+    {"id":"tr-3","userId":"u-sergio","userName":"Sergio David Rodriguez","date":"2026-08-26","featureId":"DECRONOS-2343","phase":"Pruebas","hours":2,"actividad":"DATIO (Dataproc)","source":"ocr","createdAt":"2026-08-26T18:00:00.000Z"},
+    {"id":"tr-4","userId":"u-sergio","userName":"Sergio David Rodriguez","date":"2026-08-28","featureId":"DECRONOS-2169","phase":"Desarrollo / Gestión datos","hours":3,"source":"ocr","createdAt":"2026-08-28T18:00:00.000Z"},
+    {"id":"tr-5","userId":"u-sergio","userName":"Sergio David Rodriguez","date":"2026-08-28","featureId":"DECRONOS-2238","phase":"Desarrollo / Gestión datos","hours":3,"source":"ocr","createdAt":"2026-08-28T18:00:00.000Z"},
+    {"id":"tr-6","userId":"u-sergio","userName":"Sergio David Rodriguez","date":"2026-08-28","featureId":"DECRONOS-2343","phase":"Pruebas","hours":2,"source":"ocr","createdAt":"2026-08-28T18:00:00.000Z"},
+    {"id":"tr-7","userId":"u-sergio","userName":"Sergio David Rodriguez","date":"2026-08-31","featureId":"DECRONOS-2169","phase":"Desarrollo / Gestión datos","hours":2,"source":"ocr","createdAt":"2026-08-31T18:00:00.000Z"},
+    {"id":"tr-8","userId":"u-sergio","userName":"Sergio David Rodriguez","date":"2026-08-31","featureId":"DECRONOS-2238","phase":"Pruebas","hours":2,"source":"ocr","createdAt":"2026-08-31T18:00:00.000Z"},
+    {"id":"tr-9","userId":"u-sergio","userName":"Sergio David Rodriguez","date":"2026-08-31","featureId":"DECRONOS-2343","phase":"Pruebas","hours":4,"source":"ocr","createdAt":"2026-08-31T18:00:00.000Z"},
+    {"id":"tr-10","userId":"u-juan","userName":"Juan Pablo Arévalo","date":"2026-08-31","featureId":"DECRONOS-2169","phase":"Análisis y diseño","hours":4,"source":"manual","createdAt":"2026-08-31T18:00:00.000Z"},
+    {"id":"tr-11","userId":"u-juan","userName":"Juan Pablo Arévalo","date":"2026-08-31","featureId":"DECRONOS-2343","phase":"Pruebas","hours":4,"source":"manual","createdAt":"2026-08-31T18:00:00.000Z"},
+    {"id":"tr-12","userId":"u-juan","userName":"Juan Pablo Arévalo","date":"2026-09-01","featureId":"DECRONOS-2169","phase":"Desarrollo / Gestión datos","hours":8,"source":"manual","createdAt":"2026-09-01T18:00:00.000Z"}
+  ],
   "_comment_issues": "Alertas y bloqueantes con fecha de inicio/fin e impacto (planKey + entregableId + actIdx [+ etapaId]). endDate ausente = abierta.",
   "timia_plan_issues": [
     {"id":"is-cro-01","planKey":"CRONOS","type":"bloqueante","title":"Acceso Control-M distribuido sin aprobar por BBVA","detail":"Ticket de acceso abierto desde el 18/08. Sin acceso no se pueden construir las mallas.","startDate":"2026-08-18","impacts":[{"planKey":"CRONOS","entregableId":"auto","actIdx":0},{"planKey":"CRONOS","entregableId":"auto","actIdx":2}],"createdBy":"Juan Pablo Arévalo","createdAt":"2026-08-18T14:00:00.000Z"},

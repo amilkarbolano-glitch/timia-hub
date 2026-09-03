@@ -22,11 +22,12 @@ let failed = false;
   const PlanDeTrabajo = (await import('../src/components/PlanDeTrabajo.tsx')).default;
   const Estimaciones = (await import('../src/components/Estimaciones.tsx')).default;
   const Bitacora = (await import('../src/components/Bitacora.tsx')).default;
+  const ActivityReport = (await import('../src/components/ActivityReport.tsx')).default;
   (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
   console.error = (...a:any[]) => { const s = a.join(' '); if (!s.includes('act(')) errors.push('console.error: ' + s.slice(0,300)); };
   for (const acc of auth.MOCK_ACCOUNTS) {
     w.localStorage.setItem('timia_hub_user', JSON.stringify(acc));
-    for (const [name, C, props] of [['Plan', PlanDeTrabajo, {}], ['Estim', Estimaciones, { onViewChange:()=>{}, onBack:()=>{} }], ['Tareas', Bitacora, {}]] as any) {
+    for (const [name, C, props] of [['Plan', PlanDeTrabajo, {}], ['Estim', Estimaciones, { onViewChange:()=>{}, onBack:()=>{} }], ['Tareas', Bitacora, {}], ['TR', ActivityReport, { user: acc }]] as any) {
       const el = w.document.createElement('div'); w.document.body.appendChild(el);
       const root = createRoot(el, { onUncaughtError: (e:any) => errors.push('uncaught: ' + (e?.stack ?? e)), onCaughtError: (e:any) => errors.push('caught: ' + (e?.stack ?? e)) } as any);
       const click = async (label: string) => {
@@ -36,7 +37,7 @@ let failed = false;
       };
       try {
         await act(async () => { root.render(React.createElement(auth.AuthProvider, null, React.createElement(C, props))); });
-        for (const p of ['FICO','CRONOS','NGA','FICO','Consolidado','Input','FICO 2.0','Randómico','Principal','+ Bloqueante','+ Seleccionar tareas','Confirmar','+ Alerta','+ Seleccionar tareas','Cancelar','+ Cronograma','Nuevo cambio']) await click(p);
+        for (const p of ['FICO','CRONOS','NGA','FICO','Consolidado','Input','FICO 2.0','Randómico','Principal','+ Bloqueante','+ Seleccionar tareas','Confirmar','+ Alerta','+ Seleccionar tareas','Cancelar','+ Cronograma','Nuevo cambio','Cargar TR','Features y horas','Nueva feature','Cumplimiento']) await click(p);
         const row = el.querySelector('tbody tr'); if (row) await act(async () => { row.dispatchEvent(new w.MouseEvent('click', { bubbles: true })); });
         console.log(acc.role.padEnd(13), name, errors.length ? 'ERRORS' : 'OK', el.innerHTML.length);
       } catch (e:any) { errors.push('act: ' + e.stack); console.log(acc.role, name, 'THROW'); }

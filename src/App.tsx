@@ -16,6 +16,7 @@ import AdminPanel from './components/AdminPanel';
 import CircuitosBBVA from './components/CircuitosBBVA';
 import Bitacora, { TabLinks, TabInventario } from './components/Bitacora';
 import ImputacionesJira from './components/ImputacionesJira';
+import ActivityReport from './components/ActivityReport';
 import Estimaciones from './components/Estimaciones';
 import PlanDeTrabajo from './components/PlanDeTrabajo';
 import { INITIAL_TEMPLATES } from './lib/templates';
@@ -155,6 +156,22 @@ function AppInner() {
               </div>
             </div>
             <ImputacionesJira user={user}/>
+          </div>
+        );
+
+      case 'activity-report':
+        return (
+          <div style={{ padding: '28px 36px', maxWidth: 1400, margin: '0 auto' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 22 }}>
+              <div style={{ width: 34, height: 34, borderRadius: 10, background: '#eff6ff', border: '0.5px solid #bfdbfe', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1d4ed8" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              </div>
+              <div>
+                <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#111', letterSpacing: '-.3px' }}>Activity Report (TR)</h2>
+                <p style={{ margin: 0, fontSize: 12, color: '#94a3b8', marginTop: 1 }}>Horas por feature y fase SDA — lo planificado vs. lo que cada persona imputa en el TR del banco</p>
+              </div>
+            </div>
+            <ActivityReport user={user}/>
           </div>
         );
 
