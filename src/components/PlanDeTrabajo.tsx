@@ -1649,16 +1649,175 @@ const WORK_PLANS_RAW: Omit<WorkPlan,'planKey'>[] = [
 ];
 const WORK_PLANS: WorkPlan[] = WORK_PLANS_RAW.map(p => ({ ...p, planKey: p.projectId }));
 
+// ─── GeneralGantt — Gantt calendario común de todos los cronogramas ──────────
+// Filas agrupadas por cronograma → fase → tarea, posicionadas por fecha real
+// (días hábiles desde el startDate de cada cronograma). Muestra avance, extensión
+// por cambios (morado), días perdidos por bloqueo (rojo), issues abiertos y hoy.
+
+function GeneralGantt({ plans, holidays, getActivityPct, issues, changes, onOpen, onOpenActivity }: {
+  plans: WorkPlan[]; holidays: Set<string>;
+  getActivityPct: (planKey: string, eid: string, ai: number, a: PlanActivity) => number;
+  issues: PlanIssue[]; changes: BitacoraEntry[];
+  onOpen: (planKey: string) => void;
+  onOpenActivity: (planKey: string, eid: string, ai: number, a: PlanActivity) => void;
+}) {
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [onlyOpen, setOnlyOpen] = useState<'all' | 'active' | 'late'>('all');
+  const today = new Date(); today.setHours(12, 0, 0, 0);
+  const DAY = 86400000;
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  const MES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+
+  type Row = { plan: WorkPlan; ent: PlanEntregable; ai: number; a: PlanActivity; start: Date; end: Date; baseEnd: Date; pct: number; ext: ActExtension; open: PlanIssue[]; late: boolean; done: boolean };
+  const rows: Row[] = [];
+  plans.forEach(p => p.entregables.forEach(e => e.activities.forEach((a, i) => {
+    const start = weekToActualDate(p.startDate, a.startWeek, holidays);
+    const ext = extensionFor(changes, p.planKey, e.id, i, a.endWeek, issues, holidays);
+    const baseEnd = effectiveEndDate(p.startDate, a.endWeek, 0, holidays);
+    const end = effectiveEndDate(p.startDate, a.endWeek, ext.days, holidays);
+    if (!start || !end || !baseEnd) return;
+    const pct = getActivityPct(p.planKey, e.id, i, a);
+    const open = issues.filter(x => !x.endDate && issueImpacts(x).some(m => m.planKey === p.planKey && m.entregableId === e.id && m.actIdx === i));
+    rows.push({ plan: p, ent: e, ai: i, a, start, end, baseEnd, pct, ext, open, late: end < today && pct < 100, done: pct >= 100 });
+  })));
+  if (!rows.length) return null;
+
+  // Eje: de lunes de la semana del inicio mínimo al domingo del fin máximo (o hoy)
+  const minStart = new Date(Math.min(...rows.map(r => r.start.getTime())));
+  const maxEnd = new Date(Math.max(...rows.map(r => r.end.getTime()), today.getTime()));
+  const axisStart = new Date(minStart); axisStart.setDate(axisStart.getDate() - ((axisStart.getDay() + 6) % 7)); axisStart.setHours(12,0,0,0);
+  const axisEnd = new Date(maxEnd); axisEnd.setDate(axisEnd.getDate() + (7 - ((axisEnd.getDay() + 6) % 7)) - 1);
+  const spanDays = Math.max(7, Math.round((axisEnd.getTime() - axisStart.getTime()) / DAY) + 1);
+  const weeks = Math.ceil(spanDays / 7);
+  const pos = (d: Date) => ((d.getTime() - axisStart.getTime()) / DAY) / spanDays * 100;
+  const width = (a: Date, b: Date) => Math.max(0.3, ((b.getTime() - a.getTime()) / DAY + 1) / spanDays * 100);
+  const todayLeft = pos(today);
+  const WEEK_W = 56;                                        // px por semana
+  const timelineW = weeks * WEEK_W;
+
+  const filtered = rows.filter(r => onlyOpen === 'all' ? true : onlyOpen === 'late' ? r.late : (!r.done && r.start <= today));
+  const groups = plans.map(p => ({ plan: p, ents: p.entregables.map(e => ({ ent: e, rows: filtered.filter(r => r.plan.planKey === p.planKey && r.ent.id === e.id) })).filter(g => g.rows.length) })).filter(g => g.ents.length);
+  const toggle = (k: string) => setCollapsed(s => { const n = new Set(s); n.has(k) ? n.delete(k) : n.add(k); return n; });
+  const lateCount = rows.filter(r => r.late).length, activeCount = rows.filter(r => !r.done && r.start <= today).length;
+
+  // Marcas de mes sobre el eje
+  const months: { label: string; left: number; width: number }[] = [];
+  { const c = new Date(axisStart.getFullYear(), axisStart.getMonth(), 1, 12);
+    while (c <= axisEnd) { const n = new Date(c.getFullYear(), c.getMonth() + 1, 1, 12); const a = c < axisStart ? axisStart : c; const b = n > axisEnd ? axisEnd : new Date(n.getTime() - DAY);
+      months.push({ label: `${MES[c.getMonth()]} ${c.getFullYear()}`, left: pos(a), width: width(a, b) }); c.setMonth(c.getMonth() + 1); } }
+
+  return (
+    <div style={{ background:'#fff', border:'0.5px solid #e2e8f0', borderRadius:12, marginBottom:12, overflow:'hidden' }}>
+      <div style={{ display:'flex', alignItems:'center', gap:8, padding:'10px 14px', borderBottom:'0.5px solid #f1f5f9', flexWrap:'wrap' }}>
+        <p style={{ margin:0, fontSize:11, fontWeight:700, color:'#111', flex:1 }}>Plan general · {plans.length} cronogramas · {rows.length} tareas en calendario</p>
+        {([['all', `Todas (${rows.length})`], ['active', `En curso (${activeCount})`], ['late', `Atrasadas (${lateCount})`]] as const).map(([v, l]) => (
+          <button key={v} onClick={() => setOnlyOpen(v)} style={{ fontSize:10, padding:'4px 10px', borderRadius:12, cursor:'pointer', border:`0.5px solid ${onlyOpen === v ? '#374151' : '#e2e8f0'}`, background: onlyOpen === v ? '#374151' : '#fff', color: onlyOpen === v ? '#fff' : '#374151', fontWeight:600 }}>{l}</button>
+        ))}
+        <span style={{ fontSize:9, color:'#94a3b8', marginLeft:6 }}>
+          <span style={{ display:'inline-block', width:14, height:7, background:'#0d9488', borderRadius:2, verticalAlign:'middle' }}/> ejecutado ·
+          <span style={{ display:'inline-block', width:14, height:7, background:'rgba(13,148,136,.22)', borderRadius:2, verticalAlign:'middle', marginLeft:4 }}/> planificado ·
+          <span style={{ display:'inline-block', width:14, height:7, background:'repeating-linear-gradient(135deg,#c4b5fd 0 3px,#ede9fe 3px 6px)', borderRadius:2, verticalAlign:'middle', marginLeft:4 }}/> Δ cambios ·
+          <span style={{ display:'inline-block', width:14, height:7, background:'repeating-linear-gradient(135deg,#fca5a5 0 3px,#fee2e2 3px 6px)', borderRadius:2, verticalAlign:'middle', marginLeft:4 }}/> bloqueo
+        </span>
+      </div>
+      <div style={{ overflowX:'auto' }}>
+        <div style={{ display:'grid', gridTemplateColumns:`300px ${timelineW}px`, minWidth: 300 + timelineW }}>
+          {/* Cabecera del eje */}
+          <div style={{ position:'sticky', left:0, background:'#fff', zIndex:2, borderBottom:'0.5px solid #e2e8f0', borderRight:'0.5px solid #e2e8f0', padding:'6px 12px', fontSize:9, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'.06em', fontWeight:700, display:'flex', alignItems:'flex-end' }}>Cronograma › fase › tarea</div>
+          <div style={{ position:'relative', height:34, borderBottom:'0.5px solid #e2e8f0' }}>
+            {months.map(m => <div key={m.label + m.left} style={{ position:'absolute', top:2, left:`${m.left}%`, width:`${m.width}%`, fontSize:9, fontWeight:700, color:'#64748b', borderLeft:'0.5px solid #e2e8f0', paddingLeft:4, whiteSpace:'nowrap', overflow:'hidden' }}>{m.label}</div>)}
+            {Array.from({ length: weeks }).map((_, i) => { const d = new Date(axisStart.getTime() + i * 7 * DAY); return (
+              <div key={i} style={{ position:'absolute', top:18, left:`${(i * 7) / spanDays * 100}%`, width:`${7 / spanDays * 100}%`, fontSize:8, color:'#94a3b8', borderLeft:'0.5px solid #f1f5f9', paddingLeft:3, whiteSpace:'nowrap' }}>{d.getDate()}/{d.getMonth() + 1}</div>); })}
+            <div style={{ position:'absolute', top:0, bottom:0, left:`${todayLeft}%`, width:2, background:'#16a34a' }}/>
+            <span style={{ position:'absolute', top:0, left:`${todayLeft}%`, transform:'translateX(-50%)', fontSize:7, fontWeight:800, color:'#16a34a', background:'#fff', padding:'0 2px' }}>HOY</span>
+          </div>
+
+          {groups.map(g => {
+            const color = PROJECTS.find(pr => pr.id === g.plan.projectId)?.color ?? '#64748b';
+            const key = g.plan.planKey; const col = collapsed.has(key);
+            const gRows = g.ents.flatMap(e => e.rows);
+            const gStart = new Date(Math.min(...gRows.map(r => r.start.getTime()))), gEnd = new Date(Math.max(...gRows.map(r => r.end.getTime())));
+            const gPct = gRows.length ? gRows.reduce((s, r) => s + r.pct, 0) / gRows.length : 0;
+            const gOpen = gRows.reduce((s, r) => s + r.open.length, 0), gLate = gRows.filter(r => r.late).length;
+            return (
+              <React.Fragment key={key}>
+                {/* Fila del cronograma */}
+                <div onClick={() => toggle(key)} style={{ position:'sticky', left:0, zIndex:2, background:`${color}10`, borderTop:'0.5px solid #e2e8f0', borderRight:'0.5px solid #e2e8f0', padding:'7px 10px', display:'flex', alignItems:'center', gap:6, cursor:'pointer' }}>
+                  {col ? <ChevronRight size={12} color={color}/> : <ChevronDown size={12} color={color}/>}
+                  <span style={{ fontSize:11, fontWeight:700, color, flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{g.plan.cronoId ? (g.plan.cronoName ?? g.plan.cronoId) : CRONO_MAIN_NAME}</span>
+                  {gLate > 0 && <span title={`${gLate} atrasada(s)`} style={{ fontSize:8, fontWeight:700, color:'#b91c1c', background:'#fee2e2', borderRadius:4, padding:'1px 5px' }}>{gLate} atr.</span>}
+                  {gOpen > 0 && <span style={{ fontSize:9 }}>{gRows.some(r => r.open.some(x => x.type === 'bloqueante')) ? '⛔' : '⚠'}</span>}
+                  <button onClick={e => { e.stopPropagation(); onOpen(key); }} title="Abrir cronograma" style={{ fontSize:9, padding:'2px 7px', background:'#fff', border:`0.5px solid ${color}60`, color, borderRadius:10, cursor:'pointer', fontWeight:600 }}>abrir</button>
+                </div>
+                <div style={{ position:'relative', borderTop:'0.5px solid #e2e8f0', background:`${color}08`, height:30 }}>
+                  {Array.from({ length: weeks }).map((_, i) => <div key={i} style={{ position:'absolute', top:0, bottom:0, left:`${(i * 7) / spanDays * 100}%`, borderLeft:'0.5px solid #f1f5f9' }}/>)}
+                  <div style={{ position:'absolute', top:8, height:14, left:`${pos(gStart)}%`, width:`${width(gStart, gEnd)}%`, background:`${color}30`, border:`0.5px solid ${color}70`, borderRadius:4, overflow:'hidden' }}>
+                    <div style={{ width:`${Math.min(100, gPct)}%`, height:'100%', background:color, opacity:.7 }}/>
+                    <span style={{ position:'absolute', left:6, top:1, fontSize:9, fontWeight:700, color: gPct > 12 ? '#fff' : color }}>{gPct.toFixed(0)}%</span>
+                  </div>
+                  <div style={{ position:'absolute', top:0, bottom:0, left:`${todayLeft}%`, width:2, background:'#16a34a', opacity:.5 }}/>
+                </div>
+                {!col && g.ents.map(eg => (
+                  <React.Fragment key={eg.ent.id}>
+                    <div style={{ position:'sticky', left:0, zIndex:2, background:'#fafafa', borderRight:'0.5px solid #e2e8f0', padding:'4px 10px 4px 26px', fontSize:9, fontWeight:700, color:'#9f1239', textTransform:'uppercase', letterSpacing:'.04em', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{eg.ent.name}</div>
+                    <div style={{ background:'#fafafa', height:20, position:'relative' }}>
+                      {Array.from({ length: weeks }).map((_, i) => <div key={i} style={{ position:'absolute', top:0, bottom:0, left:`${(i * 7) / spanDays * 100}%`, borderLeft:'0.5px solid #f1f5f9' }}/>)}
+                      <div style={{ position:'absolute', top:0, bottom:0, left:`${todayLeft}%`, width:2, background:'#16a34a', opacity:.35 }}/>
+                    </div>
+                    {eg.rows.map(r => {
+                      const hasBloq = r.open.some(x => x.type === 'bloqueante'), hasAlert = r.open.some(x => x.type === 'alerta');
+                      const rowBg = hasBloq ? '#fff5f5' : hasAlert ? '#fffbeb' : r.late ? '#fff7ed' : '#fff';
+                      const extStart = new Date(r.baseEnd.getTime() + DAY);
+                      const purpleEnd = r.ext.changeDays > 0 ? addBusinessDays(r.baseEnd, r.ext.changeDays, holidays) : r.baseEnd;
+                      return (
+                        <React.Fragment key={r.ai}>
+                          <div onClick={() => onOpenActivity(r.plan.planKey, r.ent.id, r.ai, r.a)} title={`${r.a.name}\n${iso(r.start)} → ${iso(r.end)}${r.ext.days ? ` (+${r.ext.days} d)` : ''} · ${r.pct}%`}
+                            style={{ position:'sticky', left:0, zIndex:2, background:rowBg, borderRight:'0.5px solid #e2e8f0', borderTop:'0.5px solid #f1f5f9', padding:'4px 8px 4px 34px', display:'flex', alignItems:'center', gap:5, cursor:'pointer', borderLeft: hasBloq ? '3px solid #dc2626' : hasAlert ? '3px solid #f59e0b' : r.late ? '3px solid #f97316' : '3px solid transparent' }}>
+                            {r.a.bbva && <span style={{ fontSize:7, padding:'0 3px', borderRadius:3, background:'#dbeafe', color:'#1d4ed8', fontWeight:700, flexShrink:0 }}>BBVA</span>}
+                            <span style={{ fontSize:10, color:'#374151', flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{r.a.name}</span>
+                            {r.ext.changeDays > 0 && <span style={{ fontSize:8, color:'#6d28d9', fontWeight:700 }}>Δ+{r.ext.changeDays}d</span>}
+                            {r.ext.blockDays > 0 && <span style={{ fontSize:8, color:'#b91c1c', fontWeight:700 }}>⛔+{r.ext.blockDays}d</span>}
+                            <span style={{ fontSize:9, fontWeight:700, color: r.done ? '#15803d' : r.late ? '#c2410c' : '#64748b', minWidth:28, textAlign:'right' }}>{r.pct}%</span>
+                          </div>
+                          <div style={{ position:'relative', height:24, borderTop:'0.5px solid #f1f5f9', background: rowBg }}>
+                            {Array.from({ length: weeks }).map((_, i) => <div key={i} style={{ position:'absolute', top:0, bottom:0, left:`${(i * 7) / spanDays * 100}%`, borderLeft:'0.5px solid #f1f5f9' }}/>)}
+                            {/* planificado + ejecutado */}
+                            <div style={{ position:'absolute', top:6, height:12, left:`${pos(r.start)}%`, width:`${width(r.start, r.baseEnd)}%`, background:'rgba(13,148,136,.22)', borderRadius:3, overflow:'hidden' }}>
+                              <div style={{ width:`${Math.min(100, r.pct)}%`, height:'100%', background:'#0d9488' }}/>
+                            </div>
+                            {/* extensión por cambios */}
+                            {r.ext.changeDays > 0 && <div style={{ position:'absolute', top:6, height:12, left:`${pos(extStart)}%`, width:`${width(extStart, purpleEnd)}%`, background:'repeating-linear-gradient(135deg,#c4b5fd 0 3px,#ede9fe 3px 6px)', borderRadius:'0 3px 3px 0' }}/>}
+                            {/* bloqueo */}
+                            {r.ext.blockDays > 0 && <div style={{ position:'absolute', top:6, height:12, left:`${pos(new Date(purpleEnd.getTime() + DAY))}%`, width:`${width(new Date(purpleEnd.getTime() + DAY), r.end)}%`, background:'repeating-linear-gradient(135deg,#fca5a5 0 3px,#fee2e2 3px 6px)', borderRadius:'0 3px 3px 0', boxShadow:'inset -2px 0 0 #dc2626' }}/>}
+                            {/* issues abiertos: franja inferior desde su inicio hasta hoy */}
+                            {r.open.map(x => { const a = new Date(x.startDate + 'T12:00:00'); return <div key={x.id} title={`${x.type === 'bloqueante' ? '⛔' : '⚠'} ${x.title} · desde ${x.startDate}`} style={{ position:'absolute', bottom:1, height:3, left:`${pos(a)}%`, width:`${width(a, today)}%`, background: x.type === 'bloqueante' ? '#dc2626' : '#f59e0b' }}/>; })}
+                            <div style={{ position:'absolute', top:0, bottom:0, left:`${todayLeft}%`, width:2, background:'#16a34a', opacity:.5 }}/>
+                          </div>
+                        </React.Fragment>
+                      );
+                    })}
+                  </React.Fragment>
+                ))}
+              </React.Fragment>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── ConsolidadoView — vista de proyecto con varios cronogramas ───────────────
 // Muestra el % ponderado por actividades del proyecto completo, una tarjeta por
 // cronograma y una línea de tiempo calendario donde se ve el solapamiento.
 
-function ConsolidadoView({ plans, holidays, getActivityPct, onOpen, openIssues = [], changes = [], allIssues = [] }: {
+function ConsolidadoView({ plans, holidays, getActivityPct, onOpen, openIssues = [], changes = [], allIssues = [], onOpenActivity }: {
   plans: WorkPlan[];
   holidays: Set<string>;
   openIssues?: PlanIssue[];
   allIssues?: PlanIssue[];
   changes?: BitacoraEntry[];
+  onOpenActivity?: (planKey: string, eid: string, ai: number, a: PlanActivity) => void;
   getActivityPct: (planKey: string, eid: string, ai: number, a: PlanActivity) => number;
   onOpen: (planKey: string) => void;
 }) {
@@ -1709,7 +1868,7 @@ function ConsolidadoView({ plans, holidays, getActivityPct, onOpen, openIssues =
           <span style={{ fontSize:15, fontWeight:700, color }}>{projectId.slice(0,2)}</span>
         </div>
         <div style={{ flex:1 }}>
-          <h3 style={{ margin:0, fontSize:15, fontWeight:600, color:'#111' }}>Proyecto {projectId} · Consolidado</h3>
+          <h3 style={{ margin:0, fontSize:15, fontWeight:600, color:'#111' }}>Proyecto {projectId} · Plan general</h3>
           <p style={{ margin:'2px 0 0', fontSize:10, color:'#64748b' }}>{plans.length} cronogramas · {totalN} actividades · ponderado por actividad</p>
         </div>
         {[['Real', real, '#111'], ['Esperado', exp, '#64748b']].map(([l, v, c]) => (
@@ -1729,6 +1888,43 @@ function ConsolidadoView({ plans, holidays, getActivityPct, onOpen, openIssues =
           </div>
         )}
       </div>
+
+      {/* Issues abiertos y cambios en todo el proyecto */}
+      {(openIssues.filter(i => plans.some(p => p.planKey === i.planKey)).length > 0 || changes.some(c => (c.impacts ?? []).some(m => plans.some(p => p.planKey === m.planKey)))) && (
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:12 }}>
+          <div style={{ background:'#fff', border:'0.5px solid #e2e8f0', borderRadius:12, padding:'10px 14px' }}>
+            <p style={{ margin:'0 0 6px', fontSize:10, fontWeight:700, color:'#374151' }}>Alertas y bloqueantes abiertos</p>
+            {openIssues.filter(i => plans.some(p => p.planKey === i.planKey)).sort((a, b) => a.type === b.type ? a.startDate.localeCompare(b.startDate) : a.type === 'bloqueante' ? -1 : 1).map(i => {
+              const p = plans.find(x => x.planKey === i.planKey)!;
+              return (
+                <div key={i.id} onClick={() => onOpen(i.planKey)} style={{ display:'flex', alignItems:'center', gap:6, fontSize:10, padding:'4px 0', borderTop:'0.5px solid #f1f5f9', cursor:'pointer' }}>
+                  <span>{i.type === 'bloqueante' ? '⛔' : '⚠'}</span>
+                  <span style={{ flex:1, color:'#111', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{i.title}</span>
+                  <span style={{ fontSize:9, color, background:`${color}15`, borderRadius:8, padding:'1px 6px', whiteSpace:'nowrap' }}>{p.cronoId ? (p.cronoName ?? p.cronoId) : CRONO_MAIN_NAME}</span>
+                  <span style={{ fontSize:9, color:'#94a3b8', whiteSpace:'nowrap' }}>desde {fmtShort(i.startDate)}</span>
+                </div>
+              );
+            })}
+            {openIssues.filter(i => plans.some(p => p.planKey === i.planKey)).length === 0 && <p style={{ margin:0, fontSize:10, color:'#94a3b8' }}>Ninguno</p>}
+          </div>
+          <div style={{ background:'#fff', border:'0.5px solid #e2e8f0', borderRadius:12, padding:'10px 14px' }}>
+            <p style={{ margin:'0 0 6px', fontSize:10, fontWeight:700, color:'#374151' }}>Cambios funcionales con impacto</p>
+            {changes.filter(c => (c.impacts ?? []).some(m => plans.some(p => p.planKey === m.planKey))).map(c => (
+              <div key={c.id} style={{ display:'flex', alignItems:'center', gap:6, fontSize:10, padding:'4px 0', borderTop:'0.5px solid #f1f5f9' }}>
+                <span style={{ color:'#6d28d9', fontWeight:700 }}>Δ</span>
+                <span style={{ flex:1, color:'#111', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{c.descripcion}</span>
+                <span style={{ fontSize:9, color:'#6d28d9', fontWeight:700, whiteSpace:'nowrap' }}>+{c.horasEstimadas ?? 0} h{c.modo === 'absorbe' ? ' (abs.)' : ''}</span>
+                <span style={{ fontSize:9, color:'#94a3b8', whiteSpace:'nowrap' }}>{c.fecha}</span>
+              </div>
+            ))}
+            {!changes.some(c => (c.impacts ?? []).some(m => plans.some(p => p.planKey === m.planKey))) && <p style={{ margin:0, fontSize:10, color:'#94a3b8' }}>Ninguno</p>}
+          </div>
+        </div>
+      )}
+
+      {/* Gantt calendario común */}
+      <GeneralGantt plans={plans} holidays={holidays} getActivityPct={getActivityPct} issues={allIssues} changes={changes} onOpen={onOpen}
+        onOpenActivity={(k, eid, ai, a) => onOpenActivity ? onOpenActivity(k, eid, ai, a) : onOpen(k)}/>
 
       {/* Línea de tiempo calendario */}
       <div style={{ background:'#fff', border:'0.5px solid #e2e8f0', borderRadius:12, padding:'12px 18px 14px', marginBottom:12 }}>
@@ -2867,7 +3063,7 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
             {/* ── Tabs de cronograma (solo si el proyecto tiene más de uno) ── */}
             {projectPlans.length > 1 && (
               <div data-print-hide style={{ display:'flex', alignItems:'center', gap:4, marginBottom:12, flexWrap:'wrap' }}>
-                <span style={{ fontSize:9, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'.06em', fontWeight:600, marginRight:4 }}>Cronogramas</span>
+                <span style={{ fontSize:9, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'.06em', fontWeight:600, marginRight:4 }}>Plan</span>
                 {(() => {
                   const color = PROJECTS.find(pr=>pr.id===plan.projectId)?.color ?? '#64748b';
                   const tab = (key: string, label: string, active: boolean, onClick: () => void, sub?: string) => (
@@ -2879,7 +3075,7 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
                     </button>
                   );
                   return [
-                    tab('__all', 'Consolidado', consolidado, () => setConsolidado(true), `${Math.round(aggregatePlans(projectPlans).real)}%`),
+                    tab('__all', 'General', consolidado, () => setConsolidado(true), `${Math.round(aggregatePlans(projectPlans).real)}%`),
                     ...projectPlans.map(p => {
                       const a = aggregatePlans([p]);
                       return tab(p.planKey, p.cronoId ? (p.cronoName ?? p.cronoId) : CRONO_MAIN_NAME, !consolidado && p.planKey === plan.planKey,
@@ -2899,6 +3095,7 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
                 changes={changes}
                 getActivityPct={getActivityPct}
                 onOpen={(key) => { setSelected(key); setConsolidado(false); }}
+                onOpenActivity={(key, eid, ai, a) => setDrawer({ projectId: key, entregableId: eid, actIdx: ai, act: a })}
               />
             ) : (
             <PlanDetail

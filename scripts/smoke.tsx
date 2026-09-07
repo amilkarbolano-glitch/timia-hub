@@ -37,7 +37,7 @@ let failed = false;
       };
       try {
         await act(async () => { root.render(React.createElement(auth.AuthProvider, null, React.createElement(C, props))); });
-        for (const p of ['FICO','CRONOS','NGA','FICO','Consolidado','Input','FICO 2.0','Randómico','Principal','+ Bloqueante','+ Seleccionar tareas','Confirmar','+ Alerta','+ Seleccionar tareas','Cancelar','+ Cronograma','Nuevo cambio','Cargar TR','Features y horas','Nueva feature','Cumplimiento']) await click(p);
+        for (const p of ['FICO','CRONOS','NGA','FICO','General','Input','FICO 2.0','Randómico','Principal','+ Bloqueante','+ Seleccionar tareas','Confirmar','+ Alerta','+ Seleccionar tareas','Cancelar','+ Cronograma','Nuevo cambio','Cargar TR','Features y horas','Nueva feature','Cumplimiento']) await click(p);
         const row = el.querySelector('tbody tr'); if (row) await act(async () => { row.dispatchEvent(new w.MouseEvent('click', { bubbles: true })); });
         console.log(acc.role.padEnd(13), name, errors.length ? 'ERRORS' : 'OK', el.innerHTML.length);
       } catch (e:any) { errors.push('act: ' + e.stack); console.log(acc.role, name, 'THROW'); }
