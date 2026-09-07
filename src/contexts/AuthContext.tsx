@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { persist, apiMe, apiLoginDemo, apiLoginGoogle, apiLogout, loadStateFromApi } from '../lib/persist';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -175,12 +176,19 @@ export const MOCK_ACCOUNTS: AuthUser[] = [
 
 interface AuthContextType {
   user: AuthUser | null;
+  /** Login local (modo sin API): guarda la cuenta en el navegador */
   login: (user: AuthUser) => void;
+  /** Login demo contra la API (cuenta del panel, sin contraseña) */
+  loginDemo: (userId: string) => Promise<{ error?: string }>;
+  /** Login con Google (ID token del botón de Google) contra la API */
+  loginWithGoogle: (credential: string) => Promise<{ error?: string }>;
   logout: () => void;
   isLoading: boolean;
 }
 
 const AuthContext = createContext<AuthContextType>({
+  loginWithGoogle: async () => ({ error: 'no disponible' }),
+  loginDemo: async () => ({ error: 'no disponible' }),
   user: null, login: () => {}, logout: () => {}, isLoading: true,
 });
 
@@ -191,37 +199,65 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        const parsed: AuthUser = JSON.parse(stored);
-        // Validate that the stored user ID still exists in current accounts
-        // (prevents stale sessions when user accounts are renamed/removed)
-        const isValid = MOCK_ACCOUNTS.some(a => a.id === parsed.id);
-        if (isValid) {
-          // Refresh with current account data (picks up name/email/role changes)
-          const current = MOCK_ACCOUNTS.find(a => a.id === parsed.id)!;
-          setUser(current);
-        } else {
-          localStorage.removeItem(STORAGE_KEY);
-        }
+    (async () => {
+      if (persist.mode === 'api') {
+        // Sesión en cookie httpOnly: la API dice quién soy (el estado ya se cargó en seedFromRemote)
+        const me = await apiMe();
+        if (me) setUser(me as AuthUser);
+        setIsLoading(false);
+        return;
       }
-    } catch {}
-    setIsLoading(false);
+      try {
+        const stored = localStorage.getItem(STORAGE_KEY);
+        if (stored) {
+          const parsed: AuthUser = JSON.parse(stored);
+          // Validate that the stored user ID still exists in current accounts
+          // (prevents stale sessions when user accounts are renamed/removed)
+          const isValid = MOCK_ACCOUNTS.some(a => a.id === parsed.id);
+          if (isValid) {
+            // Refresh with current account data (picks up name/email/role changes)
+            const current = MOCK_ACCOUNTS.find(a => a.id === parsed.id)!;
+            setUser(current);
+          } else {
+            localStorage.removeItem(STORAGE_KEY);
+          }
+        }
+      } catch {}
+      setIsLoading(false);
+    })();
   }, []);
+
+  // Si la sesión de la API caduca mientras se trabaja, volver al login
+  useEffect(() => persist.onChange(() => { if (persist.sessionLost) { persist.resetSession(); setUser(null); } }), []);
 
   const login = (u: AuthUser) => {
     setUser(u);
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(u)); } catch {}
   };
 
+  const afterApiLogin = async (u: AuthUser) => {
+    await loadStateFromApi();            // estado compartido → localStorage (caché de lectura)
+    setUser(u);
+  };
+  const loginDemo = async (userId: string) => {
+    const r = await apiLoginDemo(userId);
+    if (r.user) { await afterApiLogin(r.user as AuthUser); return {}; }
+    return { error: r.error };
+  };
+  const loginWithGoogle = async (credential: string) => {
+    const r = await apiLoginGoogle(credential);
+    if (r.user) { await afterApiLogin(r.user as AuthUser); return {}; }
+    return { error: r.error };
+  };
+
   const logout = () => {
     setUser(null);
     try { localStorage.removeItem(STORAGE_KEY); } catch {}
+    if (persist.mode === 'api') apiLogout();
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, isLoading }}>
+    <AuthContext.Provider value={{ user, login, loginDemo, loginWithGoogle, logout, isLoading }}>
       {children}
     </AuthContext.Provider>
   );

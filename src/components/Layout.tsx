@@ -285,7 +285,7 @@ export function PersistBadge() {
   const color = !api ? '#94a3b8' : fail ? '#dc2626' : pending ? '#d97706' : '#15803d';
   const label = !api ? 'Local' : fail ? 'API · error al guardar' : pending ? 'API · guardando…' : 'API · sincronizado';
   return (
-    <span title={api ? `Conectado a ${persist.apiBase || location.origin}/api (MongoDB)` : 'Sin API: datos en este navegador (db.json + localStorage)'}
+    <span title={api ? `Conectado a ${persist.apiBase || location.origin}/api (MongoDB · sesión segura)` : 'Sin API: datos en este navegador (db.json + localStorage)'}
       style={{ display:'inline-flex', alignItems:'center', gap:5, fontSize:10, color, fontWeight:600, padding:'3px 8px', borderRadius:10, background:`${color}14`, border:`0.5px solid ${color}40`, whiteSpace:'nowrap' }}>
       <span style={{ width:6, height:6, borderRadius:'50%', background:color }}/>{label}
     </span>

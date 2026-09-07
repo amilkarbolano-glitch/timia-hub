@@ -30,6 +30,8 @@ const state = {
   queue: new Map<string, unknown>(),
   failures: 0,
   listeners: new Set<() => void>(),
+  authConfig: null as ApiAuthConfig | null,
+  sessionLost: false,
 };
 
 export const persist = {
@@ -37,6 +39,8 @@ export const persist = {
   get apiBase(): string | null { return state.base; },
   get pendingWrites(): number { return state.queue.size; },
   get failures(): number { return state.failures; },
+  get sessionLost(): boolean { return state.sessionLost; },
+  resetSession() { state.sessionLost = false; notify(); },
   onChange(fn: () => void) { state.listeners.add(fn); return () => { state.listeners.delete(fn); }; },
 };
 function notify() { state.listeners.forEach(fn => { try { fn(); } catch {} }); }
@@ -50,15 +54,71 @@ function headers(): Record<string, string> {
 async function fetchWithTimeout(url: string, init: RequestInit, ms: number): Promise<Response> {
   const ctl = new AbortController();
   const t = setTimeout(() => ctl.abort(), ms);
-  try { return await fetch(url, { ...init, signal: ctl.signal }); }
+  try { return await fetch(url, { credentials: 'include', ...init, signal: ctl.signal }); }
   finally { clearTimeout(t); }
 }
 
-/** Intenta cargar todo el estado desde la API. Devuelve el mapa de keys o null si no hay API. */
+// ─── Autenticación contra la API ─────────────────────────────────────────────
+export interface ApiAuthConfig { google: boolean; googleClientId: string | null; demo: boolean; allowedDomains: string[] }
+export interface ApiUser { id: string; name: string; email: string; role: string; projectIds: string[]; initials: string; avatarColor: string; areaLabel?: string }
+
+/** Detecta la API (público). Si responde, entra en modo API aunque no haya sesión todavía. */
+export async function probeApi(): Promise<ApiAuthConfig | null> {
+  if (state.base === null) return null;
+  try {
+    const res = await fetchWithTimeout(`${state.base}/api/auth/config`, { cache: 'no-store' }, 5000);
+    if (!res.ok || !(res.headers.get('content-type') ?? '').includes('application/json')) return null;
+    const cfg = await res.json() as ApiAuthConfig;
+    if (typeof cfg?.demo !== 'boolean') return null;
+    state.mode = 'api'; state.authConfig = cfg; notify();
+    return cfg;
+  } catch { return null; }
+}
+export function apiAuthConfig(): ApiAuthConfig | null { return state.authConfig; }
+
+async function authCall(path: string, body?: unknown): Promise<{ ok: boolean; status: number; data: any }> {
+  const res = await fetchWithTimeout(`${state.base}${path}`, body === undefined ? { method: 'POST', headers: headers() } : { method: 'POST', headers: headers(), body: JSON.stringify(body) }, 10000);
+  let data: any = null; try { data = await res.json(); } catch {}
+  return { ok: res.ok, status: res.status, data };
+}
+export async function apiMe(): Promise<ApiUser | null> {
+  if (state.mode !== 'api') return null;
+  try { const res = await fetchWithTimeout(`${state.base}/api/auth/me`, { headers: headers(), cache: 'no-store' }, 6000); if (!res.ok) return null; return (await res.json()).user ?? null; }
+  catch { return null; }
+}
+export async function apiLoginGoogle(credential: string): Promise<{ user?: ApiUser; error?: string }> {
+  const r = await authCall('/api/auth/google', { credential });
+  return r.ok ? { user: r.data.user } : { error: r.data?.detail ?? `Error ${r.status}` };
+}
+export async function apiLoginDemo(userId: string): Promise<{ user?: ApiUser; error?: string }> {
+  const r = await authCall('/api/auth/demo', { userId });
+  return r.ok ? { user: r.data.user } : { error: r.data?.detail ?? `Error ${r.status}` };
+}
+export async function apiDemoAccounts(): Promise<ApiUser[]> {
+  try { const res = await fetchWithTimeout(`${state.base}/api/auth/demo-accounts`, { cache: 'no-store' }, 6000); return res.ok ? await res.json() : []; }
+  catch { return []; }
+}
+export async function apiLogout(): Promise<void> { try { await authCall('/api/auth/logout'); } catch {} }
+
+/** Keys de sesión/navegación que nunca se sobrescriben desde la API */
+export const SEED_SKIP_KEYS = new Set(['timia_hub_user', 'timia_current_view']);
+
+/** Vuelca el estado de la API a localStorage (tras iniciar sesión). Devuelve true si cargó. */
+export async function loadStateFromApi(): Promise<boolean> {
+  const fromApi = await loadFromApi();
+  if (!fromApi) return false;
+  Object.entries(fromApi).forEach(([key, val]) => {
+    if (SEED_SKIP_KEYS.has(key) || !key.startsWith('timia_')) return;
+    try { localStorage.setItem(key, JSON.stringify(val)); } catch {}
+  });
+  return true;
+}
+
+/** Carga todo el estado desde la API (requiere sesión). Devuelve null si no hay API o no hay sesión. */
 export async function loadFromApi(): Promise<Record<string, unknown> | null> {
   if (state.base === null) return null;
   try {
-    const res = await fetchWithTimeout(`${state.base}/api/state`, { headers: headers(), cache: 'no-store' }, 6000);
+    const res = await fetchWithTimeout(`${state.base}/api/state`, { headers: headers(), cache: 'no-store' }, 8000);
     if (!res.ok) return null;
     const ct = res.headers.get('content-type') ?? '';
     if (!ct.includes('application/json')) return null;   // p.ej. GitHub Pages devolviendo index.html
@@ -79,6 +139,7 @@ async function flush(key: string) {
   if (state.mode !== 'api' || state.base === null) return;
   try {
     const res = await fetchWithTimeout(`${state.base}/api/state/${encodeURIComponent(key)}`, { method: 'PUT', headers: headers(), body: JSON.stringify({ value }) }, 10000);
+    if (res.status === 401) { state.sessionLost = true; notify(); return; }   // sesión caducada: no reintentar
     if (!res.ok) throw new Error(String(res.status));
     state.failures = 0;
   } catch {

@@ -1,7 +1,8 @@
 // ─── Admin Store — datos parametrizables con persistencia localStorage ────────
 
 import { PROJECTS as BASE_PROJECTS } from '../contexts/AuthContext';
-import { persistSet, persistGet, loadFromApi } from './persist';
+import { persistSet, persistGet, probeApi, apiMe, loadStateFromApi } from './persist';
+export { loadStateFromApi } from './persist';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -548,13 +549,13 @@ const DEFAULT_IMPUTACIONES: ImputacionEntry[] = [
 const SEED_SKIP_KEYS = new Set(['timia_hub_user', 'timia_current_view']);
 
 export async function seedFromRemote(): Promise<void> {
-  // 1) API (FastAPI + Mongo): fuente de verdad compartida por todo el equipo
-  const fromApi = await loadFromApi();
-  if (fromApi) {
-    Object.entries(fromApi).forEach(([key, val]) => {
-      if (SEED_SKIP_KEYS.has(key) || !key.startsWith('timia_')) return;
-      try { localStorage.setItem(key, JSON.stringify(val)); } catch {}
-    });
+  // 1) API (FastAPI + Mongo): fuente de verdad compartida por todo el equipo.
+  //    Si hay API pero no hay sesión, el estado se carga después del login (AuthContext).
+  const cfg = await probeApi();
+  if (cfg) {
+    const me = await apiMe();
+    if (me) await loadStateFromApi();
+    // En modo API la lista de cuentas para el login demo viene de la API, no del navegador
     return;
   }
   // 2) Sin API: public/db.json como semilla (modo local / GitHub Pages)

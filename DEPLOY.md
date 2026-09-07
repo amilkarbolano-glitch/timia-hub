@@ -34,11 +34,25 @@ base de datos es la fuente de verdad: lo que cambie cualquier usuario lo ven tod
 - Servicio ECS con las dos tareas en la misma task definition (web escucha 80, api 8000); nginx resuelve `api` por `localhost` → cambia `proxy_pass http://api:8000` por `http://127.0.0.1:8000` en `docker/nginx.conf` o usa Service Connect.
 - `MONGO_URL` apuntando a Atlas o DocumentDB (con TLS: `mongodb://user:pass@host:27017/?tls=true&tlsCAFile=...`).
 
+## Autenticación (Google Sign-In)
+1. En Google Cloud → **APIs y servicios → Credenciales → Crear credencial → ID de cliente OAuth → Aplicación web**.
+   Orígenes JavaScript autorizados: `http://localhost` (pruebas) y `https://<dominio de la app>`. No hace falta URI de redirección.
+2. En `.env`: `GOOGLE_CLIENT_ID=xxxx.apps.googleusercontent.com`, `ALLOWED_EMAIL_DOMAINS=timia.ai`,
+   `SESSION_SECRET=<openssl rand -base64 48>`, y `COOKIE_SECURE=true` cuando haya HTTPS.
+3. Solo entran correos que existan en **Administración › Equipo** (`timia_admin_users`); el rol y los proyectos salen de ahí.
+4. Con `GOOGLE_CLIENT_ID` definido, el login demo se apaga solo (`ALLOW_DEMO_LOGIN=true` lo fuerza para pruebas).
+
+Cómo funciona: el botón de Google entrega un ID token → `POST /api/auth/google` lo verifica con Google → la API emite una
+cookie de sesión **httpOnly** (JWT firmado, 8 h). Todas las rutas `/api/state*` exigen sesión; las colecciones de
+configuración (usuarios, proyectos, roles, ANS, festivos) solo las escribe el rol **pm**. Rate limit en `/api/auth/*`.
+
 ## Variables
 | Var | Dónde | Descripción |
 |---|---|---|
 | `MONGO_URL`, `MONGO_DB` | api | Conexión a Mongo (por defecto `mongodb://mongo:27017`, db `timia`) |
-| `TIMIA_API_KEY` | api + front | Si está definida, la API exige header `X-API-Key`. En el front: `window.TIMIA_API_KEY` en `public/config.js` |
+| `SESSION_SECRET`, `SESSION_HOURS`, `COOKIE_SECURE` | api | Firma y duración de la sesión; `COOKIE_SECURE=true` con HTTPS |
+| `GOOGLE_CLIENT_ID`, `ALLOWED_EMAIL_DOMAINS`, `ALLOW_DEMO_LOGIN` | api | Google Sign-In y login demo |
+| `TIMIA_API_KEY` | api | Acceso servicio-a-servicio (header `X-API-Key`), opcional |
 | `CORS_ORIGINS` | api | Solo necesario si el front NO pasa por nginx (ej. GitHub Pages hablando con la API) |
 | `SEED_ON_START` | api | `true`: carga db.json en keys que no existan |
 | `window.TIMIA_API_URL` | front (`public/config.js`) | `''` = mismo origen, `https://api.x.com` = otra URL, `'none'` = sin API |

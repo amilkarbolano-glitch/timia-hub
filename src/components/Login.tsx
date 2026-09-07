@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Lock, ChevronRight, ArrowLeft, Check } from 'lucide-react';
 import { useAuth, MOCK_ACCOUNTS, AuthUser } from '../contexts/AuthContext';
 import { adminStore } from '../lib/adminStore';
+import { persist, apiAuthConfig, apiDemoAccounts } from '../lib/persist';
 import { TimiaWordmark, TimiaMark } from './TimiaLogo';
 
 type Step = 'initial' | 'picker' | 'verifying';
@@ -23,20 +24,61 @@ const features = [
   'Asistente Gemini con contexto TIMIA',
 ];
 
+declare global { interface Window { google?: any } }
+
 export default function Login() {
-  const { login } = useAuth();
+  const { login, loginDemo, loginWithGoogle } = useAuth();
   const [step, setStep] = useState<Step>('initial');
   const [selected, setSelected] = useState<AuthUser | null>(null);
   const [progress, setProgress] = useState(0);
+  const [error, setError] = useState<string>('');
+
+  // Modo API: qué métodos hay (Google real / demo) y cuentas demo desde el servidor
+  const apiMode = persist.mode === 'api';
+  const cfg = apiAuthConfig();
+  const googleEnabled = apiMode && !!cfg?.google && !!cfg?.googleClientId;
+  const demoEnabled = !apiMode || !!cfg?.demo;
+  const [apiAccounts, setApiAccounts] = useState<AuthUser[] | null>(null);
+  useEffect(() => { if (apiMode && demoEnabled) apiDemoAccounts().then(a => setApiAccounts(a as AuthUser[])); }, [apiMode, demoEnabled]);
 
   const storeUsers = adminStore.getUsers().filter(u => u.active);
-  const accounts: AuthUser[] = (storeUsers.length > 0 ? storeUsers : MOCK_ACCOUNTS) as AuthUser[];
+  const accounts: AuthUser[] = apiMode
+    ? (apiAccounts ?? [])
+    : ((storeUsers.length > 0 ? storeUsers : MOCK_ACCOUNTS) as AuthUser[]);
 
-  const handleSelectAccount = (account: AuthUser) => {
+  // Botón oficial de Google (Google Identity Services)
+  const gBtn = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!googleEnabled || step !== 'initial') return;
+    const init = () => {
+      if (!window.google?.accounts?.id || !gBtn.current) return;
+      window.google.accounts.id.initialize({
+        client_id: cfg!.googleClientId,
+        callback: async (resp: { credential: string }) => {
+          setError(''); setStep('verifying'); setProgress(0); setTimeout(() => setProgress(100), 80);
+          const r = await loginWithGoogle(resp.credential);
+          if (r.error) { setError(r.error); setStep('initial'); }
+        },
+        ux_mode: 'popup', auto_select: false, itp_support: true,
+      });
+      window.google.accounts.id.renderButton(gBtn.current, { type: 'standard', theme: 'outline', size: 'large', text: 'signin_with', shape: 'rectangular', width: 320, locale: 'es' });
+    };
+    if (window.google?.accounts?.id) { init(); return; }
+    const sc = document.createElement('script'); sc.src = 'https://accounts.google.com/gsi/client'; sc.async = true; sc.defer = true; sc.onload = init;
+    document.head.appendChild(sc);
+  }, [googleEnabled, step]);
+
+  const handleSelectAccount = async (account: AuthUser) => {
     setSelected(account);
+    setError('');
     setStep('verifying');
     setProgress(0);
     setTimeout(() => setProgress(100), 80);
+    if (apiMode) {
+      const r = await loginDemo(account.id);
+      if (r.error) { setError(r.error); setStep('picker'); }
+      return;
+    }
     setTimeout(() => login(account), 1800);
   };
 
@@ -90,23 +132,42 @@ export default function Login() {
             <div className="flex justify-center mb-5">
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs border" style={{ background: '#fef2f2', borderColor: '#fecaca', color: '#991b1b' }}>
                 <Lock size={11} />
-                Solo cuentas @timia.ai
+                {cfg?.allowedDomains?.length ? `Solo cuentas @${cfg.allowedDomains.join(', @')}` : 'Solo cuentas @timia.ai'}
               </span>
             </div>
+            {error && (
+              <div className="mb-4 px-3 py-2 rounded-lg text-xs" style={{ background:'#fef2f2', border:'0.5px solid #fecaca', color:'#b91c1c' }}>{error}</div>
+            )}
 
             {/* Paso 1: botón inicial */}
             {step === 'initial' && (
               <div>
-                <button
-                  onClick={() => setStep('picker')}
-                  className="w-full flex items-center justify-center gap-2.5 px-4 py-2.5 rounded-lg border text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 transition-colors"
-                  style={{ borderColor: '#dadce0' }}
-                >
-                  <GoogleIcon />
-                  Continuar con Google
-                  <ChevronRight size={14} className="text-slate-400" />
-                </button>
-                <p className="text-xs text-slate-400 text-center mt-3">Se abrirá el selector de cuenta Google</p>
+                {googleEnabled ? (
+                  <div>
+                    <div ref={gBtn} className="flex justify-center" style={{ minHeight: 44 }}/>
+                    <p className="text-xs text-slate-400 text-center mt-3">Inicia sesión con tu cuenta corporativa de Google</p>
+                    {demoEnabled && (
+                      <button onClick={() => setStep('picker')} className="w-full mt-3 text-xs text-slate-400 hover:text-slate-600 transition-colors">
+                        Acceso de prueba (cuentas demo)
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div>
+                    <button
+                      onClick={() => setStep('picker')}
+                      className="w-full flex items-center justify-center gap-2.5 px-4 py-2.5 rounded-lg border text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 transition-colors"
+                      style={{ borderColor: '#dadce0' }}
+                    >
+                      <GoogleIcon />
+                      Continuar con Google
+                      <ChevronRight size={14} className="text-slate-400" />
+                    </button>
+                    <p className="text-xs text-slate-400 text-center mt-3">
+                      {apiMode ? 'Modo demo: elige una cuenta del equipo (Google Sign-In no configurado aún)' : 'Se abrirá el selector de cuenta Google'}
+                    </p>
+                  </div>
+                )}
               </div>
             )}
 
@@ -118,6 +179,7 @@ export default function Login() {
                   <div className="px-3 py-2 bg-slate-50 border-b text-xs text-slate-500" style={{ borderColor: '#f3f4f6' }}>
                     Cuentas disponibles
                   </div>
+                  {apiMode && apiAccounts === null && <div className="px-3 py-3 text-xs text-slate-400">Cargando cuentas…</div>}
                   {accounts.map((acc) => (
                     <button
                       key={acc.id}

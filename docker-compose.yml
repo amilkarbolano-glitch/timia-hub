@@ -25,8 +25,15 @@ services:
       MONGO_URL: mongodb://mongo:27017
       MONGO_DB: ${MONGO_DB:-timia}
       TIMIA_API_KEY: ${TIMIA_API_KEY:-}
-      CORS_ORIGINS: ${CORS_ORIGINS:-*}
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
       SEED_ON_START: "true"
+      # Autenticación
+      SESSION_SECRET: ${SESSION_SECRET:-}
+      SESSION_HOURS: ${SESSION_HOURS:-8}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      ALLOWED_EMAIL_DOMAINS: ${ALLOWED_EMAIL_DOMAINS:-}
+      ALLOW_DEMO_LOGIN: ${ALLOW_DEMO_LOGIN:-}
     depends_on:
       mongo:
         condition: service_healthy
