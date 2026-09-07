@@ -1,7 +1,16 @@
 # Timia Hub — Despliegue (Docker · AWS)
 
-Tres contenedores: **web** (nginx sirve el front y hace proxy de `/api`), **api** (FastAPI) y **mongo**.
-El front no necesita CORS ni URL de API: habla con `/api` en el mismo origen.
+Son **dos piezas independientes** + base de datos, y quien despliega decide cómo combinarlas:
+
+| Pieza | Carpeta | Imagen | Puede ir a |
+|---|---|---|---|
+| Front | raíz (`docker/web.Dockerfile`) | nginx + estáticos | S3+CloudFront, Amplify, ECS, EC2, GitHub Pages |
+| API | `backend/` (autocontenido) | FastAPI | App Runner, ECS Fargate, EC2 — ver `backend/DEPLOY-API.md` |
+| DB | — | mongo:7 o servicio | Atlas, DocumentDB, contenedor con volumen |
+
+`docker-compose.yml` es la forma "todo junto en una máquina": **web** (nginx sirve el front y hace proxy de `/api`),
+**api** y **mongo**. En ese modo el front no necesita CORS ni URL de API.
+Si el front y la API viven en sitios distintos: `public/config.js` → `window.TIMIA_API_URL` y `CORS_ORIGINS` en la API.
 
 ## Local
 ```bash

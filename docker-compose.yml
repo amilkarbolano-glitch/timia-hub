@@ -18,9 +18,7 @@ services:
       retries: 10
 
   api:
-    build:
-      context: .
-      dockerfile: backend/Dockerfile
+    build: ./backend
     container_name: timia-api
     restart: unless-stopped
     environment:

@@ -52,7 +52,7 @@ jobs:
       - name: Build web image
         run: docker build -f docker/web.Dockerfile -t timia-web:ci .
       - name: Build api image
-        run: docker build -f backend/Dockerfile -t timia-api:ci .
+        run: docker build -t timia-api:ci ./backend
 
   # ─── DEPLOY a GitHub Pages (solo en push a main) ──────────────────────────
   deploy:

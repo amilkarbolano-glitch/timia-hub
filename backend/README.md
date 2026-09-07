@@ -13,5 +13,5 @@ MONGO_URL=mongodb://localhost:27017 uvicorn app.main:app --reload --port 8000
 Variables: `MONGO_URL`, `MONGO_DB` (timia), `TIMIA_API_KEY` (opcional, header `X-API-Key`),
 `CORS_ORIGINS` (coma-separado, `*` por defecto), `SEED_ON_START` (true), `SEED_FILE`.
 
-El seed es `public/db.json` del front (en Docker se copia a `seed/db.json`; en local se detecta `../public/db.json`)
+El seed es `seed/db.json` (copia de `public/db.json` del front; `npm run seed:sync` la actualiza). `backend/` es autocontenido: `docker build -t timia-api ./backend` funciona sin el resto del repo
 y se carga solo en keys que no existan todavía (`POST /api/seed?force=true` para forzar).

@@ -13,7 +13,8 @@
     "smoke": "tsx scripts/smoke.tsx",
     "check": "npm run lint:real && vite build && npm run smoke",
     "api:dev": "cd backend && uvicorn app.main:app --reload --port 8000",
-    "docker:up": "docker compose up -d --build"
+    "docker:up": "docker compose up -d --build",
+    "seed:sync": "cp public/db.json backend/seed/db.json"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",
