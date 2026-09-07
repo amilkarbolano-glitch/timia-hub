@@ -6,3 +6,8 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# artefactos que no van al repo
+spa.traineddata
+*.traineddata
+/assets/
