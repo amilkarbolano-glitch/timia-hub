@@ -2,7 +2,7 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { Plus, Trash2, Upload, Camera, CheckCircle, AlertTriangle, Loader2, ClipboardList, BarChart3, Image as ImageIcon, X } from 'lucide-react';
 import { adminStore, SDA_PHASES, TR_HOURS_PER_DAY, type TrFeature, type TrEntry, type SdaPhase, type AdminUser } from '../lib/adminStore';
-import { PROJECTS } from '../contexts/AuthContext';
+import { PROJECTS, canAccess } from '../contexts/AuthContext';
 import { parseTrText, fmtHours, type TrParsed } from '../lib/trParser';
 import { isBusyDay } from '../lib/businessDays';
 
@@ -48,7 +48,9 @@ export default function ActivityReport({ user }: { user: any }) {
   const [entries, setEntries]   = useState<TrEntry[]>(() => adminStore.getTrEntries());
   const allUsers = useMemo(() => adminStore.getUsers().filter(u => u.active), []);
   const holidays = useMemo(() => new Set(adminStore.getHolidays().map(h => h.date)), []);
-  const isPm = user?.role === 'pm';
+  const isPm = canAccess(user?.role ?? 'developer', 'projects.view_all');
+  const canLoadAny = canAccess(user?.role ?? 'developer', 'tr.load_any');
+  const canFeatures = canAccess(user?.role ?? 'developer', 'tr.manage_features');
   const accessibleIds: string[] = isPm ? PROJECTS.map((p: any) => p.id) : (user?.projectIds ?? []);
   const [filterProj, setFilterProj] = useState<string>('');
   const visFeatures = features.filter(f => accessibleIds.includes(f.projectId) && (!filterProj || f.projectId === filterProj));
@@ -76,9 +78,9 @@ export default function ActivityReport({ user }: { user: any }) {
           {PROJECTS.filter((p: any) => accessibleIds.includes(p.id)).map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
       </div>
-      {tab === 'features' && <FeaturesTab features={visFeatures} all={features} onSave={saveFeatures} entries={entries} accessibleIds={accessibleIds} allUsers={allUsers} filterProj={filterProj}/>}
-      {tab === 'cargar' && <CargarTab features={features} entries={entries} onSave={saveEntries} user={user} allUsers={allUsers} isPm={isPm} accessibleIds={accessibleIds}/>}
-      {tab === 'cumplimiento' && <CumplimientoTab features={visFeatures} entries={entries} allUsers={allUsers} holidays={holidays} accessibleIds={accessibleIds} filterProj={filterProj} user={user} isPm={isPm}/>}
+      {tab === 'features' && (canFeatures ? <FeaturesTab features={visFeatures} all={features} onSave={saveFeatures} entries={entries} accessibleIds={accessibleIds} allUsers={allUsers} filterProj={filterProj}/> : <div style={{ fontSize:11, color:'#94a3b8', padding:20, textAlign:'center' }}>No tienes permiso para definir features (tr.manage_features).</div>)}
+      {tab === 'cargar' && <CargarTab features={features} entries={entries} onSave={saveEntries} user={user} allUsers={allUsers} isPm={canLoadAny} accessibleIds={accessibleIds}/>}
+      {tab === 'cumplimiento' && <CumplimientoTab features={visFeatures} entries={entries} allUsers={allUsers} holidays={holidays} accessibleIds={accessibleIds} filterProj={filterProj} user={user} isPm={canLoadAny}/>}
     </div>
   );
 }

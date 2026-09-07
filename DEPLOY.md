@@ -5,15 +5,16 @@ Son **dos piezas independientes** + base de datos, y quien despliega decide cóm
 | Pieza | Carpeta | Imagen | Puede ir a |
 |---|---|---|---|
 | Front | raíz (`docker/web.Dockerfile`) | nginx + estáticos | S3+CloudFront, Amplify, ECS, EC2, GitHub Pages |
-| API | `backend/` (autocontenido) | FastAPI | App Runner, ECS Fargate, EC2 — ver `backend/DEPLOY-API.md` |
+| API | repo **timia-hub-api** | FastAPI | App Runner, ECS Fargate, EC2 — ver su README |
 | DB | — | mongo:7 o servicio | Atlas, DocumentDB, contenedor con volumen |
 
-`docker-compose.yml` es la forma "todo junto en una máquina": **web** (nginx sirve el front y hace proxy de `/api`),
+`docker-compose.yml` (con `../timia-hub-api` clonado al lado) es la forma "todo junto en una máquina": **web** (nginx sirve el front y hace proxy de `/api`),
 **api** y **mongo**. En ese modo el front no necesita CORS ni URL de API.
 Si el front y la API viven en sitios distintos: `public/config.js` → `window.TIMIA_API_URL` y `CORS_ORIGINS` en la API.
 
 ## Local
 ```bash
+git clone https://github.com/amilkarbolano-glitch/timia-hub-api ../timia-hub-api   # backend, repo hermano
 cp .env.example .env
 docker compose up -d --build
 # http://localhost  ·  API docs: descomenta ports en api y abre http://localhost:8000/docs
@@ -30,7 +31,7 @@ base de datos es la fuente de verdad: lo que cambie cualquier usuario lo ven tod
 6. Backups de Mongo: `docker exec timia-mongo mongodump --archive > backup-$(date +%F).archive` (cron + S3).
 
 ## AWS — opción gestionada (ECS Fargate + DocumentDB/Atlas)
-- Sube las dos imágenes a ECR (`docker build -f docker/web.Dockerfile -t timia-web .` y `docker build -t timia-api ./backend`).
+- Sube las dos imágenes a ECR (`docker build -f docker/web.Dockerfile -t timia-web .` y `docker build -t timia-api ../timia-hub-api`).
 - Servicio ECS con las dos tareas en la misma task definition (web escucha 80, api 8000); nginx resuelve `api` por `localhost` → cambia `proxy_pass http://api:8000` por `http://127.0.0.1:8000` en `docker/nginx.conf` o usa Service Connect.
 - `MONGO_URL` apuntando a Atlas o DocumentDB (con TLS: `mongodb://user:pass@host:27017/?tls=true&tlsCAFile=...`).
 

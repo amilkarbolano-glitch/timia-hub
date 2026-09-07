@@ -67,8 +67,11 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
   ],
 };
 
+// Permisos: la matriz vigente vive en src/lib/permissions.ts (espejo del servidor) y
+// admite los nombres antiguos (ROLE_PERMISSIONS de arriba se conserva como referencia).
+import { hasPermission } from '../lib/permissions';
 export function canAccess(role: UserRole, permission: string): boolean {
-  return ROLE_PERMISSIONS[role]?.includes(permission) ?? false;
+  return hasPermission(role, permission);
 }
 
 // Vista inicial según rol

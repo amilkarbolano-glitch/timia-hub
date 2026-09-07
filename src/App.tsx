@@ -99,8 +99,8 @@ function AppInner() {
     // ── Guards por vista ──────────────────────────────────────────────────────
     const guards: Record<string, string> = {
       'audit':            's_audit',
-      'roles-permissions':'u_roles',
       'analytics':        'view_analytics',
+      'activity-report':  'tr.view',
       'project-templates':'create_projects',
     };
 

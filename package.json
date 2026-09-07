@@ -12,9 +12,10 @@
     "lint:real": "tsx scripts/lint-real.ts",
     "smoke": "tsx scripts/smoke.tsx",
     "check": "npm run lint:real && vite build && npm run smoke",
-    "api:dev": "cd backend && uvicorn app.main:app --reload --port 8000",
+    "api:dev": "cd ../timia-hub-api && python dev_mock.py",
     "docker:up": "docker compose up -d --build",
-    "seed:sync": "cp public/db.json backend/seed/db.json"
+    "seed:sync": "cp public/db.json ../timia-hub-api/seed.json",
+    "e2e:api": "tsx scripts/e2e-api.tsx"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",

@@ -211,7 +211,7 @@ export default function ImputacionesJira({ user }: Props) {
   const canWrite = canAccess(user?.role, 'write_bitacora');
 
   // Proyectos accesibles según rol
-  const accessibleIds: string[] = user?.role === 'pm'
+  const accessibleIds: string[] = canAccess(user?.role ?? 'developer', 'projects.view_all')
     ? PROJECTS.map((p: any) => p.id)
     : (user?.projectIds ?? []);
   const accessibleProjects = PROJECTS.filter((p: any) => accessibleIds.includes(p.id));

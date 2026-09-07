@@ -32,6 +32,7 @@ const state = {
   listeners: new Set<() => void>(),
   authConfig: null as ApiAuthConfig | null,
   sessionLost: false,
+  lastError: null as { key: string; detail: string; at: number } | null,
 };
 
 export const persist = {
@@ -40,6 +41,8 @@ export const persist = {
   get pendingWrites(): number { return state.queue.size; },
   get failures(): number { return state.failures; },
   get sessionLost(): boolean { return state.sessionLost; },
+  get lastError() { return state.lastError; },
+  clearError() { state.lastError = null; state.failures = 0; notify(); },
   resetSession() { state.sessionLost = false; notify(); },
   onChange(fn: () => void) { state.listeners.add(fn); return () => { state.listeners.delete(fn); }; },
 };
@@ -140,8 +143,15 @@ async function flush(key: string) {
   try {
     const res = await fetchWithTimeout(`${state.base}/api/state/${encodeURIComponent(key)}`, { method: 'PUT', headers: headers(), body: JSON.stringify({ value }) }, 10000);
     if (res.status === 401) { state.sessionLost = true; notify(); return; }   // sesión caducada: no reintentar
+    if (res.status === 403) {
+      // Permiso denegado por el servidor: no reintentar, avisar y resincronizar esa colección
+      let detail = 'Permiso denegado'; try { detail = (await res.json()).detail ?? detail; } catch {}
+      state.failures++; state.lastError = { key, detail, at: Date.now() };
+      try { const r = await fetchWithTimeout(`${state.base}/api/state/${encodeURIComponent(key)}`, { headers: headers(), cache: 'no-store' }, 8000); if (r.ok) localStorage.setItem(key, JSON.stringify(await r.json())); } catch {}
+      notify(); return;
+    }
     if (!res.ok) throw new Error(String(res.status));
-    state.failures = 0;
+    state.failures = 0; state.lastError = null;
   } catch {
     state.failures++;
     // reintento único con backoff; si vuelve a fallar queda en localStorage (se reintenta al volver a escribir)

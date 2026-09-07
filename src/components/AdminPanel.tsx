@@ -7,7 +7,7 @@ import {
   adminStore, AdminProject, AdminUser, AnsConfig,
   BbvaAnsConfig, Holiday, Priority, UserRole,
 } from '../lib/adminStore';
-import { PROJECTS, useAuth } from '../contexts/AuthContext';
+import { PROJECTS, useAuth, canAccess } from '../contexts/AuthContext';
 
 // ─── Paleta colores ────────────────────────────────────────────────────────────
 const COLORS = ['#dc2626','#7c3aed','#2563eb','#0891b2','#059669','#d97706','#be185d','#0369a1','#0f766e','#4f46e5','#b45309','#7e22ce'];
@@ -781,7 +781,7 @@ const ADMIN_TABS: { id: AdminTab; label: string; icon: React.ReactNode; desc: st
 
 export default function AdminPanel({ onViewChange }: { onViewChange?: (view: string) => void } = {}) {
   const { user } = useAuth();
-  const isPM        = user?.role === 'pm';
+  const isPM        = canAccess(user?.role ?? 'developer', 'team.manage');
   const isTechLead  = user?.role === 'tech_lead';
   // tech_lead solo ve sus proyectos asignados; PM ve todos
   const allowedProjectIds = isTechLead ? (user?.projectIds ?? []) : undefined;

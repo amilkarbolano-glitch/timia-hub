@@ -125,7 +125,7 @@ function TabCambios({ user }: { user: any }) {
   const [filterTipo, setFT]   = useState('');
   const [search, setSearch]   = useState('');
 
-  const accessibleIds: string[] = user?.role === 'pm' ? PROJECTS.map((p: any) => p.id) : (user?.projectIds ?? []);
+  const accessibleIds: string[] = canAccess(user?.role ?? 'developer', 'projects.view_all') ? PROJECTS.map((p: any) => p.id) : (user?.projectIds ?? []);
   const accessibleProjects = PROJECTS.filter((p: any) => accessibleIds.includes(p.id));
 
   function save(next: BitacoraEntry[]) { setEntries(next); adminStore.saveBitacora(next); }
@@ -414,7 +414,7 @@ export function TabLinks({ user }: { user: any }) {
   const [search, setSearch] = useState('');
   const [form, setForm]     = useState({ projectId:'', title:'', url:'', category:'Ticket', descripcion:'' });
 
-  const accessibleIds: string[] = user?.role === 'pm' ? PROJECTS.map((p: any) => p.id) : (user?.projectIds ?? []);
+  const accessibleIds: string[] = canAccess(user?.role ?? 'developer', 'projects.view_all') ? PROJECTS.map((p: any) => p.id) : (user?.projectIds ?? []);
   const accessibleProjects = PROJECTS.filter((p: any) => accessibleIds.includes(p.id));
 
   function add() {
@@ -719,7 +719,7 @@ export function TabInventario({ user }: { user: any }) {
   const [delMode,  setDelMode]= useState(false);
 
   // Projects accessible to this user
-  const accessibleIds: string[] = user?.role === 'pm' ? PROJECTS.map((p: any) => p.id) : (user?.projectIds ?? []);
+  const accessibleIds: string[] = canAccess(user?.role ?? 'developer', 'projects.view_all') ? PROJECTS.map((p: any) => p.id) : (user?.projectIds ?? []);
   const accessibleProjects = PROJECTS.filter((p: any) => accessibleIds.includes(p.id));
 
   function save(next: InvRow[]) { setRows(next); saveInvRows(next); }

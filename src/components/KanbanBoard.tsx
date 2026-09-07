@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { motion, AnimatePresence } from 'motion/react';
-import { useAuth, PROJECTS } from '../contexts/AuthContext';
+import { useAuth, PROJECTS, canAccess } from '../contexts/AuthContext';
 import { adminStore, makePlanKey, type KanbanTask, type KanbanStatus, type AdminUser, type Priority } from '../lib/adminStore';
 
 // ─── Permisos por rol ─────────────────────────────────────────────────────────
@@ -20,8 +20,13 @@ const ROLE_PERMS: Record<string, {
   tech_ref:     { canCreate:true,  canEdit:true,  canAssign:true,  canDelete:false, canMove:true,  canComment:true  },
   developer:    { canCreate:false, canEdit:false, canAssign:false, canDelete:false, canMove:true,  canComment:true  },
 };
+// Ahora los permisos salen de la matriz (Herramientas › Roles y permisos); ROLE_PERMS queda como referencia
+const PERM_MAP: Record<keyof typeof ROLE_PERMS.pm, string> = {
+  canCreate: 'tasks.manage', canEdit: 'tasks.manage', canDelete: 'tasks.manage',
+  canAssign: 'tasks.assign', canMove: 'tasks.update_status', canComment: 'tasks.comment',
+};
 function perm(role: string, key: keyof typeof ROLE_PERMS.pm) {
-  return ROLE_PERMS[role]?.[key] ?? false;
+  return canAccess(role as any, PERM_MAP[key]);
 }
 
 // ─── Columnas Kanban ──────────────────────────────────────────────────────────
@@ -394,7 +399,7 @@ export default function KanbanBoard({ userRole }: KanbanBoardProps) {
 
   // ── Ámbito de proyectos por rol ──────────────────────────────────────────────
   // pm ve todo; el resto, solo sus proyectos asignados
-  const userProjectIds: string[] = role === 'pm'
+  const userProjectIds: string[] = canAccess(role as any, 'projects.view_all')
     ? PROJECTS.map(p => p.id)
     : (user?.projectIds ?? []);
 
@@ -433,7 +438,7 @@ export default function KanbanBoard({ userRole }: KanbanBoardProps) {
   const [newProject, setNewProject] = useState('FICO');
 
   // Proyectos visibles para el usuario
-  const userProjects = role === 'pm'
+  const userProjects = canAccess(role as any, 'projects.view_all')
     ? PROJECTS
     : PROJECTS.filter(p => (user?.projectIds ?? []).includes(p.id));
 

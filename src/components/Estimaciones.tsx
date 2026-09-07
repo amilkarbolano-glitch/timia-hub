@@ -3,7 +3,7 @@ import {
   ChevronDown, ChevronRight, Plus, Trash2, Save, ArrowRight, ArrowLeft,
   LayoutList, Clock, CalendarDays, Settings2, CheckSquare, Users,
 } from 'lucide-react';
-import { PROJECTS, useAuth } from '../contexts/AuthContext';
+import { PROJECTS, useAuth, canAccess } from '../contexts/AuthContext';
 import { adminStore, makePlanKey, CRONO_MAIN_NAME, type PlanEtapa, type PlanActivityConfig, type PlanEntregableConfig, type PlanConfig } from '../lib/adminStore';
 import type { View } from './Layout';
 import { FlowStepper } from './SetupProject';
@@ -703,7 +703,7 @@ export default function Estimaciones({ onViewChange, onBack }: EstimacionesProps
 
   // Build project list combining static PROJECTS + dynamic adminStore projects
   const allProjects = getAllProjects();
-  const visibleProjects = role === 'pm'
+  const visibleProjects = canAccess(role, 'projects.view_all')
     ? allProjects
     : allProjects.filter(p => (user?.projectIds ?? []).includes(p.id));
 
@@ -1120,7 +1120,7 @@ export default function Estimaciones({ onViewChange, onBack }: EstimacionesProps
         </div>
 
         {/* ── Panel Gestionar Equipo — visible para pm / tech_lead / project_lead ── */}
-        {(role === 'pm' || role === 'tech_lead' || role === 'project_lead') && (() => {
+        {canAccess(role, 'team.manage') && (() => {
           // teamRev en dependencias → re-render cada vez que se toggle un miembro
           const allUsers  = adminStore.getUsers().filter(u => u.active && u.role !== 'pm');
           const inProject = (u: { id: string; projectIds: string[] }) =>

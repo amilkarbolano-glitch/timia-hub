@@ -281,13 +281,22 @@ export function PersistBadge() {
   const [, force] = React.useState(0);
   React.useEffect(() => persist.onChange(() => force(v => v + 1)), []);
   const api = persist.mode === 'api';
-  const pending = persist.pendingWrites, fail = persist.failures;
+  const pending = persist.pendingWrites, fail = persist.failures, err = persist.lastError;
   const color = !api ? '#94a3b8' : fail ? '#dc2626' : pending ? '#d97706' : '#15803d';
-  const label = !api ? 'Local' : fail ? 'API · error al guardar' : pending ? 'API · guardando…' : 'API · sincronizado';
+  const label = !api ? 'Local' : err ? 'API · cambio rechazado' : fail ? 'API · error al guardar' : pending ? 'API · guardando…' : 'API · sincronizado';
+  React.useEffect(() => { if (err) { const t = setTimeout(() => persist.clearError(), 8000); return () => clearTimeout(t); } }, [err]);
   return (
+    <>
+    {err && (
+      <div role="alert" style={{ position:'fixed', top:64, right:20, zIndex:2000, maxWidth:380, padding:'10px 14px', background:'#fef2f2', border:'0.5px solid #fecaca', borderRadius:10, boxShadow:'0 8px 24px rgba(0,0,0,.12)', fontSize:11, color:'#991b1b', lineHeight:1.4 }}>
+        <strong>El servidor no permitió el cambio.</strong> {err.detail}
+        <div style={{ fontSize:10, color:'#b91c1c', marginTop:3 }}>Se restauró el estado guardado; recarga la vista para verlo.</div>
+      </div>
+    )}
     <span title={api ? `Conectado a ${persist.apiBase || location.origin}/api (MongoDB · sesión segura)` : 'Sin API: datos en este navegador (db.json + localStorage)'}
       style={{ display:'inline-flex', alignItems:'center', gap:5, fontSize:10, color, fontWeight:600, padding:'3px 8px', borderRadius:10, background:`${color}14`, border:`0.5px solid ${color}40`, whiteSpace:'nowrap' }}>
       <span style={{ width:6, height:6, borderRadius:'50%', background:color }}/>{label}
     </span>
+    </>
   );
 }

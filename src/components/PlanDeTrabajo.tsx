@@ -4,7 +4,7 @@ import {
   FileDown, X, Users, Check, LayoutList, Search, ExternalLink,
   Plus, Trash2, Printer,
 } from 'lucide-react';
-import { PROJECTS, useAuth } from '../contexts/AuthContext';
+import { PROJECTS, useAuth, canAccess } from '../contexts/AuthContext';
 import { FlowStepper } from './SetupProject';
 import ImpactPicker, { ImpactChips, impactLabel, type PlanOutline } from './ImpactPicker';
 import { persistSet } from '../lib/persist';
@@ -776,13 +776,14 @@ function fmtShort(iso: string): string {
   return `${d.getDate()} ${['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'][d.getMonth()]}`;
 }
 
-function IssuesPanel({ plan, issues, legacy, userName, onChange, outlines }: {
+function IssuesPanel({ plan, issues, legacy, userName, onChange, outlines, readOnly = false }: {
   plan: WorkPlan;
   issues: PlanIssue[];
   legacy: { type: 'alerta' | 'bloqueante'; text: string }[];
   userName: string;
   onChange: (next: PlanIssue[]) => void;
   outlines: PlanOutline[];
+  readOnly?: boolean;
 }) {
   const [picker, setPicker] = useState(false);
   const todayISO = new Date().toISOString().slice(0, 10);
@@ -848,12 +849,12 @@ function IssuesPanel({ plan, issues, legacy, userName, onChange, outlines }: {
             </div>
           )}
         </div>
-        <div style={{ display:'flex', gap:3, flexShrink:0 }}>
+        {!readOnly && <div style={{ display:'flex', gap:3, flexShrink:0 }}>
           {isOpen
             ? <button onClick={() => { setResolving(i.id); setResolveDate(todayISO); }} title="Reportar fin" style={{ fontSize:9, padding:'2px 7px', background:'#f0fdf4', color:'#15803d', border:'0.5px solid #bbf7d0', borderRadius:5, cursor:'pointer', fontWeight:600 }}>Resolver</button>
             : <button onClick={() => reopen(i.id)} title="Reabrir" style={{ fontSize:9, padding:'2px 7px', background:'#fff', color:'#64748b', border:'0.5px solid #e2e8f0', borderRadius:5, cursor:'pointer' }}>Reabrir</button>}
           <button onClick={() => remove(i.id)} style={{ border:'none', background:'none', cursor:'pointer', color:'#cbd5e1', padding:2, display:'flex' }}><Trash2 size={10}/></button>
-        </div>
+        </div>}
       </div>
     );
   };
@@ -865,8 +866,10 @@ function IssuesPanel({ plan, issues, legacy, userName, onChange, outlines }: {
           <AlertTriangle size={12}/> Alertas y bloqueantes
           {open.length > 0 && <span style={{ marginLeft:4, background:'rgba(0,0,0,0.08)', borderRadius:10, padding:'0 6px', fontSize:10 }}>{nBloq ? `${nBloq} ⛔ ` : ''}{nAlert ? `${nAlert} ⚠` : ''}</span>}
         </p>
+        {!readOnly && <>
         <button onClick={() => { setAdding('alerta'); setForm(empty); }} style={{ border:'0.5px solid #fde68a', background:'#fef9c3', cursor:'pointer', color:'#a16207', borderRadius:6, padding:'2px 7px', display:'flex', alignItems:'center', gap:3, fontSize:10, fontWeight:600 }}><Plus size={10}/> Alerta</button>
         <button onClick={() => { setAdding('bloqueante'); setForm(empty); }} style={{ border:'0.5px solid #fecaca', background:'#fef2f2', cursor:'pointer', color:'#dc2626', borderRadius:6, padding:'2px 7px', display:'flex', alignItems:'center', gap:3, fontSize:10, fontWeight:600 }}><Plus size={10}/> Bloqueante</button>
+        </>}
       </div>
 
       {adding && (() => { const st = ISSUE_STYLE[adding]; return (
@@ -946,8 +949,9 @@ function saveNotes(projectId: string, data: { pasos:string[]; alertas:string[]; 
   persistSet(`timia_notes_${projectId}`, data);
 }
 
-function PlanDetail({ plan, getActivityPct, setActivityPct, onActivityClick, onGoEstimaciones, getDoneDate, holidays, issues, onIssuesChange, userName, changes, outlines }: {
+function PlanDetail({ plan, getActivityPct, setActivityPct, onActivityClick, onGoEstimaciones, getDoneDate, holidays, issues, onIssuesChange, userName, changes, outlines, canIssues = true }: {
   plan: WorkPlan;
+  canIssues?: boolean;
   issues: PlanIssue[];
   changes: BitacoraEntry[];
   outlines: PlanOutline[];
@@ -1151,6 +1155,7 @@ function PlanDetail({ plan, getActivityPct, setActivityPct, onActivityClick, onG
                    ...extraNotes.alertas.map((t:string) => ({ type:'alerta' as const, text:t })), ...extraNotes.bloqueantes.map((t:string) => ({ type:'bloqueante' as const, text:t }))]}
           userName={userName}
           outlines={outlines}
+          readOnly={!canIssues}
           onChange={next => onIssuesChange([...issues.filter(i => i.planKey !== plan.planKey), ...next])}
         />
       </div>
@@ -2138,7 +2143,8 @@ export function getPlanOutlines(projectId?: string): PlanOutline[] {
 export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?: () => void }) {
   const { user } = useAuth();
   const role = user?.role ?? 'developer';
-  const canMark = user ? (['pm','tech_lead','tech_ref'] as string[]).includes(user.role) : false;
+  const canMark = user ? canAccess(user.role, 'plan.edit_progress') : false;
+  const canIssues = user ? canAccess(user.role, 'plan.manage_issues') : false;
 
   const [effectivePlans, setEffectivePlans] = useState<WorkPlan[]>(buildEffectivePlans);
 
@@ -2146,7 +2152,7 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
   useEffect(() => { setEffectivePlans(buildEffectivePlans()); }, []);
 
   // Filtrar según rol del usuario
-  const visiblePlans = role === 'pm'
+  const visiblePlans = canAccess(role, 'projects.view_all')
     ? effectivePlans
     : effectivePlans.filter(p => (user?.projectIds ?? []).includes(p.projectId));
 
@@ -2908,6 +2914,7 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
               userName={user?.name ?? 'Usuario'}
               changes={changes}
               outlines={outlines.filter(o => o.projectId === plan.projectId)}
+              canIssues={canIssues}
             />
             )}
           </>
