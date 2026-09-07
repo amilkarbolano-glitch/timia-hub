@@ -19,6 +19,11 @@ export default defineConfig(({mode}) => {
     },
     server: {
       hmr: process.env.DISABLE_HMR !== 'true',
+      // Desarrollo local: npm run dev + npm run api:dev → /api va al backend
+      proxy: { '/api': { target: process.env.API_PROXY ?? 'http://localhost:8000', changeOrigin: true } },
+    },
+    preview: {
+      proxy: { '/api': { target: process.env.API_PROXY ?? 'http://localhost:8000', changeOrigin: true } },
     },
   };
 });
