@@ -1,6 +1,7 @@
 // ─── Admin Store — datos parametrizables con persistencia localStorage ────────
 
 import { PROJECTS as BASE_PROJECTS } from '../contexts/AuthContext';
+import { persistSet, persistGet, loadFromApi } from './persist';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -512,7 +513,7 @@ function load<T>(key: string, def: T): T {
 }
 
 function save<T>(key: string, val: T): void {
-  try { localStorage.setItem('timia_' + key, JSON.stringify(val)); } catch {}
+  persistSet('timia_' + key, val);   // localStorage + API (si hay)
 }
 
 // ─── Imputaciones FICO por defecto (seed data del proyecto real) ─────────────
@@ -547,6 +548,16 @@ const DEFAULT_IMPUTACIONES: ImputacionEntry[] = [
 const SEED_SKIP_KEYS = new Set(['timia_hub_user', 'timia_current_view']);
 
 export async function seedFromRemote(): Promise<void> {
+  // 1) API (FastAPI + Mongo): fuente de verdad compartida por todo el equipo
+  const fromApi = await loadFromApi();
+  if (fromApi) {
+    Object.entries(fromApi).forEach(([key, val]) => {
+      if (SEED_SKIP_KEYS.has(key) || !key.startsWith('timia_')) return;
+      try { localStorage.setItem(key, JSON.stringify(val)); } catch {}
+    });
+    return;
+  }
+  // 2) Sin API: public/db.json como semilla (modo local / GitHub Pages)
   try {
     const base = import.meta.env.BASE_URL ?? '/';
     const url  = base.endsWith('/') ? `${base}db.json` : `${base}/db.json`;
@@ -668,12 +679,8 @@ export const adminStore = {
   saveImputaciones: (i: ImputacionEntry[])      => save('imputaciones', i),
 
   // Activity done dates: key = `${projectId}-${entregableId}-${actIdx}`
-  getActivityDoneDates: (): Record<string, string> => {
-    try { return JSON.parse(localStorage.getItem('timia_activity_done_dates') ?? '{}'); } catch { return {}; }
-  },
-  saveActivityDoneDates: (d: Record<string, string>) => {
-    try { localStorage.setItem('timia_activity_done_dates', JSON.stringify(d)); } catch {}
-  },
+  getActivityDoneDates: (): Record<string, string> => persistGet('timia_activity_done_dates', {}),
+  saveActivityDoneDates: (d: Record<string, string>) => persistSet('timia_activity_done_dates', d),
 
   // Sync a specific plan-activity assignee to its kanban card
   // planKey puede ser `${projectId}` o `${projectId}::${cronoId}`

@@ -1,0 +1,1 @@
+# db.json se copia aquí en el build de Docker (COPY public/db.json)

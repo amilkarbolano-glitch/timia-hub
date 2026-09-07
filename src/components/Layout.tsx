@@ -1,3 +1,4 @@
+import { persist } from '../lib/persist';
 import React, { useState, useRef, useEffect } from 'react';
 import { useAuth, canAccess, UserRole } from '../contexts/AuthContext';
 import UserProfile from './UserProfile';
@@ -202,6 +203,7 @@ export default function Layout({ children, currentView, onViewChange, userRole }
           </div>
           
           <div className="flex items-center gap-2">
+            <PersistBadge/>
             <button
               onClick={() => { setShowUserMenu(false); setShowProfile(true); }}
               className="flex items-center justify-center w-10 h-10 rounded-lg bg-slate-100 text-slate-600 hover:bg-primary/10 hover:text-primary transition-all"
@@ -270,5 +272,22 @@ export default function Layout({ children, currentView, onViewChange, userRole }
         </main>
       </div>
     </div>
+  );
+}
+
+
+// ─── Indicador de persistencia: API (Mongo compartida) o Local (db.json + navegador) ──
+export function PersistBadge() {
+  const [, force] = React.useState(0);
+  React.useEffect(() => persist.onChange(() => force(v => v + 1)), []);
+  const api = persist.mode === 'api';
+  const pending = persist.pendingWrites, fail = persist.failures;
+  const color = !api ? '#94a3b8' : fail ? '#dc2626' : pending ? '#d97706' : '#15803d';
+  const label = !api ? 'Local' : fail ? 'API · error al guardar' : pending ? 'API · guardando…' : 'API · sincronizado';
+  return (
+    <span title={api ? `Conectado a ${persist.apiBase || location.origin}/api (MongoDB)` : 'Sin API: datos en este navegador (db.json + localStorage)'}
+      style={{ display:'inline-flex', alignItems:'center', gap:5, fontSize:10, color, fontWeight:600, padding:'3px 8px', borderRadius:10, background:`${color}14`, border:`0.5px solid ${color}40`, whiteSpace:'nowrap' }}>
+      <span style={{ width:6, height:6, borderRadius:'50%', background:color }}/>{label}
+    </span>
   );
 }

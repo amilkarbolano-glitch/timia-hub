@@ -7,6 +7,7 @@ import {
 import { PROJECTS, useAuth } from '../contexts/AuthContext';
 import { FlowStepper } from './SetupProject';
 import ImpactPicker, { ImpactChips, impactLabel, type PlanOutline } from './ImpactPicker';
+import { persistSet } from '../lib/persist';
 import { snapToBusinessDay, addBusinessDays, computeBusinessWeekIdx, dateToBusinessWeekIdx, businessDaysBetween } from '../lib/businessDays';
 import {
   adminStore,
@@ -942,7 +943,7 @@ function loadNotes(planKey: string): PlanNotes {
   } catch { return { pasos: [], alertas: [], bloqueantes: [] }; }
 }
 function saveNotes(projectId: string, data: { pasos:string[]; alertas:string[]; bloqueantes:string[] }) {
-  localStorage.setItem(`timia_notes_${projectId}`, JSON.stringify(data));
+  persistSet(`timia_notes_${projectId}`, data);
 }
 
 function PlanDetail({ plan, getActivityPct, setActivityPct, onActivityClick, onGoEstimaciones, getDoneDate, holidays, issues, onIssuesChange, userName, changes, outlines }: {

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Trash2, Search, Link2, Package, BookOpen, X, ExternalLink, Copy, Check, TicketCheck, ClipboardList } from 'lucide-react';
 import { adminStore, BitacoraEntry, type PlanImpact } from '../lib/adminStore';
+import { persistSet } from '../lib/persist';
 import ImpactPicker, { ImpactChips, type PlanOutline } from './ImpactPicker';
 import { getPlanOutlines } from './PlanDeTrabajo';
 import { PROJECTS, useAuth, canAccess } from '../contexts/AuthContext';
@@ -81,20 +82,20 @@ const ESTADO_COLORS: Record<string, { bg: string; text: string }> = {
 function loadLinks(): LinkEntry[] {
   try { return JSON.parse(localStorage.getItem('timia_links') ?? '[]'); } catch { return []; }
 }
-function saveLinks(d: LinkEntry[]) { localStorage.setItem('timia_links', JSON.stringify(d)); }
+function saveLinks(d: LinkEntry[]) { persistSet('timia_links', d); }
 
 // ── Inventario v2 storage ────────────────────────────────────────────────────
 function loadInvRows(): InvRow[] {
   try { return JSON.parse(localStorage.getItem('timia_inv_v2') ?? '[]'); } catch { return []; }
 }
-function saveInvRows(d: InvRow[]) { localStorage.setItem('timia_inv_v2', JSON.stringify(d)); }
+function saveInvRows(d: InvRow[]) { persistSet('timia_inv_v2', d); }
 function loadInvStages(): InvStage[] {
   try {
     const raw = localStorage.getItem('timia_inv_stages');
     return raw ? JSON.parse(raw) : DEFAULT_INV_STAGES;
   } catch { return DEFAULT_INV_STAGES; }
 }
-function saveInvStages(d: InvStage[]) { localStorage.setItem('timia_inv_stages', JSON.stringify(d)); }
+function saveInvStages(d: InvStage[]) { persistSet('timia_inv_stages', d); }
 
 // ─── CopyBtn helper ───────────────────────────────────────────────────────────
 

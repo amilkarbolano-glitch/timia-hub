@@ -43,6 +43,17 @@ jobs:
         with:
           path: dist/
 
+  # ─── DOCKER: valida que las imágenes construyen (no publica) ──────────────
+  docker:
+    name: Docker build check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build web image
+        run: docker build -f docker/web.Dockerfile -t timia-web:ci .
+      - name: Build api image
+        run: docker build -f backend/Dockerfile -t timia-api:ci .
+
   # ─── DEPLOY a GitHub Pages (solo en push a main) ──────────────────────────
   deploy:
     name: Deploy → GitHub Pages
