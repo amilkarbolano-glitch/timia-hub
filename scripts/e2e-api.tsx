@@ -62,10 +62,10 @@ const apiGet = async (p: string) => { const r = await fetch(`${API}${p}`); retur
 
   // ── PM edita la matriz y el servidor la aplica ──
   const pm = (await apiLoginDemo('u-rodolfo')).user!; await loadStateFromApi();
-  check('login PM', pm.role === 'pm' && hasPermission('pm', 'roles.manage'));
+  check('login gerente de cuenta', pm.role === 'account_manager' && hasPermission('account_manager', 'roles.manage'));
   const mx = currentMatrix(); mx.developer = mx.developer.filter(p => p !== 'tasks.update_status');
   saveMatrix(mx); await wait(900);
-  check('PM guarda matriz → en Mongo', (await apiGet('/api/state/timia_role_permissions')).data.developer.indexOf('tasks.update_status') < 0);
+  check('Gerente guarda matriz → en Mongo', (await apiGet('/api/state/timia_role_permissions')).data.developer.indexOf('tasks.update_status') < 0);
   await apiLogout();
   await apiLoginDemo('u-sergio'); await loadStateFromApi();
   check('front: developer ya no puede mover tareas (matriz recargada)', !hasPermission('developer', 'tasks.update_status'));
@@ -74,8 +74,18 @@ const apiGet = async (p: string) => { const r = await fetch(`${API}${p}`); retur
   check('servidor: developer mover tarea → 403 tras el cambio de matriz', persist.failures > f2);
   await apiLogout();
   const pm2 = await apiLoginDemo('u-rodolfo'); await loadStateFromApi(); saveMatrix({ ...currentMatrix(), developer: [...currentMatrix().developer, 'tasks.update_status'] }); await wait(900);
-  check('PM restaura la matriz', !!pm2.user && (await apiGet('/api/state/timia_role_permissions')).data.developer.includes('tasks.update_status'));
+  check('Gerente restaura la matriz', !!pm2.user && (await apiGet('/api/state/timia_role_permissions')).data.developer.includes('tasks.update_status'));
 
+  // ── piloto: Amilkar (líder técnico) en MIGBD
+  await apiLogout();
+  const am = (await apiLoginDemo('u-amilkar')).user!; await loadStateFromApi();
+  check('Amilkar es líder técnico en MIGBD', am.role === 'tech_lead' && am.projectIds.includes('MIGBD') && hasPermission('tech_lead', 'plan.edit_progress'));
+  check('proyecto piloto con SDA real', adminStore.getProjects().some(p => p.id === 'MIGBD' && p.sda === 'SDATOOL-54364'));
+  const pcts = adminStore.getPlanPcts(); adminStore.savePlanPcts({ ...pcts, 'MIGBD-documentacion-y-0': 25 }); await wait(900);
+  check('líder técnico marca avance en su proyecto → ok', persist.failures === 0 || (await apiGet('/api/state/timia_plan_pcts')).data['MIGBD-documentacion-y-0'] === 25);
+  const f3 = persist.failures; adminStore.savePlanPcts({ ...adminStore.getPlanPcts(), 'BCBS239-doc-0': 25 }); await wait(900);
+  check('líder técnico en proyecto ajeno → rechazado', persist.failures > f3);
+  await apiLogout();
   console.log(failed ? `\n${failed} prueba(s) fallida(s)` : '\nTODO OK');
   process.exit(failed ? 1 : 0);
 })();

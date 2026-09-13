@@ -1824,6 +1824,7 @@ function ConsolidadoView({ plans, holidays, getActivityPct, onOpen, openIssues =
   const projectId = plans[0].projectId;
   const color = PROJECTS.find(p => p.id === projectId)?.color ?? '#64748b';
   const today = new Date(); today.setHours(12,0,0,0);
+  const [showTimeline, setShowTimeline] = useState(false);
 
   type Row = { p: WorkPlan; real: number; exp: number; n: number; start: Date | null; end: Date | null; weeks: number; todayIdx: number; extDays: number; weeksShift: number };
   const rows: Row[] = plans.map(p => {
@@ -1871,6 +1872,9 @@ function ConsolidadoView({ plans, holidays, getActivityPct, onOpen, openIssues =
           <h3 style={{ margin:0, fontSize:15, fontWeight:600, color:'#111' }}>Proyecto {projectId} · Plan general</h3>
           <p style={{ margin:'2px 0 0', fontSize:10, color:'#64748b' }}>{plans.length} cronogramas · {totalN} actividades · ponderado por actividad</p>
         </div>
+        <button onClick={() => setShowTimeline(true)} style={{ display:'flex', alignItems:'center', gap:5, padding:'7px 12px', fontSize:11, fontWeight:600, background:'#fff', border:`0.5px solid ${color}60`, color, borderRadius:8, cursor:'pointer' }}>
+          <LayoutList size={12}/> Ver cronogramas en el tiempo
+        </button>
         {[['Real', real, '#111'], ['Esperado', exp, '#64748b']].map(([l, v, c]) => (
           <div key={l as string} style={{ textAlign:'right' }}>
             <div style={{ fontSize:9, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'.05em' }}>{l as string}</div>
@@ -1926,9 +1930,15 @@ function ConsolidadoView({ plans, holidays, getActivityPct, onOpen, openIssues =
       <GeneralGantt plans={plans} holidays={holidays} getActivityPct={getActivityPct} issues={allIssues} changes={changes} onOpen={onOpen}
         onOpenActivity={(k, eid, ai, a) => onOpenActivity ? onOpenActivity(k, eid, ai, a) : onOpen(k)}/>
 
-      {/* Línea de tiempo calendario */}
-      <div style={{ background:'#fff', border:'0.5px solid #e2e8f0', borderRadius:12, padding:'12px 18px 14px', marginBottom:12 }}>
-        <p style={{ margin:'0 0 10px', fontSize:10, fontWeight:600, color:'#374151' }}>Cronogramas en el tiempo</p>
+      {/* Línea de tiempo calendario — en modal (botón "Ver cronogramas en el tiempo") */}
+      {showTimeline && (
+      <div onClick={() => setShowTimeline(false)} style={{ position:'fixed', inset:0, background:'rgba(15,23,42,.45)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
+      <div onClick={e => e.stopPropagation()} style={{ background:'#fff', borderRadius:14, width:'min(1100px, 96vw)', maxHeight:'90vh', overflow:'auto', padding:'16px 20px 18px', boxShadow:'0 20px 60px rgba(0,0,0,.25)' }}>
+        <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:12 }}>
+          <p style={{ margin:0, fontSize:13, fontWeight:700, color:'#111', flex:1 }}>Cronogramas en el tiempo · {projectId}</p>
+          <span style={{ fontSize:10, color:'#94a3b8' }}>Barra = duración planificada · relleno = % real · HOY en verde</span>
+          <button onClick={() => setShowTimeline(false)} style={{ border:'none', background:'none', cursor:'pointer', color:'#94a3b8', display:'flex' }}><X size={16}/></button>
+        </div>
         <div style={{ position:'relative', marginLeft:150 }}>
           {/* eje meses */}
           <div style={{ position:'relative', height:14, borderBottom:'0.5px solid #e2e8f0', marginBottom:6 }}>
@@ -1955,6 +1965,8 @@ function ConsolidadoView({ plans, holidays, getActivityPct, onOpen, openIssues =
           <span style={{ position:'absolute', top:-14, left:`${pos(today)}%`, transform:'translateX(-50%)', fontSize:7, fontWeight:800, color:'#16a34a', letterSpacing:'.05em' }}>HOY</span>
         </div>
       </div>
+      </div>
+      )}
 
       {/* Tarjetas por cronograma */}
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(230px, 1fr))', gap:8 }}>

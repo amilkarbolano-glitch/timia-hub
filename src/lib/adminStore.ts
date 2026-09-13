@@ -1,13 +1,13 @@
 // ─── Admin Store — datos parametrizables con persistencia localStorage ────────
 
-import { PROJECTS as BASE_PROJECTS } from '../contexts/AuthContext';
+import { PROJECTS as BASE_PROJECTS, normalizeRole } from '../contexts/AuthContext';
 import { persistSet, persistGet, probeApi, apiMe, loadStateFromApi } from './persist';
 export { loadStateFromApi } from './persist';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
 export type Priority = 'Baja' | 'Media' | 'Alta' | 'Crítica';
-export type UserRole  = 'pm' | 'tech_lead' | 'project_lead' | 'tech_ref' | 'developer';
+export type UserRole  = 'account_manager' | 'pm' | 'tech_lead' | 'developer';
 
 // ─── Imputaciones Jira ────────────────────────────────────────────────────────
 
@@ -413,7 +413,7 @@ const DEFAULT_USERS: AdminUser[] = [
   // ── Referente Técnico ────────────────────────────────────────────────────────
   {
     id: 'u-juliana', name: 'Juliana Garzón', email: 'juliana.garzon@timia.ai',
-    role: 'tech_ref', projectIds: ['FICO','NGA'],
+    role: 'tech_lead', projectIds: ['FICO','NGA'],
     initials: 'JG', avatarColor: '#0f766e', active: true,
     areaLabel: 'Referente Técnico · FICO · NGA',
   },
@@ -590,9 +590,10 @@ export const adminStore = {
     if (missing.length > 0) {
       const merged = [...stored, ...missing];
       save('admin_users', merged);
-      return merged;
+      return merged.map(u => ({ ...u, role: normalizeRole(u.role as string) }));
     }
-    return stored;
+    // Normaliza roles antiguos (project_lead / tech_ref → tech_lead) sin reescribir
+    return stored.map(u => ({ ...u, role: normalizeRole(u.role as string) }));
   },
   saveUsers:     (u: AdminUser[])    => save('admin_users', u),
 

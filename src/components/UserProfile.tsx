@@ -11,8 +11,7 @@ const AVATAR_COLORS = [
 const ROLE_LABELS: Record<string, string> = {
   pm:           'Project Manager',
   tech_lead:    'Líder Técnico',
-  project_lead: 'Líder de Proyecto',
-  tech_ref:     'Referente Técnico',
+  account_manager: 'Gerente de cuenta',
   developer:    'Desarrollador',
 };
 

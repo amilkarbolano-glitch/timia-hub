@@ -1,16 +1,16 @@
 // ─── Roles y permisos — matriz real, editable por el PM y aplicada por el servidor ─
 import React, { useMemo, useState } from 'react';
 import { Shield, RotateCcw, Save, Check, Info, Lock } from 'lucide-react';
-import { useAuth, type UserRole } from '../contexts/AuthContext';
+import { useAuth, canAccess, type UserRole } from '../contexts/AuthContext';
 import { PERMISSIONS, DEFAULT_ROLE_PERMISSIONS, ROLE_META, currentMatrix, saveMatrix } from '../lib/permissions';
 import { adminStore } from '../lib/adminStore';
 import { persist } from '../lib/persist';
 
-const ROLES: UserRole[] = ['pm', 'tech_lead', 'project_lead', 'tech_ref', 'developer'];
+const ROLES: UserRole[] = ['account_manager', 'pm', 'tech_lead', 'developer'];
 
 export default function RolesPermissions() {
   const { user } = useAuth();
-  const canEdit = user?.role === 'pm';
+  const canEdit = user ? canAccess(user.role, 'roles.manage') : false;
   const [matrix, setMatrix] = useState<Record<UserRole, string[]>>(() => currentMatrix());
   const [saved, setSaved] = useState(false);
   const [dirty, setDirty] = useState(false);
@@ -26,7 +26,7 @@ export default function RolesPermissions() {
   }, [filter]);
 
   function toggle(role: UserRole, perm: string) {
-    if (!canEdit || role === 'pm') return;
+    if (!canEdit || role === 'account_manager') return;
     setMatrix(m => ({ ...m, [role]: m[role].includes(perm) ? m[role].filter(p => p !== perm) : [...m[role], perm] }));
     setDirty(true); setSaved(false);
   }
@@ -65,12 +65,12 @@ export default function RolesPermissions() {
 
       {!canEdit && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', background: '#f8fafc', border: '0.5px solid #e2e8f0', borderRadius: 8, fontSize: 11, color: '#64748b', marginBottom: 12 }}>
-          <Lock size={12} /> Solo el Project Manager puede modificar la matriz. Estás viendo la configuración vigente.
+          <Lock size={12} /> Solo quien tenga el permiso roles.manage (gerente de cuenta / PM) puede modificar la matriz. Estás viendo la configuración vigente.
         </div>
       )}
 
       {/* Tarjetas de rol */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8, marginBottom: 14 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 14 }}>
         {ROLES.map(r => (
           <div key={r} style={{ background: '#fff', border: `0.5px solid ${ROLE_META[r].color}40`, borderLeft: `3px solid ${ROLE_META[r].color}`, borderRadius: 10, padding: '10px 12px' }}>
             <div style={{ fontSize: 12, fontWeight: 700, color: ROLE_META[r].color }}>{ROLE_META[r].name}</div>
@@ -100,12 +100,12 @@ export default function RolesPermissions() {
                       <div style={{ fontSize: 9, color: '#94a3b8', fontFamily: 'monospace' }}>{p.id}</div>
                     </td>
                     {ROLES.map(r => {
-                      const on = matrix[r].includes(p.id); const changed = on !== isDefault(r, p.id); const locked = r === 'pm' || !canEdit;
+                      const on = matrix[r].includes(p.id); const changed = on !== isDefault(r, p.id); const locked = r === 'account_manager' || !canEdit;
                       return (
                         <td key={r} style={{ textAlign: 'center', padding: '4px 8px' }}>
-                          <button onClick={() => toggle(r, p.id)} disabled={locked} title={r === 'pm' ? 'El PM siempre tiene todos los permisos' : changed ? 'Modificado respecto al valor por defecto' : ''}
+                          <button onClick={() => toggle(r, p.id)} disabled={locked} title={r === 'account_manager' ? 'El gerente de cuenta siempre tiene todos los permisos' : changed ? 'Modificado respecto al valor por defecto' : ''}
                             style={{ width: 26, height: 26, borderRadius: 7, border: `1.5px solid ${on ? ROLE_META[r].color : '#e2e8f0'}`, background: on ? ROLE_META[r].color : '#fff',
-                              cursor: locked ? 'default' : 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', opacity: r === 'pm' ? .55 : 1,
+                              cursor: locked ? 'default' : 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', opacity: r === 'account_manager' ? .55 : 1,
                               outline: changed ? '2px solid #fbbf24' : 'none', outlineOffset: 1 }}>
                             {on && <Check size={14} color="#fff" />}
                           </button>

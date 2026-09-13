@@ -1122,7 +1122,7 @@ export default function Estimaciones({ onViewChange, onBack }: EstimacionesProps
         {/* ── Panel Gestionar Equipo — visible para pm / tech_lead / project_lead ── */}
         {canAccess(role, 'team.manage') && (() => {
           // teamRev en dependencias → re-render cada vez que se toggle un miembro
-          const allUsers  = adminStore.getUsers().filter(u => u.active && u.role !== 'pm');
+          const allUsers  = adminStore.getUsers().filter(u => u.active && u.role !== 'account_manager');
           const inProject = (u: { id: string; projectIds: string[] }) =>
             adminStore.getUsers().find(x => x.id === u.id)?.projectIds.includes(selectedProjectId) ?? false;
 
@@ -1144,12 +1144,12 @@ export default function Estimaciones({ onViewChange, onBack }: EstimacionesProps
           }
 
           const ROLE_LABEL_SHORT: Record<string, string> = {
-            tech_lead: 'Líder Téc.', project_lead: 'Líder Proy.',
-            tech_ref: 'Ref. Téc.', developer: 'Developer',
+            account_manager: 'Gerente', pm: 'PM',
+            tech_lead: 'Líder Téc.', developer: 'Developer',
           };
           const ROLE_COLOR: Record<string, string> = {
-            tech_lead: '#7c3aed', project_lead: '#0369a1',
-            tech_ref: '#0d9488', developer: '#374151',
+            account_manager: '#dc2626', pm: '#7c3aed',
+            tech_lead: '#0d9488', developer: '#374151',
           };
 
           const memberCount  = allUsers.filter(u => inProject(u)).length;

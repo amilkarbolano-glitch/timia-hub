@@ -229,8 +229,7 @@ export default function Layout({ children, currentView, onViewChange, userRole }
                   <p className="text-xs leading-tight" style={{ color: user?.avatarColor ?? '#dc2626', fontSize: '10px' }}>
                     {user?.role === 'pm' ? 'Project Manager'
                       : user?.role === 'tech_lead' ? 'Líder Técnico'
-                      : user?.role === 'project_lead' ? 'Líder Proyecto'
-                      : user?.role === 'tech_ref' ? 'Referente Técnico'
+                      : user?.role === 'account_manager' ? 'Gerente de cuenta'
                       : 'Desarrollador'}
                   </p>
                 </div>
