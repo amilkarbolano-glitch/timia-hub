@@ -29,52 +29,58 @@ const apiGet = async (p: string) => { const r = await fetch(`${API}${p}`); retur
   check('arranque en modo API sin sesión', persist.mode === 'api' && (await apiMe()) === null);
   check('login inválido rechazado', !!(await apiLoginDemo('nadie')).error);
 
-  // ── developer ──
-  const dev = (await apiLoginDemo('u-sergio')).user!;
+  // ── developer (Santiago) ──
+  const dev = (await apiLoginDemo('u-santiago')).user!;
   check('login demo developer', dev?.role === 'developer');
-  check('estado cargado desde Mongo', await loadStateFromApi() && adminStore.getPlanIssues().length > 0);
-  check('front: developer sin team.manage / con tasks.update_status', !hasPermission('developer', 'team.manage') && hasPermission('developer', 'tasks.update_status'));
-
-  const issues0 = adminStore.getPlanIssues();
-  adminStore.savePlanIssues([...issues0, { id:'e2e-ok', planKey:'CRONOS', type:'alerta', title:'propio proyecto', startDate:'2026-09-07', impacts:[], createdBy:'e2e', createdAt:new Date().toISOString() }]);
+  check('estado cargado desde Mongo', await loadStateFromApi() && adminStore.getProjects().length === 1 && adminStore.getProjects()[0].id === 'MIGBD');
+  check('front: developer sin plan.view ni team.manage', !hasPermission('developer', 'plan.view') && !hasPermission('developer', 'team.manage') && hasPermission('developer', 'tasks.update_status'));
+  adminStore.savePlanIssues([...adminStore.getPlanIssues(), { id:'e2e-ok', planKey:'MIGBD', type:'bloqueante', title:'reportado por dev', startDate:'2026-09-13', impacts:[], createdBy:'e2e', createdAt:new Date().toISOString() }]);
   await wait(900);
-  check('issue en proyecto propio → guardado en Mongo', persist.failures === 0 && (await apiGet('/api/state/timia_plan_issues')).data.some((i: any) => i.id === 'e2e-ok'));
-
-  const other = ['BCBS239','MURIC','SDM1','OPTIM'].find(p => !dev.projectIds.includes(p))!;
-  adminStore.savePlanIssues([...adminStore.getPlanIssues(), { id:'e2e-bad', planKey: other, type:'alerta', title:'otro proyecto', startDate:'2026-09-07', impacts:[], createdBy:'e2e', createdAt:new Date().toISOString() }]);
-  await wait(900);
-  check(`issue en ${other} (sin acceso) → rechazado por el servidor`, persist.failures > 0 && !(await apiGet('/api/state/timia_plan_issues')).data.some((i: any) => i.id === 'e2e-bad'));
-  await loadStateFromApi();   // resincronizar caché con lo que realmente quedó
-
-  const tasks = adminStore.getKanbanTasks(); const mine = tasks.find(t => dev.projectIds.includes(t.projectId ?? ''))!;
-  adminStore.saveKanbanTasks(tasks.map(t => t.id === mine.id ? { ...t, status: t.status === 'done' ? 'backlog' : 'done' } : t)); await wait(900);
-  check('developer mueve su tarea de estado → ok', (await apiGet('/api/state/timia_kanban_tasks')).data.find((t: any) => t.id === mine.id).status !== mine.status);
+  check('dev reporta bloqueante en su proyecto → en Mongo', persist.failures === 0 && (await apiGet('/api/state/timia_plan_issues')).data.some((i: any) => i.id === 'e2e-ok'));
   const f0 = persist.failures;
-  adminStore.saveKanbanTasks(adminStore.getKanbanTasks().map(t => t.id === mine.id ? { ...t, title: 'hackeado' } : t)); await wait(900);
-  check('developer edita título → rechazado', persist.failures > f0 && (await apiGet('/api/state/timia_kanban_tasks')).data.find((t: any) => t.id === mine.id).title !== 'hackeado');
-  await loadStateFromApi();
+  adminStore.saveUsers(adminStore.getUsers().map(u => u.id === 'u-santiago' ? { ...u, role: 'pm' as any } : u)); await wait(900);
+  check('dev se auto-asciende → rechazado', persist.failures > f0 && (await apiGet('/api/state/timia_admin_users')).data.find((u: any) => u.id === 'u-santiago').role === 'developer');
+  await loadStateFromApi(); await apiLogout(); check('logout', (await apiMe()) === null);
 
-  const f1 = persist.failures;
-  adminStore.saveUsers(adminStore.getUsers().map(u => u.id === 'u-sergio' ? { ...u, role: 'pm' as any } : u)); await wait(900);
-  check('developer se auto-asciende a pm → rechazado', persist.failures > f1 && (await apiGet('/api/state/timia_admin_users')).data.find((u: any) => u.id === 'u-sergio').role === 'developer');
-  await loadStateFromApi();
-  await apiLogout(); check('logout', (await apiMe()) === null);
+  // ── PM (Juan) crea tarea; dev la mueve pero no la edita ──
+  await apiLoginDemo('u-juan'); await loadStateFromApi();
+  adminStore.saveKanbanTasks([{ id:'kt-e2e', title:'Tarea piloto', description:'', priority:'Media', startDate:'2026-09-13', endDate:'2026-09-20', status:'backlog', assigneeIds:['u-santiago'], projectId:'MIGBD', links:[], comments:[] }]); await wait(900);
+  check('PM crea tarea en MIGBD', (await apiGet('/api/state/timia_kanban_tasks')).data.some((t: any) => t.id === 'kt-e2e'));
+  await apiLogout(); await apiLoginDemo('u-santiago'); await loadStateFromApi();
+  adminStore.saveKanbanTasks(adminStore.getKanbanTasks().map(t => t.id === 'kt-e2e' ? { ...t, status: 'in-progress' as any } : t)); await wait(900);
+  check('dev mueve su tarea → ok', (await apiGet('/api/state/timia_kanban_tasks')).data.find((t: any) => t.id === 'kt-e2e').status === 'in-progress');
+  const f1 = persist.failures; adminStore.saveKanbanTasks(adminStore.getKanbanTasks().map(t => t.id === 'kt-e2e' ? { ...t, title: 'hackeado' } : t)); await wait(900);
+  check('dev edita título → rechazado', persist.failures > f1);
+  await loadStateFromApi(); await apiLogout();
 
-  // ── PM edita la matriz y el servidor la aplica ──
+  // ── Gerente edita la matriz y el servidor la aplica ──
   const pm = (await apiLoginDemo('u-rodolfo')).user!; await loadStateFromApi();
-  check('login PM', pm.role === 'pm' && hasPermission('pm', 'roles.manage'));
-  const mx = currentMatrix(); mx.developer = mx.developer.filter(p => p !== 'tasks.update_status');
-  saveMatrix(mx); await wait(900);
-  check('PM guarda matriz → en Mongo', (await apiGet('/api/state/timia_role_permissions')).data.developer.indexOf('tasks.update_status') < 0);
+  check('login gerente de cuenta', pm.role === 'account_manager' && hasPermission('account_manager', 'roles.manage'));
+  const mx = currentMatrix(); mx.developer = mx.developer.filter(p => p !== 'tasks.update_status'); saveMatrix(mx); await wait(900);
+  check('Gerente guarda matriz → en Mongo', (await apiGet('/api/state/timia_role_permissions')).data.developer.indexOf('tasks.update_status') < 0);
+  await apiLogout(); await apiLoginDemo('u-santiago'); await loadStateFromApi();
+  check('front: dev ya no puede mover tareas', !hasPermission('developer', 'tasks.update_status'));
+  const f2 = persist.failures; adminStore.saveKanbanTasks(adminStore.getKanbanTasks().map(t => t.id === 'kt-e2e' ? { ...t, status: 'done' as any } : t)); await wait(900);
+  check('servidor: dev mover tarea → 403', persist.failures > f2);
+  await loadStateFromApi(); await apiLogout();
+  await apiLoginDemo('u-rodolfo'); await loadStateFromApi(); saveMatrix({ ...currentMatrix(), developer: [...currentMatrix().developer, 'tasks.update_status'] }); await wait(900);
+  check('Gerente restaura la matriz', (await apiGet('/api/state/timia_role_permissions')).data.developer.includes('tasks.update_status'));
+
+  // ── Rol por proyecto: Amilkar líder base, developer en MIGBD por override ──
+  adminStore.saveProjects(adminStore.getProjects()); // noop
+  const { persistSet } = await import('../src/lib/persist.ts');
+  persistSet('timia_project_roles', { 'u-amilkar:MIGBD': 'developer' }); await wait(900);
+  await apiLogout(); const am = (await apiLoginDemo('u-amilkar')).user!; await loadStateFromApi();
+  const { canInProject, effectiveRole } = await import('../src/lib/permissions.ts');
+  check('front: Amilkar es developer EN MIGBD (override) y no ve el plan', effectiveRole(am, 'MIGBD') === 'developer' && !canInProject(am, 'plan.view', 'MIGBD'));
+  const f3 = persist.failures; adminStore.savePlanPcts({ ...adminStore.getPlanPcts(), 'MIGBD-documentacion-y-0': 30 }); await wait(900);
+  check('servidor: Amilkar (dev en MIGBD) no marca avance → 403', persist.failures > f3);
+  await loadStateFromApi(); await apiLogout(); await apiLoginDemo('u-rodolfo'); await loadStateFromApi(); persistSet('timia_project_roles', {}); await wait(900);
+  await apiLogout(); await apiLoginDemo('u-amilkar'); await loadStateFromApi();
+  check('sin override: Amilkar líder técnico ve el plan', canInProject(am, 'plan.view', 'MIGBD'));
+  adminStore.savePlanPcts({ ...adminStore.getPlanPcts(), 'MIGBD-documentacion-y-0': 30 }); await wait(900);
+  check('líder técnico marca avance → ok', (await apiGet('/api/state/timia_plan_pcts')).data['MIGBD-documentacion-y-0'] === 30);
   await apiLogout();
-  await apiLoginDemo('u-sergio'); await loadStateFromApi();
-  check('front: developer ya no puede mover tareas (matriz recargada)', !hasPermission('developer', 'tasks.update_status'));
-  const f2 = persist.failures; const t2 = adminStore.getKanbanTasks().find(t => dev.projectIds.includes(t.projectId ?? ''))!;
-  adminStore.saveKanbanTasks(adminStore.getKanbanTasks().map(t => t.id === t2.id ? { ...t, status: t.status === 'done' ? 'backlog' : 'done' } : t)); await wait(900);
-  check('servidor: developer mover tarea → 403 tras el cambio de matriz', persist.failures > f2);
-  await apiLogout();
-  const pm2 = await apiLoginDemo('u-rodolfo'); await loadStateFromApi(); saveMatrix({ ...currentMatrix(), developer: [...currentMatrix().developer, 'tasks.update_status'] }); await wait(900);
-  check('PM restaura la matriz', !!pm2.user && (await apiGet('/api/state/timia_role_permissions')).data.developer.includes('tasks.update_status'));
 
   console.log(failed ? `\n${failed} prueba(s) fallida(s)` : '\nTODO OK');
   process.exit(failed ? 1 : 0);

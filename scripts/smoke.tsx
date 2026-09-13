@@ -10,8 +10,8 @@ w.confirm = () => true;
 const db = JSON.parse(fs.readFileSync('public/db.json','utf8'));
 for (const [k,v] of Object.entries(db)) if (k.startsWith('timia_')) w.localStorage.setItem(k, JSON.stringify(v));
 // Restos de versiones anteriores que pueden quedar en el navegador
-w.localStorage.setItem('timia_notes_FICO', JSON.stringify({ pasos:['x'] }));
-w.localStorage.setItem('timia_notes_CRONOS', 'garbage{');
+w.localStorage.setItem('timia_notes_MIGBD', JSON.stringify({ pasos:['x'] }));
+w.localStorage.setItem('timia_notes_OTRO', 'garbage{');
 const errors: string[] = [];
 let failed = false;
 (async () => {
@@ -20,6 +20,7 @@ let failed = false;
   const { act } = await import('react');
   const auth: any = await import('../src/contexts/AuthContext.tsx');
   const PlanDeTrabajo = (await import('../src/components/PlanDeTrabajo.tsx')).default;
+  const PMDashboard = (await import('../src/components/PMDashboard.tsx')).default;
   const Estimaciones = (await import('../src/components/Estimaciones.tsx')).default;
   const Bitacora = (await import('../src/components/Bitacora.tsx')).default;
   const ActivityReport = (await import('../src/components/ActivityReport.tsx')).default;
@@ -27,7 +28,7 @@ let failed = false;
   console.error = (...a:any[]) => { const s = a.join(' '); if (!s.includes('act(')) errors.push('console.error: ' + s.slice(0,300)); };
   for (const acc of auth.MOCK_ACCOUNTS) {
     w.localStorage.setItem('timia_hub_user', JSON.stringify(acc));
-    for (const [name, C, props] of [['Plan', PlanDeTrabajo, {}], ['Estim', Estimaciones, { onViewChange:()=>{}, onBack:()=>{} }], ['Tareas', Bitacora, {}], ['TR', ActivityReport, { user: acc }]] as any) {
+    for (const [name, C, props] of [['Plan', PlanDeTrabajo, {}], ['Estim', Estimaciones, { onViewChange:()=>{}, onBack:()=>{} }], ['Tareas', Bitacora, {}], ['TR', ActivityReport, { user: acc }], ['Dash', PMDashboard, { onViewChange: () => {} }]] as any) {
       const el = w.document.createElement('div'); w.document.body.appendChild(el);
       const root = createRoot(el, { onUncaughtError: (e:any) => errors.push('uncaught: ' + (e?.stack ?? e)), onCaughtError: (e:any) => errors.push('caught: ' + (e?.stack ?? e)) } as any);
       const click = async (label: string) => {
@@ -37,7 +38,7 @@ let failed = false;
       };
       try {
         await act(async () => { root.render(React.createElement(auth.AuthProvider, null, React.createElement(C, props))); });
-        for (const p of ['FICO','CRONOS','NGA','FICO','General','Input','FICO 2.0','Randómico','Principal','+ Bloqueante','+ Seleccionar tareas','Confirmar','+ Alerta','+ Seleccionar tareas','Cancelar','+ Cronograma','Nuevo cambio','Cargar TR','Features y horas','Nueva feature','Cumplimiento']) await click(p);
+        for (const p of ['FICO','CRONOS','NGA','FICO','General','Ver cronogramas en el tiempo','Input','FICO 2.0','Randómico','Principal','+ Bloqueante','+ Seleccionar tareas','Confirmar','+ Alerta','+ Seleccionar tareas','Cancelar','+ Cronograma','Nuevo cambio','Cargar TR','Features y horas','Nueva feature','Cumplimiento']) await click(p);
         const row = el.querySelector('tbody tr'); if (row) await act(async () => { row.dispatchEvent(new w.MouseEvent('click', { bubbles: true })); });
         console.log(acc.role.padEnd(13), name, errors.length ? 'ERRORS' : 'OK', el.innerHTML.length);
       } catch (e:any) { errors.push('act: ' + e.stack); console.log(acc.role, name, 'THROW'); }

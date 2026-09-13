@@ -1,13 +1,13 @@
 // ─── Admin Store — datos parametrizables con persistencia localStorage ────────
 
-import { PROJECTS as BASE_PROJECTS } from '../contexts/AuthContext';
+import { PROJECTS as BASE_PROJECTS, normalizeRole, refreshProjects } from '../contexts/AuthContext';
 import { persistSet, persistGet, probeApi, apiMe, loadStateFromApi } from './persist';
 export { loadStateFromApi } from './persist';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
 export type Priority = 'Baja' | 'Media' | 'Alta' | 'Crítica';
-export type UserRole  = 'pm' | 'tech_lead' | 'project_lead' | 'tech_ref' | 'developer';
+export type UserRole  = 'account_manager' | 'pm' | 'tech_lead' | 'developer';
 
 // ─── Imputaciones Jira ────────────────────────────────────────────────────────
 
@@ -46,6 +46,8 @@ export interface AdminUser {
   role: UserRole; projectIds: string[];
   initials: string; avatarColor: string; active: boolean;
   areaLabel?: string;
+  /** Cuenta habilitada para el login de prueba (modo demo). Si ninguna lo tiene, se muestran todas las activas */
+  demo?: boolean;
 }
 
 export interface AnsConfig { Baja: number; Media: number; Alta: number; Crítica: number; }
@@ -170,95 +172,7 @@ export interface KanbanTask {
   comments: KanbanComment[];
 }
 
-const DEFAULT_KANBAN_TASKS: KanbanTask[] = [
-  {
-    id: 'kt-1', title: 'Análisis y resolución de dudas',
-    description: 'Recopilación y resolución de dudas técnicas con BBVA para inicio del proyecto FICO.',
-    priority: 'Alta', startDate: '2026-01-26', endDate: '2026-02-08', status: 'done',
-    assigneeIds: ['u-juliana'], projectId: 'FICO', entregableId: 'doc', actIdx: 0, fromPlan: true,
-    links: [], comments: [],
-  },
-  {
-    id: 'kt-2', title: 'Elaboración diccionario técnico (370 campos)',
-    description: 'Levantamiento, envío a Gobierno de Datos BBVA y validación del diccionario técnico.',
-    priority: 'Alta', startDate: '2026-01-26', endDate: '2026-02-08', status: 'in-progress',
-    assigneeIds: ['u-juliana'], projectId: 'FICO', entregableId: 'doc', actIdx: 1, fromPlan: true,
-    links: [], comments: [],
-  },
-  {
-    id: 'kt-3', title: 'Documentación técnica ETL y mapeo de campos',
-    description: 'Documentar flujos ETL y mapeo campo a campo entre fuente (Core Bancario) y destino (VBox FICO).',
-    priority: 'Media', startDate: '2026-01-26', endDate: '2026-03-01', status: 'in-progress',
-    assigneeIds: ['u-juliana', 'u-david'], projectId: 'FICO', entregableId: 'doc', actIdx: 4, fromPlan: true,
-    links: [], comments: [],
-  },
-  {
-    id: 'kt-4', title: 'Construcción procesamiento Spark · Scala',
-    description: 'Desarrollo del componente ADA con Spark-Scala: clases principales, config, test unitarios y validación de salida.',
-    priority: 'Crítica', startDate: '2026-02-02', endDate: '2026-03-22', status: 'in-progress',
-    assigneeIds: ['u-juliana'], projectId: 'FICO', entregableId: 'ada', actIdx: 1, fromPlan: true,
-    links: [], comments: [],
-  },
-  {
-    id: 'kt-5', title: 'Construcción reglas calidad MVP (Hammurabi)',
-    description: 'Implementar reglas de calidad de datos usando el framework Hammurabi de BBVA.',
-    priority: 'Alta', startDate: '2026-02-23', endDate: '2026-03-22', status: 'backlog',
-    assigneeIds: ['u-david'], projectId: 'FICO', entregableId: 'ada', actIdx: 3, fromPlan: true,
-    links: [], comments: [],
-  },
-  {
-    id: 'kt-6', title: 'Circuito validación Gobierno Técnico · BBVA',
-    description: 'Presentación al comité técnico BBVA, gestión de observaciones y obtención de aprobación definitiva.',
-    priority: 'Alta', startDate: '2026-02-09', endDate: '2026-03-08', status: 'review',
-    assigneeIds: ['u-david', 'u-juliana'], projectId: 'FICO', entregableId: 'doc', actIdx: 3,
-    fromPlan: true, jiraId: 'FICO-142',
-    links: [], comments: [],
-  },
-  {
-    id: 'kt-7', title: 'Despliegue y pruebas entornos Work',
-    description: 'Creación y ejecución del job ADA en entorno Work, verificación de escritura en VBox y prueba de aceptación.',
-    priority: 'Alta', startDate: '2026-03-22', endDate: '2026-03-29', status: 'backlog',
-    assigneeIds: ['u-juliana'], projectId: 'FICO', entregableId: 'ada', actIdx: 6, fromPlan: true,
-    links: [], comments: [],
-  },
-  // ─── NGA ──────────────────────────────────────────────────────────────────────
-  {
-    id: 'kt-nga-1', title: 'Análisis fuentes — Core Bancario NGA',
-    description: 'Levantamiento de fuentes de datos del Core Bancario para el proyecto NGA: inventario de tablas, volúmenes y frecuencias de actualización.',
-    priority: 'Alta', startDate: '2026-02-01', endDate: '2026-02-28', status: 'in-progress',
-    assigneeIds: ['u-juan'], projectId: 'NGA',
-    links: [], comments: [],
-  },
-  {
-    id: 'kt-nga-2', title: 'Diccionario de datos NGA',
-    description: 'Elaboración del diccionario técnico de campos NGA y validación con el área de Gobierno de Datos.',
-    priority: 'Media', startDate: '2026-02-15', endDate: '2026-03-15', status: 'backlog',
-    assigneeIds: ['u-juan', 'u-juliana'], projectId: 'NGA',
-    links: [], comments: [],
-  },
-  {
-    id: 'kt-nga-3', title: 'Revisión arquitectura ETL · NGA',
-    description: 'Revisión del flujo ETL propuesto con el equipo de arquitectura BBVA. Definición de capas de ingestión y transformación.',
-    priority: 'Alta', startDate: '2026-03-01', endDate: '2026-03-22', status: 'review',
-    assigneeIds: ['u-david', 'u-juan'], projectId: 'NGA',
-    links: [], comments: [],
-  },
-  // ─── CRONOS ───────────────────────────────────────────────────────────────────
-  {
-    id: 'kt-cro-1', title: 'Definición modelo estrella CRONOS',
-    description: 'Diseño del modelo estrella para CRONOS: tablas de hechos, dimensiones y granularidad.',
-    priority: 'Crítica', startDate: '2026-02-10', endDate: '2026-03-10', status: 'in-progress',
-    assigneeIds: ['u-juan'], projectId: 'CRONOS',
-    links: [], comments: [],
-  },
-  {
-    id: 'kt-cro-2', title: 'Construcción pipeline Spark CRONOS',
-    description: 'Implementación del pipeline de procesamiento con Spark, incluyendo transformaciones y validaciones de calidad.',
-    priority: 'Alta', startDate: '2026-03-10', endDate: '2026-04-10', status: 'backlog',
-    assigneeIds: ['u-david'], projectId: 'CRONOS',
-    links: [], comments: [],
-  },
-];
+const DEFAULT_KANBAN_TASKS: KanbanTask[] = [];
 
 // ─── Plan de Trabajo — Etapas y trazabilidad ─────────────────────────────────
 
@@ -383,60 +297,7 @@ const DEFAULT_BBVA_ANS: BbvaAnsConfig = {
   Pendiente: 3, Enviado: 5, 'En revisión': 10, Observaciones: 5,
 };
 
-const DEFAULT_USERS: AdminUser[] = [
-  // ── Project Manager ──────────────────────────────────────────────────────────
-  {
-    id: 'u-rodolfo', name: 'Rodolfo Pereda', email: 'rodolfo.pereda@timia.ai',
-    role: 'pm', projectIds: BASE_PROJECTS.map(p => p.id),
-    initials: 'RP', avatarColor: '#dc2626', active: true,
-    areaLabel: 'Project Manager · BBVA CO & Credicorp Capital',
-  },
-  // ── Líderes Técnicos ─────────────────────────────────────────────────────────
-  {
-    id: 'u-juan', name: 'Juan Pablo Arévalo', email: 'juanpablo.arevalo@timia.ai',
-    role: 'tech_lead', projectIds: ['FICO','NGA','CRONOS','PINTO','QA'],
-    initials: 'JA', avatarColor: '#7c3aed', active: true,
-    areaLabel: 'Líder Técnico · FICO · NGA · CRONOS · PINTO · QA',
-  },
-  {
-    id: 'u-david', name: 'David Huamán', email: 'david.huaman@timia.ai',
-    role: 'tech_lead', projectIds: ['OPTIM','FABRICA','SDM1','SDM2'],
-    initials: 'DH', avatarColor: '#0369a1', active: true,
-    areaLabel: 'Líder Técnico · Credicorp Capital · SDM',
-  },
-  {
-    id: 'u-diego', name: 'Diego Sánchez', email: 'diego.sanchez@timia.ai',
-    role: 'tech_lead', projectIds: ['SDM1','SDM2','MURIC','BRICKELL','BCBS239'],
-    initials: 'DS', avatarColor: '#2563eb', active: true,
-    areaLabel: 'Líder Técnico · SDM · MURIC · BRICKELL · BCBS239',
-  },
-  // ── Referente Técnico ────────────────────────────────────────────────────────
-  {
-    id: 'u-juliana', name: 'Juliana Garzón', email: 'juliana.garzon@timia.ai',
-    role: 'tech_ref', projectIds: ['FICO','NGA'],
-    initials: 'JG', avatarColor: '#0f766e', active: true,
-    areaLabel: 'Referente Técnico · FICO · NGA',
-  },
-  // ── Desarrolladores ───────────────────────────────────────────────────────────
-  {
-    id: 'u-sergio', name: 'Sergio David Rodriguez', email: 'sergio.rodriguez@timia.ai',
-    role: 'developer', projectIds: ['FICO','NGA','CRONOS'],
-    initials: 'SR', avatarColor: '#b45309', active: true,
-    areaLabel: 'Desarrollador · FICO · NGA · CRONOS',
-  },
-  {
-    id: 'u-fabrizio', name: 'Fabrizio Atiquipa', email: 'fabrizio.atiquipa@timia.ai',
-    role: 'developer', projectIds: ['FICO','NGA','CRONOS'],
-    initials: 'FA', avatarColor: '#059669', active: true,
-    areaLabel: 'Desarrollador · FICO · NGA · CRONOS',
-  },
-  {
-    id: 'u-ana', name: 'Ana Restrepo', email: 'ana.restrepo@timia.ai',
-    role: 'developer', projectIds: ['NGA','CRONOS','PINTO'],
-    initials: 'AR', avatarColor: '#be185d', active: true,
-    areaLabel: 'Desarrolladora · NGA · CRONOS · PINTO',
-  },
-];
+const DEFAULT_USERS: AdminUser[] = [];
 
 const DEFAULT_HOLIDAYS: Holiday[] = [
   { date: '2026-01-01', name: 'Año Nuevo',                  type: 'nacional' },
@@ -459,50 +320,7 @@ const DEFAULT_HOLIDAYS: Holiday[] = [
   { date: '2026-12-25', name: 'Navidad',                    type: 'nacional' },
 ];
 
-const DEFAULT_CIRCUITOS: CircuitoCard[] = [
-  {
-    id: 'c1', projectId: 'FICO', titulo: 'Validación Diccionario Técnico v2',
-    columna: 'En revisión', fechaEnvio: '2026-06-01',
-    responsable: 'Juliana Garzón', prioridad: 'Alta',
-    observaciones: 'Enviado con correcciones de campos solicitadas',
-    historial: [
-      { fecha: '2026-05-26', columna: 'Enviado',      nota: 'Envío inicial al equipo BBVA' },
-      { fecha: '2026-06-01', columna: 'En revisión',  nota: 'BBVA confirmó recepción' },
-    ],
-  },
-  {
-    id: 'c2', projectId: 'BCBS239', titulo: 'Despliegue Control-M producción',
-    columna: 'Pendiente', responsable: 'Mauricio Pajoy', prioridad: 'Crítica',
-    historial: [],
-  },
-  {
-    id: 'c3', projectId: 'NGA', titulo: 'Aprobación ETL t_nga_output',
-    columna: 'Aprobado', fechaEnvio: '2026-05-20',
-    responsable: 'Juliana Garzón', prioridad: 'Media',
-    historial: [
-      { fecha: '2026-05-20', columna: 'Enviado',  nota: 'Envío v1' },
-      { fecha: '2026-05-28', columna: 'Aprobado', nota: 'Aprobado sin observaciones' },
-    ],
-  },
-  {
-    id: 'c4', projectId: 'SDM1', titulo: 'Certificación calidad datos SDM',
-    columna: 'Observaciones', fechaEnvio: '2026-05-28',
-    responsable: 'Omar Bonilla', prioridad: 'Alta',
-    observaciones: '3 campos requieren ajuste en nomenclatura',
-    historial: [
-      { fecha: '2026-05-28', columna: 'Enviado',      nota: 'Envío inicial' },
-      { fecha: '2026-06-03', columna: 'Observaciones',nota: 'BBVA devolvió con 3 observaciones' },
-    ],
-  },
-  {
-    id: 'c5', projectId: 'CRONOS', titulo: 'Aprobación Hammurabi Rules v3',
-    columna: 'Enviado', fechaEnvio: '2026-06-05',
-    responsable: 'Eric Buitrago', prioridad: 'Alta',
-    historial: [
-      { fecha: '2026-06-05', columna: 'Enviado', nota: 'Envío v3 con correcciones' },
-    ],
-  },
-];
+const DEFAULT_CIRCUITOS: CircuitoCard[] = [];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -519,27 +337,7 @@ function save<T>(key: string, val: T): void {
 
 // ─── Imputaciones FICO por defecto (seed data del proyecto real) ─────────────
 
-const DEFAULT_IMPUTACIONES: ImputacionEntry[] = [
-  { id:'imp-1450',  projectId:'FICO', jiraId:'DECRONOS-1450',  summary:'Creación y productivización Tablón FICO',                            type:'Enabler Delivery', status:'Deployed',    assigneeIds:['todos'],                          month:'Enero',   weeks:'2-13',   q:'Q1-2026',    phase:'Análisis y Diseño', hoursEst:96,  hoursImputed:96,  context:'CRONOS-4Q25-DATCAL01',                                    createdBy:'Juan Pablo Arévalo', createdAt:'2026-01-02' },
-  { id:'imp-1600',  projectId:'FICO', jiraId:'DECRONOS-1600',  summary:'Tablón FICO — validación de componentes',                            type:'Enabler Delivery', status:'Deployed',    assigneeIds:['todos'],                          month:'Enero',   weeks:'14-15',  q:'Q1-2026',    phase:'Análisis y Diseño', hoursEst:16,  hoursImputed:16,  context:'CRONOS-4Q25-DATCAL01',                                    createdBy:'Juan Pablo Arévalo', createdAt:'2026-01-14' },
-  { id:'imp-1682',  projectId:'FICO', jiraId:'DECRONOS-1682',  summary:'Creación y productivización tablón de insumo',                       type:'Enabler Delivery', status:'Deployed',    assigneeIds:['todos'],                          month:'Enero',   weeks:'',       q:'Q1-2026',    phase:'Análisis y Diseño', hoursEst:40,  hoursImputed:40,  context:'CRONOS-Q126-DATCAL01',                                    createdBy:'Juan Pablo Arévalo', createdAt:'2026-01-05' },
-  { id:'imp-1687',  projectId:'FICO', jiraId:'DECRONOS-1687',  summary:'Migración proceso Holding Campañas a Local',                         type:'Enabler Delivery', status:'Deployed',    assigneeIds:['todos'],                          month:'Enero',   weeks:'',       q:'Q1-2026',    phase:'Análisis y Diseño', hoursEst:40,  hoursImputed:40,  context:'CRONOS-1Q26-DATCAL01',                                    createdBy:'Juan Pablo Arévalo', createdAt:'2026-01-05' },
-  { id:'imp-1726',  projectId:'FICO', jiraId:'DECRONOS-1726',  summary:'Codificación componentes proceso principal',                         type:'Enabler Delivery', status:'Deployed',    assigneeIds:['todos'],                          month:'Febrero', weeks:'16-26',  q:'Q1-2026',    phase:'Codificación',      hoursEst:88,  hoursImputed:88,  context:'Refs: DECRONOS-1450 · DECRONOS-1600',                     createdBy:'Juan Pablo Arévalo', createdAt:'2026-02-16' },
-  { id:'imp-1727',  projectId:'FICO', jiraId:'DECRONOS-1727',  summary:'Codificación ajuste y validación de datos',                          type:'Enabler Delivery', status:'Deployed',    assigneeIds:['u-sergio'],                       month:'Febrero', weeks:'27',     q:'Q1-2026',    phase:'Codificación',      hoursEst:8,   hoursImputed:8,   context:'DECRONOS-1600 · 6h | DECRONOS-1450 · 2h',                createdBy:'Juan Pablo Arévalo', createdAt:'2026-02-27' },
-  { id:'imp-1834',  projectId:'FICO', jiraId:'DECRONOS-1834',  summary:'Creación y productivización malla Certificación componentes T02',    type:'Enabler Delivery', status:'Deployed',    assigneeIds:['u-amilkar'],                      month:'Febrero', weeks:'27',     q:'Q2-2026',    phase:'Codificación',      hoursEst:8,   hoursImputed:8,   context:'DECRONOS-1682 · 6h | DECRONOS-1450 · 2h — CRONOS-Q226', createdBy:'Juan Pablo Arévalo', createdAt:'2026-02-27' },
-  { id:'imp-1835',  projectId:'FICO', jiraId:'DECRONOS-1835',  summary:'Malla Certificación componentes T02 — Deployment',                  type:'Deployment',       status:'Deployed',    assigneeIds:['u-fabrizio'],                     month:'Febrero', weeks:'27',     q:'Q2-2026',    phase:'Despliegue',        hoursEst:8,   hoursImputed:8,   context:'DECRONOS-1687 · 6h | DECRONOS-1450 · 2h — CRONOS-Q226', createdBy:'Juan Pablo Arévalo', createdAt:'2026-02-27' },
-  { id:'imp-1794',  projectId:'FICO', jiraId:'DECRONOS-1794',  summary:'Procesamiento FICO – ADA',                                           type:'Enabler Delivery', status:'Deployed',    assigneeIds:['todos'],                          month:'Marzo',   weeks:'',       q:'Q2-2026',    phase:'Codificación',      hoursEst:80,  hoursImputed:80,  context:'CRONOS-Q2 2026-DATCAL01',                                 createdBy:'Juan Pablo Arévalo', createdAt:'2026-03-01' },
-  { id:'imp-1814',  projectId:'FICO', jiraId:'DECRONOS-1814',  summary:'Procesamiento Input FICO – ADA',                                     type:'Enabler Delivery', status:'Deployed',    assigneeIds:['todos'],                          month:'Marzo',   weeks:'',       q:'Q2-2026',    phase:'Codificación',      hoursEst:80,  hoursImputed:80,  context:'CRONOS-Q2 2026-DATCAL01',                                 createdBy:'Juan Pablo Arévalo', createdAt:'2026-03-05' },
-  { id:'imp-1804a', projectId:'FICO', jiraId:'DECRONOS-1804',  summary:'Procesamiento FICO Output Proactivo – ADA',                         type:'Enabler Delivery', status:'Deployed',    assigneeIds:['todos'],                          month:'Abril',   weeks:'1',      q:'Q2-2026',    phase:'Pruebas',           hoursEst:8,   hoursImputed:8,   context:'Refs: DECRONOS-1726 · DECRONOS-1727 — CRONOS-Q2 2026',   createdBy:'Juan Pablo Arévalo', createdAt:'2026-04-01' },
-  { id:'imp-1846a', projectId:'FICO', jiraId:'DECRONOS-1846',  summary:'Historificación FICO – ADA',                                         type:'Enabler Delivery', status:'Deployed',    assigneeIds:['todos'],                          month:'Abril',   weeks:'6',      q:'Q2-2026',    phase:'Análisis y Diseño', hoursEst:8,   hoursImputed:8,   context:'Ref: DECRONOS-1794 — CRONOS-Q2 2026-DATCAL01',            createdBy:'Juan Pablo Arévalo', createdAt:'2026-04-06' },
-  { id:'imp-1846b', projectId:'FICO', jiraId:'DECRONOS-1846',  summary:'Historificación FICO – ADA · Codificación',                         type:'Enabler Delivery', status:'Deployed',    assigneeIds:['todos'],                          month:'Abril',   weeks:'7-23',   q:'Q2-II-2026', phase:'Codificación',      hoursEst:136, hoursImputed:136, context:'Refs: DECRONOS-1794 · DECRONOS-1814',                     createdBy:'Juan Pablo Arévalo', createdAt:'2026-04-07' },
-  { id:'imp-1804b', projectId:'FICO', jiraId:'DECRONOS-1804',  summary:'Procesamiento FICO Output Proactivo – ADA · Codificación',          type:'Enabler Delivery', status:'Deployed',    assigneeIds:['todos'],                          month:'Abril',   weeks:'23-30',  q:'Q2-II-2026', phase:'Codificación',      hoursEst:64,  hoursImputed:64,  context:'Refs: DECRONOS-1794 · DECRONOS-1814 · DECRONOS-1804',    createdBy:'Juan Pablo Arévalo', createdAt:'2026-04-23' },
-  { id:'imp-1996',  projectId:'FICO', jiraId:'DECRONOS-1996',  summary:'Test — Validación componentes ADA',                                  type:'Enabler Delivery', status:'Test',        assigneeIds:['u-sergio'],                       month:'Mayo',    weeks:'',       q:'Q2-II-2026', phase:'Pruebas',           hoursEst:40,  hoursImputed:24,  context:'',                                                        createdBy:'Juan Pablo Arévalo', createdAt:'2026-05-01' },
-  { id:'imp-1997',  projectId:'FICO', jiraId:'DECRONOS-1997',  summary:'Test — Validación componentes ADA',                                  type:'Enabler Delivery', status:'Test',        assigneeIds:['u-amilkar'],                      month:'Mayo',    weeks:'1-10',   q:'Q2-II-2026', phase:'Codificación',      hoursEst:80,  hoursImputed:40,  context:'Refs: DECRONOS-1794 · 1814 · 1804 · 1846',               createdBy:'Juan Pablo Arévalo', createdAt:'2026-05-01' },
-  { id:'imp-1999',  projectId:'FICO', jiraId:'DECRONOS-1999',  summary:'Test — Validación componentes ADA',                                  type:'Enabler Delivery', status:'Test',        assigneeIds:['u-fabrizio'],                     month:'Mayo',    weeks:'11-25',  q:'Q2-II-2026', phase:'Pruebas',           hoursEst:120, hoursImputed:60,  context:'Refs: DECRONOS-1794 · 1814 · 1804 · 1846',               createdBy:'Juan Pablo Arévalo', createdAt:'2026-05-11' },
-  { id:'imp-2000',  projectId:'FICO', jiraId:'DECRONOS-2000',  summary:'Test — Integración y validación final del equipo',                   type:'Enabler Delivery', status:'Test',        assigneeIds:['u-sergio','u-fabrizio','u-amilkar'], month:'Mayo', weeks:'26-30',  q:'Q2-II-2026', phase:'Codificación',      hoursEst:40,  hoursImputed:0,   context:'Cada uno tiene asignado su sub-ticket. Refs: 1996 · 1997 · 1999 · 2000', createdBy:'Juan Pablo Arévalo', createdAt:'2026-05-26' },
-  { id:'imp-1537',  projectId:'FICO', jiraId:'DECRONOS-1537',  summary:'Procesamiento FICO – integración completa y cierre',                 type:'Enabler Delivery', status:'In Progress', assigneeIds:['u-sergio','u-fabrizio','u-amilkar'], month:'Mayo', weeks:'',       q:'Q2-II-2026', phase:'Codificación',      hoursEst:120, hoursImputed:48,  context:'',                                                        createdBy:'Juan Pablo Arévalo', createdAt:'2026-05-01' },
-];
+const DEFAULT_IMPUTACIONES: ImputacionEntry[] = [];
 
 // ─── Seed desde GitHub (public/db.json) ──────────────────────────────────────
 // Se llama una vez al arrancar la app (en main.tsx).
@@ -555,6 +353,7 @@ export async function seedFromRemote(): Promise<void> {
   if (cfg) {
     const me = await apiMe();
     if (me) await loadStateFromApi();
+    refreshProjects();
     // En modo API la lista de cuentas para el login demo viene de la API, no del navegador
     return;
   }
@@ -575,25 +374,16 @@ export async function seedFromRemote(): Promise<void> {
   } catch {
     // Si el fetch falla (offline, etc.), el app arranca con los defaults del código
   }
+  refreshProjects();
 }
 
 // ─── API pública ──────────────────────────────────────────────────────────────
 
 export const adminStore = {
   getProjects:   (): AdminProject[]  => load('admin_projects', DEFAULT_PROJECTS),
-  saveProjects:  (p: AdminProject[]) => save('admin_projects', p),
+  saveProjects:  (p: AdminProject[]) => { save('admin_projects', p); refreshProjects(); },
 
-  getUsers: (): AdminUser[] => {
-    const stored = load<AdminUser[]>('admin_users', DEFAULT_USERS);
-    // Migration: add any new default users that don't exist in stored data
-    const missing = DEFAULT_USERS.filter(du => !stored.some(u => u.id === du.id));
-    if (missing.length > 0) {
-      const merged = [...stored, ...missing];
-      save('admin_users', merged);
-      return merged;
-    }
-    return stored;
-  },
+  getUsers: (): AdminUser[] => load<AdminUser[]>('admin_users', DEFAULT_USERS).map(u => ({ ...u, role: normalizeRole(u.role as string) })),
   saveUsers:     (u: AdminUser[])    => save('admin_users', u),
 
   getAns:        (): AnsConfig       => load('ans_config', DEFAULT_ANS),
@@ -663,16 +453,7 @@ export const adminStore = {
   },
 
   // Kanban tasks — merges new default tasks on every load (migration-safe)
-  getKanbanTasks: (): KanbanTask[] => {
-    const stored = load<KanbanTask[]>('kanban_tasks', DEFAULT_KANBAN_TASKS);
-    const missing = DEFAULT_KANBAN_TASKS.filter(dt => !stored.some(t => t.id === dt.id));
-    if (missing.length > 0) {
-      const merged = [...stored, ...missing];
-      save('kanban_tasks', merged);
-      return merged;
-    }
-    return stored;
-  },
+  getKanbanTasks: (): KanbanTask[] => load('kanban_tasks', DEFAULT_KANBAN_TASKS),
   saveKanbanTasks: (t: KanbanTask[]) => save('kanban_tasks', t),
 
   // Imputaciones Jira

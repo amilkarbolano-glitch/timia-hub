@@ -39,9 +39,17 @@ export default function Login() {
   const googleEnabled = apiMode && !!cfg?.google && !!cfg?.googleClientId;
   const demoEnabled = !apiMode || !!cfg?.demo;
   const [apiAccounts, setApiAccounts] = useState<AuthUser[] | null>(null);
-  useEffect(() => { if (apiMode && demoEnabled) apiDemoAccounts().then(a => setApiAccounts(a as AuthUser[])); }, [apiMode, demoEnabled]);
+  const [apiAccountsError, setApiAccountsError] = useState('');
+  useEffect(() => {
+    if (!apiMode) return;
+    if (!demoEnabled) { setApiAccounts([]); setApiAccountsError('El acceso de prueba está desactivado en la API (ALLOW_DEMO_LOGIN=false) y Google aún no está configurado.'); return; }
+    const t = setTimeout(() => setApiAccounts(a => { if (a === null) setApiAccountsError('La API no respondió con las cuentas. Revisa que el contenedor api esté arriba (docker compose ps).'); return a ?? []; }), 8000);
+    apiDemoAccounts().then(a => { clearTimeout(t); setApiAccounts(a as AuthUser[]); if (!a.length) setApiAccountsError('La API no devolvió cuentas de prueba. Si acabas de actualizar, recrea la base: docker compose down -v && docker compose up -d --build'); });
+    return () => clearTimeout(t);
+  }, [apiMode, demoEnabled]);
 
-  const storeUsers = adminStore.getUsers().filter(u => u.active);
+  const allActive = adminStore.getUsers().filter(u => u.active);
+  const storeUsers = allActive.some(u => u.demo) ? allActive.filter(u => u.demo) : allActive;
   const accounts: AuthUser[] = apiMode
     ? (apiAccounts ?? [])
     : ((storeUsers.length > 0 ? storeUsers : MOCK_ACCOUNTS) as AuthUser[]);
@@ -180,6 +188,7 @@ export default function Login() {
                     Cuentas disponibles
                   </div>
                   {apiMode && apiAccounts === null && <div className="px-3 py-3 text-xs text-slate-400">Cargando cuentas…</div>}
+                  {apiMode && apiAccountsError && <div className="px-3 py-3 text-xs" style={{ color:'#b91c1c', background:'#fef2f2' }}>{apiAccountsError}</div>}
                   {accounts.map((acc) => (
                     <button
                       key={acc.id}

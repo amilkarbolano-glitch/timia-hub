@@ -49,33 +49,23 @@ export const PERMISSIONS: PermissionDef[] = [
 export const ALL_PERMISSIONS = PERMISSIONS.map(p => p.id);
 
 export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, string[]> = {
-  pm: ALL_PERMISSIONS,
+  // Gerente de cuenta: todo, sobre todos los proyectos del cliente
+  account_manager: ALL_PERMISSIONS,
+  // PM: todo sobre sus proyectos
+  pm: ALL_PERMISSIONS.filter(p => p !== 'projects.view_all'),
+  // Líder / Referente técnico: apoya al PM
   tech_lead: [
-    'projects.view_all', 'projects.create', 'projects.manage', 'config.manage',
     'plan.view', 'plan.edit_progress', 'plan.manage_issues', 'plan.export',
-    'estimaciones.view', 'estimaciones.edit', 'estimaciones.generate',
+    'estimaciones.view', 'estimaciones.edit',
     'tasks.view', 'tasks.manage', 'tasks.update_status', 'tasks.assign', 'tasks.comment',
     'bitacora.view', 'bitacora.write', 'circuitos.view', 'circuitos.edit',
     'inventario.view', 'inventario.edit', 'inventario.configure', 'links.edit', 'imputaciones.edit',
     'tr.view', 'tr.load_own', 'tr.load_any', 'tr.manage_features',
-    'bank_status.view', 'standup.generate', 'audit.view',
+    'bank_status.view', 'standup.generate',
   ],
-  project_lead: [
-    'plan.view', 'plan.manage_issues', 'plan.export', 'estimaciones.view',
-    'tasks.view', 'tasks.manage', 'tasks.update_status', 'tasks.assign', 'tasks.comment',
-    'bitacora.view', 'bitacora.write', 'circuitos.view', 'circuitos.edit',
-    'inventario.view', 'inventario.edit', 'links.edit',
-    'tr.view', 'tr.load_own', 'tr.load_any', 'bank_status.view',
-  ],
-  tech_ref: [
-    'plan.view', 'plan.edit_progress', 'plan.manage_issues', 'estimaciones.view', 'estimaciones.edit',
-    'tasks.view', 'tasks.manage', 'tasks.update_status', 'tasks.comment',
-    'bitacora.view', 'bitacora.write', 'circuitos.view',
-    'inventario.view', 'inventario.edit', 'links.edit',
-    'tr.view', 'tr.load_own', 'bank_status.view',
-  ],
+  // Desarrollador: ve lo suyo, mueve sus tareas, reporta bloqueantes, carga su TR
   developer: [
-    'plan.view', 'plan.manage_issues',
+    'plan.manage_issues',
     'tasks.view', 'tasks.update_status', 'tasks.comment',
     'bitacora.view', 'bitacora.write', 'circuitos.view',
     'inventario.view', 'inventario.edit',
@@ -104,14 +94,13 @@ export const LEGACY_ALIASES: Record<string, string> = {
   u_invite: 'team.manage', u_remove: 'team.manage', s_standards: 'plan.view', s_billing: 'config.manage',
 };
 /** Ids de rol del módulo antiguo → rol real */
-const LEGACY_ROLE: Record<string, UserRole> = { admin: 'pm', leader: 'project_lead', member: 'developer', guest: 'developer' };
+const LEGACY_ROLE: Record<string, UserRole> = { admin: 'account_manager', leader: 'pm', member: 'developer', guest: 'developer', project_lead: 'tech_lead', tech_ref: 'tech_lead' };
 
 export const ROLE_META: Record<UserRole, { name: string; description: string; color: string }> = {
-  pm:           { name: 'Project Manager',   description: 'Control total: proyectos, equipo, permisos y configuración.', color: '#dc2626' },
-  tech_lead:    { name: 'Líder Técnico',     description: 'Dirige varios proyectos: estimaciones, plan, tablero, TR y administración.', color: '#7c3aed' },
-  project_lead: { name: 'Líder de Proyecto', description: 'Gestiona sus proyectos: tareas, alertas, circuitos y TR del equipo.', color: '#0369a1' },
-  tech_ref:     { name: 'Referente Técnico', description: 'Apoya al líder: avance del plan, borradores de estimación, tareas.', color: '#0d9488' },
-  developer:    { name: 'Desarrollador',     description: 'Ejecuta: mueve sus tareas, reporta bloqueantes, carga su TR.', color: '#374151' },
+  account_manager: { name: 'Gerente de cuenta',         description: 'Visión global del cliente: todos los proyectos de todos los PM, números, equipo y permisos.', color: '#dc2626' },
+  pm:              { name: 'Project Manager',           description: 'Gestiona sus proyectos: estimaciones, plan, equipo, aprobaciones y configuración.', color: '#7c3aed' },
+  tech_lead:       { name: 'Líder / Referente técnico', description: 'Apoya al PM: plan, estimaciones, inventario, alertas, tablero y TR del equipo.', color: '#0d9488' },
+  developer:       { name: 'Desarrollador',             description: 'Ejecuta: mueve sus tareas, reporta bloqueantes, carga su TR.', color: '#374151' },
 };
 
 /** Compatibilidad con el módulo antiguo (SetupTeam): roles en el formato Role de ../types */
@@ -134,8 +123,31 @@ export function currentMatrix(): Record<UserRole, string[]> {
       });
     }
   } catch {}
-  out.pm = ALL_PERMISSIONS;
+  out.account_manager = ALL_PERMISSIONS;
   return out;
+}
+
+/** Rol efectivo de un usuario en un proyecto: override de timia_project_roles ("userId:projectId") o su rol base. */
+export function effectiveRole(user: { id: string; role: string } | null | undefined, projectId?: string): UserRole | undefined {
+  if (!user) return undefined;
+  const base = (LEGACY_ROLE[user.role] ?? user.role) as UserRole;
+  if (!projectId || base === 'account_manager') return base;
+  try {
+    const raw = localStorage.getItem('timia_project_roles');
+    const map = raw ? JSON.parse(raw) : {};
+    const o = map?.[`${user.id}:${projectId}`];
+    if (typeof o === 'string') return (LEGACY_ROLE[o] ?? o) as UserRole;
+  } catch {}
+  return base;
+}
+
+/** Permiso de un usuario dentro de un proyecto (usa el rol efectivo en ese proyecto). */
+export function canInProject(user: { id: string; role: string; projectIds?: string[] } | null | undefined, permission: string, projectId: string): boolean {
+  if (!user) return false;
+  const role = effectiveRole(user, projectId);
+  if (!hasPermission(role, permission)) return false;
+  // sin projects.view_all, además debe estar asignado al proyecto
+  return hasPermission(role, 'projects.view_all') || (user.projectIds ?? []).includes(projectId);
 }
 
 export function hasPermission(role: string | undefined, permission: string): boolean {
