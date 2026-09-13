@@ -41,7 +41,8 @@ export default function Login() {
   const [apiAccounts, setApiAccounts] = useState<AuthUser[] | null>(null);
   useEffect(() => { if (apiMode && demoEnabled) apiDemoAccounts().then(a => setApiAccounts(a as AuthUser[])); }, [apiMode, demoEnabled]);
 
-  const storeUsers = adminStore.getUsers().filter(u => u.active);
+  const allActive = adminStore.getUsers().filter(u => u.active);
+  const storeUsers = allActive.some(u => u.demo) ? allActive.filter(u => u.demo) : allActive;
   const accounts: AuthUser[] = apiMode
     ? (apiAccounts ?? [])
     : ((storeUsers.length > 0 ? storeUsers : MOCK_ACCOUNTS) as AuthUser[]);

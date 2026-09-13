@@ -46,6 +46,8 @@ export interface AdminUser {
   role: UserRole; projectIds: string[];
   initials: string; avatarColor: string; active: boolean;
   areaLabel?: string;
+  /** Cuenta habilitada para el login de prueba (modo demo). Si ninguna lo tiene, se muestran todas las activas */
+  demo?: boolean;
 }
 
 export interface AnsConfig { Baja: number; Media: number; Alta: number; Crítica: number; }
