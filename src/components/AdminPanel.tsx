@@ -8,6 +8,7 @@ import {
   BbvaAnsConfig, Holiday, Priority, UserRole,
 } from '../lib/adminStore';
 import { PROJECTS, useAuth, canAccess } from '../contexts/AuthContext';
+import { persistSet } from '../lib/persist';
 
 // ─── Paleta colores ────────────────────────────────────────────────────────────
 const COLORS = ['#dc2626','#7c3aed','#2563eb','#0891b2','#059669','#d97706','#be185d','#0369a1','#0f766e','#4f46e5','#b45309','#7e22ce'];
@@ -50,7 +51,7 @@ function loadProjRoles(): Record<string, UserRole> {
   try { return JSON.parse(localStorage.getItem(PROJ_ROLES_KEY) ?? '{}'); } catch { return {}; }
 }
 function saveProjRoles(r: Record<string, UserRole>) {
-  try { localStorage.setItem(PROJ_ROLES_KEY, JSON.stringify(r)); } catch {}
+  persistSet(PROJ_ROLES_KEY, r);
 }
 function projRoleKey(userId: string, projId: string) { return `${userId}:${projId}`; }
 

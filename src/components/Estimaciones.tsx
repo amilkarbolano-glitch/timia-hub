@@ -40,93 +40,6 @@ function getAllProjects() {
 // We bootstrap FICO from the known plan structure.
 // Other projects get a blank 3-entregable template.
 
-const FICO_DEFAULT: PlanConfig = {
-  projectId: 'FICO',
-  totalWeeks: 10,
-  weekLabels: ['S1','S2','S3','S4','S5','S6','S7','S8','S9','S10'],
-  generatedAt: '',
-  entregables: [
-    {
-      id: 'doc', label: 'I. Documentación y gobierno',
-      activities: [
-        { label: 'Análisis y resolución de dudas',              startWeek: 1, endWeek: 2 },
-        {
-          label: 'Elaboración diccionario técnico (370 campos)', startWeek: 1, endWeek: 2,
-          etapas: [
-            { id: 'dt-1', label: 'Levantamiento inicial de campos', peso: 25 },
-            { id: 'dt-2', label: 'Envío a Gobierno de datos',       peso: 25 },
-            { id: 'dt-3', label: 'Correcciones de Gobierno',        peso: 25, optional: true },
-            { id: 'dt-4', label: 'Validación final del diccionario',peso: 25 },
-          ],
-        },
-        { label: 'Inicialización en Nebula',                     startWeek: 1, endWeek: 1, bbva: true },
-        {
-          label: 'Circuito validación Gobierno Técnico',          startWeek: 3, endWeek: 5, bbva: true,
-          etapas: [
-            { id: 'cvgt-1', label: 'Presentación al comité BBVA',  peso: 25 },
-            { id: 'cvgt-2', label: 'Recepción de observaciones',   peso: 25 },
-            { id: 'cvgt-3', label: 'Aplicación de correcciones',   peso: 25, optional: true },
-            { id: 'cvgt-4', label: 'Aprobación definitiva',        peso: 25 },
-          ],
-        },
-        { label: 'Documentación técnica ETL y mapeo de campos',   startWeek: 1, endWeek: 3 },
-        { label: 'Construcción Modelo Solución del Dato (MSD)',    startWeek: 2, endWeek: 3 },
-        { label: 'Circuito validación MSD',                       startWeek: 3, endWeek: 5, bbva: true },
-        { label: 'Despliegue esquemas entorno Work',               startWeek: 4, endWeek: 5, bbva: true },
-        { label: 'Solicitud y circuito de ACLs',                  startWeek: 4, endWeek: 5, bbva: true },
-        { label: 'Solicitud despliegue Live',                     startWeek: 5, endWeek: 5, bbva: true },
-        { label: 'Acompañamiento en Definición Funcional',        startWeek: 1, endWeek: 2, bbva: true },
-        { label: 'Acompañamiento validación del Notebook',        startWeek: 1, endWeek: 1, bbva: true },
-      ],
-    },
-    {
-      id: 'ada', label: 'II. Componentes ADA',
-      activities: [
-        { label: 'Gestión repos Bitbucket · Procesamiento', startWeek: 1, endWeek: 1, bbva: true },
-        {
-          label: 'Construcción procesamiento Spark · Scala', startWeek: 2, endWeek: 7,
-          etapas: [
-            { id: 'spark-1', label: 'Ambientación del repositorio local',       peso: 10 },
-            { id: 'spark-2', label: 'Construcción clases principales',          peso: 40, subs: ['Clase getData','Clase Generate','Clase Process'] },
-            { id: 'spark-3', label: 'Config y utilitarios — context provider',  peso: 20 },
-            { id: 'spark-4', label: 'Test unitarios y de aceptación',           peso: 20 },
-            { id: 'spark-5', label: 'Escritura local — validación de salida',   peso: 10 },
-          ],
-        },
-        { label: 'Construcción Test unitarios y Aceptación',     startWeek: 6, endWeek: 8 },
-        { label: 'Construcción reglas calidad MVP (Hammurabi)',   startWeek: 5, endWeek: 7 },
-        { label: 'Construcción Smart Cleaner procesamiento',      startWeek: 5, endWeek: 6 },
-        { label: 'Pruebas en entorno local',                      startWeek: 7, endWeek: 8 },
-        {
-          label: 'Despliegue y pruebas entornos Work', startWeek: 8, endWeek: 8,
-          etapas: [
-            { id: 'work-1', label: 'Generación de muestras/sandbox',       peso: 20, optional: true },
-            { id: 'work-2', label: 'Creación y ejecución job ADA en Work', peso: 30 },
-            { id: 'work-3', label: 'Verificación de escritura en VBox',    peso: 30 },
-            { id: 'work-4', label: 'Prueba en ambiente de test',           peso: 20 },
-          ],
-        },
-        { label: 'Generación Datos Sandbox · validación',        startWeek: 8,  endWeek: 9,  bbva: true },
-        { label: 'Certificación calidad por equipo QA',           startWeek: 9,  endWeek: 10, bbva: true },
-        { label: 'Despliegue producción componentes ADA',         startWeek: 11, endWeek: 11 },
-        { label: 'Acompañamiento validación ADA Live',            startWeek: 11, endWeek: 13, bbva: true },
-      ],
-    },
-    {
-      id: 'auto', label: 'III. Automatización y orquestación',
-      activities: [
-        { label: 'Gestión acceso Control-M distribuido',      startWeek: 3,  endWeek: 4,  bbva: true },
-        { label: 'Definición de la automatización',           startWeek: 5,  endWeek: 5 },
-        { label: 'Construcción Mallas Control-M distribuido', startWeek: 6,  endWeek: 8 },
-        { label: 'Pruebas entornos Work · Mallas Control-M',  startWeek: 7,  endWeek: 8 },
-        { label: 'Elaboración documentación Mallas ADA',      startWeek: 7,  endWeek: 8 },
-        { label: 'Certificación mallas Control-M',            startWeek: 8,  endWeek: 10, bbva: true },
-        { label: 'Instalación mallas producción',             startWeek: 10, endWeek: 10, bbva: true },
-        { label: 'Estabilización procesos en producción',     startWeek: 11, endWeek: 13 },
-      ],
-    },
-  ],
-};
 
 // ─── Plantilla Procesamiento (plan completo — igual estructura que FICO) ────────
 // Se carga cuando el proyecto se crea con tipo "procesamientos" en SetupProject.
@@ -363,7 +276,6 @@ const HIBRIDO_TEMPLATE = (projectId: string): PlanConfig => ({
 // ─── Template selector — elige según tipo de proyecto ─────────────────────────
 
 function getDefaultPlanConfig(projectId: string): PlanConfig {
-  if (projectId === 'FICO') return FICO_DEFAULT;
   try {
     // SetupProject guarda { projectId, type } para evitar contaminar otros proyectos.
     // También soporta el formato simple string por compatibilidad.
@@ -748,7 +660,7 @@ export default function Estimaciones({ onViewChange, onBack }: EstimacionesProps
   }, []);
 
   // Get or bootstrap the config for the selected project.
-  // getDefaultPlanConfig selecciona FICO_DEFAULT, PROCESAMIENTO_TEMPLATE, INGESTA_TEMPLATE,
+  // getDefaultPlanConfig selecciona PROCESAMIENTO_TEMPLATE, INGESTA_TEMPLATE,
   // HIBRIDO_TEMPLATE o BLANK_TEMPLATE según el tipo de proyecto creado en SetupProject.
   // planKey = projectId (principal) o projectId::cronoId — es la key de `configs` y de todo el storage del plan.
   const planKey = makePlanKey(selectedProjectId, selectedCronoId || undefined);

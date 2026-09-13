@@ -4,7 +4,7 @@ import {
   FileDown, X, Users, Check, LayoutList, Search, ExternalLink,
   Plus, Trash2, Printer,
 } from 'lucide-react';
-import { PROJECTS, useAuth, canAccess } from '../contexts/AuthContext';
+import { PROJECTS, useAuth, canAccess, canInProject } from '../contexts/AuthContext';
 import { FlowStepper } from './SetupProject';
 import ImpactPicker, { ImpactChips, impactLabel, type PlanOutline } from './ImpactPicker';
 import { persistSet } from '../lib/persist';
@@ -1273,380 +1273,8 @@ function planConfigToWorkPlan(cfg: PlanConfig): WorkPlan {
 // Nota: actividades marcadas "BBVA" son tareas que TIMIA INICIA
 // pero que dependen de BBVA para completarse (aprobaciones, accesos, etc.)
 
-const WORK_PLANS_RAW: Omit<WorkPlan,'planKey'>[] = [
-  {
-    projectId: 'FICO',
-    startDate: '2026-05-04',
-    respBBVA: 'Alfonso Caro · Bibiana Andres Vargas',
-    respTimia: 'Juan Pablo Arévalo M.',
-    pasos: [
-      'Cerrar circuito validación Gobierno Técnico con BBVA',
-      'Iniciar construcción procesamiento Spark-Scala (ADA)',
-      'Gestionar acceso Control-M distribuido',
-    ],
-    alertas: [
-      'Definición funcional aún no cerrada con BBVA',
-      'ANS "Validación calidad datos LIVE" próximo a vencer',
-    ],
-    bloqueantes: ['Pendiente validación MSD por parte de BBVA'],
-    entregables: [
-      // ── I. Documentación y gobierno ─────────────────────────────────────
-      {
-        id: 'doc', name: 'I. Documentación y gobierno',
-        pctReal: 37.1, pctExp: 36.8,
-        activities: [
-          {
-            name: 'Análisis y resolución de dudas', pct: 50, pctExp: 50, startWeek: 1, endWeek: 2,
-            etapas: [
-              { id: 'ard-1', label: 'Recopilación y registro de dudas técnicas', peso: 25 },
-              { id: 'ard-2', label: 'Sesiones de aclaración con BBVA',           peso: 35 },
-              { id: 'ard-3', label: 'Consolidación de respuestas',               peso: 20 },
-              { id: 'ard-4', label: 'Documentación de acuerdos',                 peso: 20 },
-            ],
-          },
-          {
-            name: 'Elaboración diccionario técnico (370 campos)', pct: 50, pctExp: 50, startWeek: 1, endWeek: 2,
-            etapas: [
-              { id: 'dt-1', label: 'Levantamiento inicial de campos',    peso: 25 },
-              { id: 'dt-2', label: 'Envío a Gobierno de datos',          peso: 25 },
-              { id: 'dt-3', label: 'Correcciones de Gobierno',           peso: 25, optional: true },
-              { id: 'dt-4', label: 'Validación final del diccionario',   peso: 25 },
-            ],
-          },
-          {
-            // 100% done — no etapas needed
-            name: 'Inicialización en Nebula', pct: 100, pctExp: 100, startWeek: 1, endWeek: 1, bbva: true,
-          },
-          {
-            name: 'Circuito validación Gobierno Técnico', pct: 0, pctExp: 0, startWeek: 3, endWeek: 5, bbva: true,
-            etapas: [
-              { id: 'cvgt-1', label: 'Presentación al comité BBVA',    peso: 25 },
-              { id: 'cvgt-2', label: 'Recepción de observaciones',      peso: 25 },
-              { id: 'cvgt-3', label: 'Aplicación de correcciones',      peso: 25, optional: true },
-              { id: 'cvgt-4', label: 'Aprobación definitiva',           peso: 25 },
-            ],
-          },
-          {
-            name: 'Documentación técnica ETL y mapeo de campos', pct: 50, pctExp: 50, startWeek: 1, endWeek: 3,
-            etapas: [
-              { id: 'etl-1', label: 'Levantamiento de fuentes de datos',     peso: 35 },
-              { id: 'etl-2', label: 'Mapeo origen → destino por campo',       peso: 40 },
-              { id: 'etl-3', label: 'Validación',                             peso: 25 },
-            ],
-          },
-          {
-            name: 'Construcción Modelo Solución del Dato (MSD)', pct: 50, pctExp: 50, startWeek: 2, endWeek: 3,
-            etapas: [
-              { id: 'msd-1', label: 'Diseño modelo conceptual',  peso: 35 },
-              { id: 'msd-2', label: 'Construcción del MSD',      peso: 35 },
-              { id: 'msd-3', label: 'Validación',                peso: 30 },
-            ],
-          },
-          {
-            name: 'Circuito validación MSD', pct: 0, pctExp: 0, startWeek: 3, endWeek: 5, bbva: true,
-            etapas: [
-              { id: 'cmsd-1', label: 'Preparación del documento MSD',             peso: 20 },
-              { id: 'cmsd-2', label: 'Envío formal a equipo BBVA',                peso: 20 },
-              { id: 'cmsd-3', label: 'Seguimiento y recepción de observaciones',  peso: 30 },
-              { id: 'cmsd-4', label: 'Correcciones y reenvío',                    peso: 20, optional: true },
-              { id: 'cmsd-5', label: 'Cierre y aprobación',                       peso: 10 },
-            ],
-          },
-          {
-            name: 'Despliegue esquemas entorno Work', pct: 0, pctExp: 0, startWeek: 4, endWeek: 5, bbva: true,
-            etapas: [
-              { id: 'dsw-1', label: 'Preparación de scripts DDL/DML',       peso: 25 },
-              { id: 'dsw-2', label: 'Solicitud de acceso al entorno Work',   peso: 25 },
-              { id: 'dsw-3', label: 'Ejecución del despliegue',              peso: 25 },
-              { id: 'dsw-4', label: 'Validación de esquemas en Work',        peso: 25 },
-            ],
-          },
-          {
-            name: 'Solicitud y circuito de ACLs', pct: 0, pctExp: 0, startWeek: 4, endWeek: 5, bbva: true,
-            etapas: [
-              { id: 'acl-1', label: 'Identificación de recursos y permisos requeridos', peso: 25 },
-              { id: 'acl-2', label: 'Elaboración y envío de solicitud',                 peso: 25 },
-              { id: 'acl-3', label: 'Seguimiento con equipo BBVA',                      peso: 25 },
-              { id: 'acl-4', label: 'Confirmación y validación de accesos',             peso: 25 },
-            ],
-          },
-          {
-            name: 'Solicitud despliegue Live', pct: 0, pctExp: 0, startWeek: 5, endWeek: 5, bbva: true,
-            etapas: [
-              { id: 'sdl-1', label: 'Preparación de documentación para Live', peso: 30 },
-              { id: 'sdl-2', label: 'Envío de solicitud formal a BBVA',       peso: 30 },
-              { id: 'sdl-3', label: 'Validación en ambiente Live',            peso: 40 },
-            ],
-          },
-          {
-            // pct:80 done — no etapas (avoid state inconsistency)
-            name: 'Acompañamiento en Definición Funcional', pct: 80, pctExp: 80, startWeek: 1, endWeek: 2, bbva: true,
-            etapas: [
-              { id: 'adf-1', label: 'Participación en sesiones de definición',         peso: 40 },
-              { id: 'adf-2', label: 'Registro de decisiones y acuerdos funcionales',   peso: 30 },
-              { id: 'adf-3', label: 'Validación con equipo técnico Timia',             peso: 30 },
-            ],
-          },
-          {
-            // 100% done — no etapas needed
-            name: 'Acompañamiento validación del Notebook', pct: 100, pctExp: 100, startWeek: 1, endWeek: 1, bbva: true,
-          },
-        ],
-      },
-
-      // ── II. Componentes ADA ──────────────────────────────────────────────
-      {
-        id: 'ada', name: 'II. Componentes ADA',
-        pctReal: 5.3, pctExp: 5.3,
-        activities: [
-          {
-            // 100% done — no etapas
-            name: 'Gestión repos Bitbucket · Procesamiento', pct: 100, pctExp: 100, startWeek: 1, endWeek: 1, bbva: true,
-          },
-          {
-            name: 'Construcción procesamiento Spark · Scala', pct: 0, pctExp: 0, startWeek: 2, endWeek: 7,
-            etapas: [
-              { id: 'spark-1', label: 'Ambientación del repositorio local',       peso: 10 },
-              { id: 'spark-2', label: 'Construcción clases principales',          peso: 40, subs: ['Clase getData','Clase Generate','Clase Process'] },
-              { id: 'spark-3', label: 'Config y utilitarios — context provider',  peso: 20 },
-              { id: 'spark-4', label: 'Test unitarios y de aceptación',           peso: 20 },
-              { id: 'spark-5', label: 'Escritura local — validación de salida',   peso: 10 },
-            ],
-          },
-          {
-            name: 'Construcción Test unitarios y Aceptación', pct: 0, pctExp: 0, startWeek: 6, endWeek: 8,
-            etapas: [
-              { id: 'cta-1', label: 'Diseño de casos de prueba',                   peso: 20 },
-              { id: 'cta-2', label: 'Implementación de tests unitarios',           peso: 30 },
-              { id: 'cta-3', label: 'Implementación de tests de aceptación',       peso: 30 },
-              { id: 'cta-4', label: 'Ejecución y validación de resultados',        peso: 20 },
-            ],
-          },
-          {
-            name: 'Construcción reglas calidad MVP (Hammurabi)', pct: 0, pctExp: 0, startWeek: 5, endWeek: 7,
-            etapas: [
-              { id: 'ham-1', label: 'Levantamiento de reglas de negocio',   peso: 25 },
-              { id: 'ham-2', label: 'Implementación de reglas Hammurabi',   peso: 40 },
-              { id: 'ham-3', label: 'Pruebas de reglas en local',           peso: 25 },
-              { id: 'ham-4', label: 'Documentación de reglas',              peso: 10 },
-            ],
-          },
-          {
-            name: 'Construcción Smart Cleaner procesamiento', pct: 0, pctExp: 0, startWeek: 5, endWeek: 6,
-            etapas: [
-              { id: 'sc-1', label: 'Diseño del módulo Smart Cleaner',    peso: 25 },
-              { id: 'sc-2', label: 'Implementación del módulo',          peso: 50 },
-              { id: 'sc-3', label: 'Pruebas y validación',               peso: 25 },
-            ],
-          },
-          {
-            name: 'Pruebas en entorno local', pct: 0, pctExp: 0, startWeek: 7, endWeek: 8,
-            etapas: [
-              { id: 'pel-1', label: 'Configuración del entorno de pruebas',    peso: 20 },
-              { id: 'pel-2', label: 'Ejecución de pruebas funcionales',        peso: 40 },
-              { id: 'pel-3', label: 'Corrección de errores encontrados',       peso: 25 },
-              { id: 'pel-4', label: 'Validación final del componente',         peso: 15 },
-            ],
-          },
-          {
-            name: 'Despliegue y pruebas entornos Work', pct: 0, pctExp: 0, startWeek: 8, endWeek: 8,
-            etapas: [
-              { id: 'work-1', label: 'Generación de muestras/sandbox',        peso: 20, optional: true },
-              { id: 'work-2', label: 'Creación y ejecución job ADA en Work',  peso: 30 },
-              { id: 'work-3', label: 'Verificación de escritura en VBox',     peso: 30 },
-              { id: 'work-4', label: 'Prueba en ambiente de test',            peso: 20 },
-            ],
-          },
-          {
-            name: 'Generación Datos Sandbox · validación', pct: 0, pctExp: 0, startWeek: 8, endWeek: 9, bbva: true,
-            etapas: [
-              { id: 'gds-1', label: 'Preparación del dataset de prueba',   peso: 25 },
-              { id: 'gds-2', label: 'Generación de datos sandbox',         peso: 35 },
-              { id: 'gds-3', label: 'Ejecución con dataset sandbox',       peso: 25 },
-              { id: 'gds-4', label: 'Validación de resultados',            peso: 15 },
-            ],
-          },
-          {
-            name: 'Certificación calidad por equipo QA', pct: 0, pctExp: 0, startWeek: 9, endWeek: 10, bbva: true,
-            etapas: [
-              { id: 'cqa-1', label: 'Preparación del ambiente QA',              peso: 20 },
-              { id: 'cqa-2', label: 'Ejecución de pruebas de calidad',          peso: 35 },
-              { id: 'cqa-3', label: 'Revisión de resultados con BBVA QA',       peso: 25 },
-              { id: 'cqa-4', label: 'Certificación y aprobación formal',        peso: 20 },
-            ],
-          },
-          {
-            name: 'Despliegue producción componentes ADA', pct: 0, pctExp: 0, startWeek: 11, endWeek: 11,
-            etapas: [
-              { id: 'dpa-1', label: 'Preparación del release de producción',       peso: 25 },
-              { id: 'dpa-2', label: 'Despliegue a ambiente productivo',            peso: 35 },
-              { id: 'dpa-3', label: 'Validación post-despliegue',                  peso: 25 },
-              { id: 'dpa-4', label: 'Documentación del cierre de despliegue',      peso: 15 },
-            ],
-          },
-          {
-            name: 'Acompañamiento validación ADA Live', pct: 0, pctExp: 0, startWeek: 11, endWeek: 13, bbva: true,
-            etapas: [
-              { id: 'val-1', label: 'Monitoreo de primeras ejecuciones en Live',     peso: 35 },
-              { id: 'val-2', label: 'Revisión de logs y outputs',                    peso: 35 },
-              { id: 'val-3', label: 'Ajustes y correcciones post-validación',        peso: 30, optional: true },
-            ],
-          },
-        ],
-      },
-
-      // ── III. Automatización y orquestación ──────────────────────────────
-      {
-        id: 'auto', name: 'III. Automatización y orquestación',
-        pctReal: 0.0, pctExp: 0.0,
-        activities: [
-          {
-            name: 'Gestión acceso Control-M distribuido', pct: 0, pctExp: 0, startWeek: 3, endWeek: 4, bbva: true,
-            etapas: [
-              { id: 'gac-1', label: 'Identificación de requisitos de acceso', peso: 25 },
-              { id: 'gac-2', label: 'Solicitud formal a BBVA',                peso: 25 },
-              { id: 'gac-3', label: 'Coordinación y seguimiento',             peso: 25 },
-              { id: 'gac-4', label: 'Validación de accesos otorgados',        peso: 25 },
-            ],
-          },
-          {
-            name: 'Definición de la automatización', pct: 0, pctExp: 0, startWeek: 5, endWeek: 5,
-            etapas: [
-              { id: 'da-1', label: 'Análisis de requerimientos de automatización', peso: 35 },
-              { id: 'da-2', label: 'Diseño de la arquitectura de mallas',          peso: 40 },
-              { id: 'da-3', label: 'Documentación del diseño técnico',             peso: 25 },
-            ],
-          },
-          {
-            name: 'Construcción Mallas Control-M distribuido', pct: 0, pctExp: 0, startWeek: 6, endWeek: 8,
-            etapas: [
-              { id: 'cm-1', label: 'Configuración del agente Control-M',                  peso: 20 },
-              { id: 'cm-2', label: 'Construcción de mallas de procesamiento',             peso: 35 },
-              { id: 'cm-3', label: 'Construcción de mallas de control y monitoreo',       peso: 30 },
-              { id: 'cm-4', label: 'Pruebas en entorno local',                            peso: 15 },
-            ],
-          },
-          {
-            name: 'Pruebas entornos Work · Mallas Control-M', pct: 0, pctExp: 0, startWeek: 7, endWeek: 8,
-            etapas: [
-              { id: 'pwm-1', label: 'Despliegue de mallas en entorno Work',       peso: 30 },
-              { id: 'pwm-2', label: 'Ejecución de pruebas funcionales',           peso: 40 },
-              { id: 'pwm-3', label: 'Validación de dependencias y triggers',      peso: 30 },
-            ],
-          },
-          {
-            name: 'Elaboración documentación Mallas ADA', pct: 0, pctExp: 0, startWeek: 7, endWeek: 8,
-            etapas: [
-              { id: 'edm-1', label: 'Documentación técnica de las mallas',         peso: 40 },
-              { id: 'edm-2', label: 'Diagramas de flujo de orquestación',          peso: 30 },
-              { id: 'edm-3', label: 'Manual de operación y monitoreo',             peso: 30 },
-            ],
-          },
-          {
-            name: 'Certificación mallas Control-M', pct: 0, pctExp: 0, startWeek: 8, endWeek: 10, bbva: true,
-            etapas: [
-              { id: 'cmc-1', label: 'Presentación de mallas al equipo BBVA',   peso: 25 },
-              { id: 'cmc-2', label: 'Ejecución supervisada con BBVA',          peso: 35 },
-              { id: 'cmc-3', label: 'Corrección de observaciones',             peso: 25, optional: true },
-              { id: 'cmc-4', label: 'Aprobación formal de certificación',      peso: 15 },
-            ],
-          },
-          {
-            name: 'Instalación mallas producción', pct: 0, pctExp: 0, startWeek: 10, endWeek: 10, bbva: true,
-            etapas: [
-              { id: 'imp-1', label: 'Migración de mallas a producción',              peso: 40 },
-              { id: 'imp-2', label: 'Configuración de schedules productivos',        peso: 30 },
-              { id: 'imp-3', label: 'Validación de instalación en producción',       peso: 30 },
-            ],
-          },
-          {
-            name: 'Estabilización procesos en producción', pct: 0, pctExp: 0, startWeek: 11, endWeek: 13,
-            etapas: [
-              { id: 'epp-1', label: 'Monitoreo de primeras ejecuciones productivas', peso: 40 },
-              { id: 'epp-2', label: 'Análisis y corrección de incidencias',          peso: 35 },
-              { id: 'epp-3', label: 'Documentación final de estabilización',         peso: 25 },
-            ],
-          },
-        ],
-      },
-    ],
-  },
-
-  // ── Proyectos resumen — pctReal/pctExp en 0 hasta que se carguen actividades reales ──
-  { projectId:'NGA', startDate:'2026-04-27', respBBVA:'TBD · BBVA',              respTimia:'Juan Pablo Arévalo M.', pasos:[], alertas:[], bloqueantes:[], entregables:[{id:'doc',name:'I. Documentación y gobierno',pctReal:0,pctExp:0,activities:[]},{id:'etl',name:'II. Componentes ETL',pctReal:0,pctExp:0,activities:[]},{id:'val',name:'III. Validación y despliegue',pctReal:0,pctExp:0,activities:[]}] },
-  {
-    projectId: 'CRONOS',
-    startDate: '2026-06-02',   // S1 = 2 jun → hoy 25 jun cae en S4
-    respBBVA:  'Pedro Gómez · BBVA Analytics',
-    respTimia: 'Juan Pablo Arévalo M.',
-    pasos: [
-      'Completar diccionario técnico y enviar a Gobierno de datos',
-      'Iniciar construcción componentes Spark-Scala (semana en curso)',
-      'Gestionar acceso Control-M distribuido con BBVA',
-    ],
-    alertas: ['Circuito validación Gobierno Técnico sin respuesta de BBVA'],
-    bloqueantes: [],
-    entregables: [
-      {
-        id: 'doc', name: 'I. Documentación y gobierno', pctReal: 55, pctExp: 45,
-        activities: [
-          { name: 'Análisis y resolución de dudas',          pct: 100, pctExp: 100, startWeek: 1, endWeek: 2 },
-          { name: 'Elaboración diccionario técnico',          pct:  75, pctExp: 100, startWeek: 1, endWeek: 3,
-            etapas: [
-              { id:'dt-1', label:'Levantamiento inicial de campos',  peso: 25 },
-              { id:'dt-2', label:'Envío a Gobierno de datos',        peso: 25 },
-              { id:'dt-3', label:'Correcciones de Gobierno',         peso: 25, optional: true },
-              { id:'dt-4', label:'Validación final del diccionario', peso: 25 },
-            ],
-          },
-          { name: 'Inicialización en Nebula',                pct: 100, pctExp: 100, startWeek: 1, endWeek: 1, bbva: true },
-          { name: 'Documentación técnica ETL',               pct:  50, pctExp:  75, startWeek: 2, endWeek: 4 },
-          { name: 'Circuito validación Gobierno Técnico',    pct:   0, pctExp:  20, startWeek: 3, endWeek: 6, bbva: true },
-          { name: 'Construcción Modelo Solución del Dato',   pct:  30, pctExp:  50, startWeek: 2, endWeek: 4 },
-        ],
-      },
-      {
-        id: 'ada', name: 'II. Componentes ADA', pctReal: 10, pctExp: 15,
-        activities: [
-          { name: 'Gestión repos Bitbucket · Procesamiento', pct: 100, pctExp: 100, startWeek: 1, endWeek: 1, bbva: true },
-          { name: 'Construcción Spark · Scala',              pct:  15, pctExp:  20, startWeek: 3, endWeek: 9,
-            etapas: [
-              { id:'sp-1', label:'Ambientación repositorio local',      peso: 10 },
-              { id:'sp-2', label:'Construcción clases principales',     peso: 40 },
-              { id:'sp-3', label:'Config y utilitarios',                peso: 20 },
-              { id:'sp-4', label:'Test unitarios y aceptación',         peso: 20 },
-              { id:'sp-5', label:'Escritura local · validación salida', peso: 10 },
-            ],
-          },
-          { name: 'Construcción reglas calidad (Hammurabi)', pct:   0, pctExp:   0, startWeek:  6, endWeek:  8 },
-          { name: 'Pruebas en entorno local',                pct:   0, pctExp:   0, startWeek:  8, endWeek:  9 },
-          { name: 'Despliegue y pruebas entornos Work',      pct:   0, pctExp:   0, startWeek:  9, endWeek: 10, bbva: true },
-          { name: 'Certificación calidad por equipo QA',     pct:   0, pctExp:   0, startWeek: 10, endWeek: 11, bbva: true },
-        ],
-      },
-      {
-        id: 'auto', name: 'III. Automatización y orquestación', pctReal: 0, pctExp: 0,
-        activities: [
-          { name: 'Gestión acceso Control-M distribuido',    pct: 0, pctExp: 0, startWeek:  4, endWeek:  5, bbva: true },
-          { name: 'Definición de la automatización',         pct: 0, pctExp: 0, startWeek:  5, endWeek:  6 },
-          { name: 'Construcción Mallas Control-M',           pct: 0, pctExp: 0, startWeek:  7, endWeek: 10 },
-          { name: 'Pruebas orquestación en Work',            pct: 0, pctExp: 0, startWeek:  9, endWeek: 11 },
-          { name: 'Certificación mallas Control-M',          pct: 0, pctExp: 0, startWeek: 10, endWeek: 12, bbva: true },
-          { name: 'Estabilización en producción',            pct: 0, pctExp: 0, startWeek: 12, endWeek: 13 },
-        ],
-      },
-    ],
-  },
-  { projectId:'SDM1',    respBBVA:'TBD · BBVA',              respTimia:'Diego Sánchez',         pasos:[], alertas:[], bloqueantes:[], entregables:[{id:'doc',name:'I. Documentación',pctReal:0,pctExp:0,activities:[]},{id:'comp',name:'II. Componentes',pctReal:0,pctExp:0,activities:[]},{id:'int',name:'III. Integración',pctReal:0,pctExp:0,activities:[]}] },
-  { projectId:'SDM2',    respBBVA:'TBD · BBVA',              respTimia:'Diego Sánchez',         pasos:[], alertas:[], bloqueantes:[], entregables:[{id:'doc',name:'I. Documentación',pctReal:0,pctExp:0,activities:[]},{id:'comp',name:'II. Componentes',pctReal:0,pctExp:0,activities:[]},{id:'auto',name:'III. Automatización',pctReal:0,pctExp:0,activities:[]}] },
-  { projectId:'MURIC',   respBBVA:'TBD · BBVA',              respTimia:'Diego Sánchez',         pasos:[], alertas:[], bloqueantes:[], entregables:[{id:'doc',name:'I. Documentación',pctReal:0,pctExp:0,activities:[]},{id:'comp',name:'II. Componentes',pctReal:0,pctExp:0,activities:[]},{id:'auto',name:'III. Automatización',pctReal:0,pctExp:0,activities:[]}] },
-  { projectId:'BCBS239', respBBVA:'TBD · BBVA',              respTimia:'Diego Sánchez',         pasos:[], alertas:[], bloqueantes:[], entregables:[{id:'doc',name:'I. Documentación',pctReal:0,pctExp:0,activities:[]},{id:'comp',name:'II. Componentes ADA',pctReal:0,pctExp:0,activities:[]},{id:'auto',name:'III. Automatización',pctReal:0,pctExp:0,activities:[]}] },
-  { projectId:'BRICKELL',respBBVA:'TBD · BBVA',              respTimia:'Diego Sánchez',         pasos:[], alertas:[], bloqueantes:[], entregables:[{id:'doc',name:'I. Documentación',pctReal:0,pctExp:0,activities:[]},{id:'comp',name:'II. Componentes',pctReal:0,pctExp:0,activities:[]},{id:'close',name:'III. Cierre',pctReal:0,pctExp:0,activities:[]}] },
-  { projectId:'OPTIM',   respBBVA:'N/A · Credicorp Capital', respTimia:'David Huamán',          pasos:[], alertas:[], bloqueantes:[], entregables:[{id:'doc',name:'I. Documentación',pctReal:0,pctExp:0,activities:[]},{id:'comp',name:'II. Componentes',pctReal:0,pctExp:0,activities:[]}] },
-  { projectId:'PINTO',   respBBVA:'TBD · BBVA',              respTimia:'Juan Pablo Arévalo',    pasos:[], alertas:[], bloqueantes:[], entregables:[{id:'doc',name:'I. Documentación',pctReal:0,pctExp:0,activities:[]},{id:'comp',name:'II. Componentes',pctReal:0,pctExp:0,activities:[]},{id:'auto',name:'III. Automatización',pctReal:0,pctExp:0,activities:[]}] },
-  { projectId:'QA',      respBBVA:'TBD · BBVA',              respTimia:'Juan Pablo Arévalo',    pasos:[], alertas:[], bloqueantes:[], entregables:[{id:'doc',name:'I. Documentación',pctReal:0,pctExp:0,activities:[]},{id:'comp',name:'II. Componentes QA',pctReal:0,pctExp:0,activities:[]}] },
-  { projectId:'FABRICA', respBBVA:'N/A · Credicorp Capital', respTimia:'David Huamán',          pasos:[], alertas:[], bloqueantes:[], entregables:[{id:'doc',name:'I. Documentación',pctReal:0,pctExp:0,activities:[]},{id:'comp',name:'II. Componentes',pctReal:0,pctExp:0,activities:[]},{id:'ent',name:'III. Entregables',pctReal:0,pctExp:0,activities:[]}] },
-];
+// Sin planes hardcodeados: todos los planes vienen de Estimaciones (timia_plan_configs)
+const WORK_PLANS_RAW: Omit<WorkPlan,'planKey'>[] = [];
 const WORK_PLANS: WorkPlan[] = WORK_PLANS_RAW.map(p => ({ ...p, planKey: p.projectId }));
 
 // ─── GeneralGantt — Gantt calendario común de todos los cronogramas ──────────
@@ -2340,6 +1968,49 @@ function buildEffectivePlans(): WorkPlan[] {
 }
 
 
+/** % efectivo de una actividad sin estado React (misma lógica que getActivityPct del componente). */
+function purePct(planKey: string, eid: string, i: number, act: PlanActivity, etapaStates: EtapaStates, pcts: Record<string, number>): number {
+  if (act.etapas?.length) {
+    const any = act.etapas.some(e => etapaStates[`${planKey}__${eid}__${i}__${e.id}`] !== undefined);
+    if (!any) return act.pct;
+    return Math.min(100, act.etapas.reduce((s, e) => s + (etapaStates[`${planKey}__${eid}__${i}__${e.id}`]?.done ? e.peso : 0), 0));
+  }
+  const k = `${planKey}-${eid}-${i}`;
+  return pcts[k] !== undefined ? pcts[k] : act.pct;
+}
+
+export interface PlanSummary {
+  planKey: string; projectId: string; cronoName: string; startDate?: string;
+  real: number; exp: number; nActs: number; done: number; late: number; inProgress: number;
+  openBloq: number; openAlert: number; changeDays: number; blockDays: number;
+  start: Date | null; end: Date | null; todayIdx: number; weeks: number;
+}
+/** Resumen de todos los planes con datos reales (dashboards, standup, riesgo). */
+export function getPlanSummaries(): PlanSummary[] {
+  const holidays = new Set(adminStore.getHolidays().map(h => h.date));
+  const etapaStates = adminStore.getEtapaStates(); const pcts = adminStore.getPlanPcts();
+  const issues = adminStore.getPlanIssues(); const changes = adminStore.getBitacora().filter(c => (c.impacts?.length ?? 0) > 0);
+  const today = new Date(); today.setHours(12, 0, 0, 0);
+  return buildEffectivePlans().map(p => {
+    const todayIdx = computeCurrentWeekIdx(p.startDate, holidays);
+    let sr = 0, se = 0, n = 0, done = 0, late = 0, inProg = 0, cd = 0, bd = 0, maxEnd = 0;
+    p.entregables.forEach(e => e.activities.forEach((a, i) => {
+      const pct = purePct(p.planKey, e.id, i, a, etapaStates, pcts);
+      const ex = extensionFor(changes, p.planKey, e.id, i, a.endWeek, issues, holidays);
+      sr += pct; se += computeActExpPct(a.startWeek, ex.effEndWeek, todayIdx); n++;
+      cd += ex.changeDays; bd += ex.blockDays; maxEnd = Math.max(maxEnd, ex.effEndWeek);
+      const end = effectiveEndDate(p.startDate, a.endWeek, ex.days, holidays);
+      if (pct >= 100) done++; else if (end && end < today) late++; else if (todayIdx + 1 >= a.startWeek) inProg++;
+    }));
+    const mine = issues.filter(x => !x.endDate && issueImpacts(x).some(m => m.planKey === p.planKey) || (!x.endDate && x.planKey === p.planKey));
+    const weeks = Math.max(p.weekLabels?.length ?? TOTAL_WEEKS, maxEnd);
+    return { planKey: p.planKey, projectId: p.projectId, cronoName: p.cronoId ? (p.cronoName ?? p.cronoId) : CRONO_MAIN_NAME, startDate: p.startDate,
+      real: n ? sr / n : 0, exp: n ? se / n : 0, nActs: n, done, late, inProgress: inProg,
+      openBloq: mine.filter(x => x.type === 'bloqueante').length, openAlert: mine.filter(x => x.type === 'alerta').length,
+      changeDays: cd, blockDays: bd, start: weekToActualDate(p.startDate, 1, holidays), end: weekToActualDate(p.startDate, weeks + 1, holidays), todayIdx, weeks };
+  });
+}
+
 /** Esqueleto de los planes (para selectores de impacto en otras vistas, ej. Tareas/Bitácora). */
 export function getPlanOutlines(projectId?: string): PlanOutline[] {
   return buildEffectivePlans()
@@ -2351,18 +2022,13 @@ export function getPlanOutlines(projectId?: string): PlanOutline[] {
 export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?: () => void }) {
   const { user } = useAuth();
   const role = user?.role ?? 'developer';
-  const canMark = user ? canAccess(user.role, 'plan.edit_progress') : false;
-  const canIssues = user ? canAccess(user.role, 'plan.manage_issues') : false;
-
   const [effectivePlans, setEffectivePlans] = useState<WorkPlan[]>(buildEffectivePlans);
-
   // Refrescar en cada mount (puede venir de Estimaciones con nuevo plan)
   useEffect(() => { setEffectivePlans(buildEffectivePlans()); }, []);
 
   // Filtrar según rol del usuario
-  const visiblePlans = canAccess(role, 'projects.view_all')
-    ? effectivePlans
-    : effectivePlans.filter(p => (user?.projectIds ?? []).includes(p.projectId));
+  // Un plan se ve si el usuario tiene plan.view con su rol EN ese proyecto (p.ej. dev en FICO no lo ve)
+  const visiblePlans = effectivePlans.filter(p => canInProject(user, 'plan.view', p.projectId));
 
   const [etapaStates,       setEtapaStates]       = useState<EtapaStates>(()         => adminStore.getEtapaStates());
   const [historial,         setHistorial]         = useState<PlanHistorialEntry[]>(() => adminStore.getHistorial());
@@ -2384,10 +2050,9 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
       localStorage.removeItem('timia_last_plan_project');
       return lastGen;
     }
-    // Para no-PM, arrancar en el primer proyecto asignado
-    if (!user || user.role === 'pm') return WORK_PLANS[0].planKey;
-    const firstAssigned = WORK_PLANS.find(p => (user.projectIds ?? []).includes(p.projectId));
-    return firstAssigned?.planKey ?? WORK_PLANS[0].planKey;
+    // Primer plan visible (los planes salen de Estimaciones)
+    const plans = buildEffectivePlans().filter(p => canInProject(user, 'plan.view', p.projectId));
+    return plans[0]?.planKey ?? '';
   });
   const [drawer,            setDrawer]            = useState<DrawerState | null>(null);
   // Vista consolidada del proyecto (solo aplica si tiene varios cronogramas)
@@ -2412,9 +2077,13 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
     }
   }, []);
 
-  // El plan activo (selected = planKey). Si el planKey ya no existe, cae al principal del proyecto.
-  const plan = effectivePlans.find(p => p.planKey === selected)
-    ?? effectivePlans.find(p => p.projectId === splitPlanKey(selected).projectId);
+  // El plan activo (selected = planKey). Si el planKey ya no existe o no es visible, cae al primero visible.
+  const plan = visiblePlans.find(p => p.planKey === selected)
+    ?? visiblePlans.find(p => p.projectId === splitPlanKey(selected).projectId)
+    ?? visiblePlans[0];
+  // Permisos con el rol efectivo en el proyecto del plan activo
+  const canMark = !!user && !!plan && canInProject(user, 'plan.edit_progress', plan.projectId);
+  const canIssues = !!user && !!plan && canInProject(user, 'plan.manage_issues', plan.projectId);
 
   // Cronogramas del proyecto activo (principal + adicionales) — para tabs y consolidado
   const projectPlans = plan ? effectivePlans.filter(p => p.projectId === plan.projectId) : [];
@@ -3090,7 +2759,7 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
                     tab('__all', 'General', consolidado, () => setConsolidado(true), `${Math.round(aggregatePlans(projectPlans).real)}%`),
                     ...projectPlans.map(p => {
                       const a = aggregatePlans([p]);
-                      return tab(p.planKey, p.cronoId ? (p.cronoName ?? p.cronoId) : CRONO_MAIN_NAME, !consolidado && p.planKey === plan.planKey,
+                      return tab(p.planKey, p.cronoId ? (p.cronoName ?? p.cronoId) : 'Cronograma base', !consolidado && p.planKey === plan.planKey,
                         () => { setSelected(p.planKey); setConsolidado(false); }, `${Math.round(a.real)}%`);
                     }),
                   ];

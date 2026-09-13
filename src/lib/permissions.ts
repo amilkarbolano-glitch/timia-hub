@@ -65,7 +65,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, string[]> = {
   ],
   // Desarrollador: ve lo suyo, mueve sus tareas, reporta bloqueantes, carga su TR
   developer: [
-    'plan.view', 'plan.manage_issues',
+    'plan.manage_issues',
     'tasks.view', 'tasks.update_status', 'tasks.comment',
     'bitacora.view', 'bitacora.write', 'circuitos.view',
     'inventario.view', 'inventario.edit',
@@ -125,6 +125,29 @@ export function currentMatrix(): Record<UserRole, string[]> {
   } catch {}
   out.account_manager = ALL_PERMISSIONS;
   return out;
+}
+
+/** Rol efectivo de un usuario en un proyecto: override de timia_project_roles ("userId:projectId") o su rol base. */
+export function effectiveRole(user: { id: string; role: string } | null | undefined, projectId?: string): UserRole | undefined {
+  if (!user) return undefined;
+  const base = (LEGACY_ROLE[user.role] ?? user.role) as UserRole;
+  if (!projectId || base === 'account_manager') return base;
+  try {
+    const raw = localStorage.getItem('timia_project_roles');
+    const map = raw ? JSON.parse(raw) : {};
+    const o = map?.[`${user.id}:${projectId}`];
+    if (typeof o === 'string') return (LEGACY_ROLE[o] ?? o) as UserRole;
+  } catch {}
+  return base;
+}
+
+/** Permiso de un usuario dentro de un proyecto (usa el rol efectivo en ese proyecto). */
+export function canInProject(user: { id: string; role: string; projectIds?: string[] } | null | undefined, permission: string, projectId: string): boolean {
+  if (!user) return false;
+  const role = effectiveRole(user, projectId);
+  if (!hasPermission(role, permission)) return false;
+  // sin projects.view_all, además debe estar asignado al proyecto
+  return hasPermission(role, 'projects.view_all') || (user.projectIds ?? []).includes(projectId);
 }
 
 export function hasPermission(role: string | undefined, permission: string): boolean {

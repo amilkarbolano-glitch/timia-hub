@@ -208,11 +208,11 @@ function AppInner() {
         );
 
       case 'proyectos':
-        return role === 'pm' ? <ProyectosPage /> : <AccessDenied onBack={goHome}/>;
+        return canAccess(role, 'projects.view_all') || role === 'pm' ? <ProyectosPage /> : <AccessDenied onBack={goHome}/>;
 
       case 'analytics':
         // PM tiene su propio dashboard ejecutivo
-        return role === 'pm' ? <PMDashboard onViewChange={navigate} /> : <Analytics />;
+        return role === 'pm' || role === 'account_manager' ? <PMDashboard onViewChange={navigate} /> : <Analytics />;
 
       case 'plan-trabajo':
         return canAccess(role, 'view_plan_trabajo')
