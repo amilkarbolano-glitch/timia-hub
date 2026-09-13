@@ -14,10 +14,9 @@ const ROLE_PERMS: Record<string, {
   canCreate: boolean; canEdit: boolean; canAssign: boolean;
   canDelete: boolean; canMove: boolean; canComment: boolean;
 }> = {
+  account_manager: { canCreate:true, canEdit:true, canAssign:true, canDelete:true, canMove:true, canComment:true },
   pm:           { canCreate:true,  canEdit:true,  canAssign:true,  canDelete:true,  canMove:true,  canComment:true  },
   tech_lead:    { canCreate:true,  canEdit:true,  canAssign:true,  canDelete:true,  canMove:true,  canComment:true  },
-  project_lead: { canCreate:true,  canEdit:true,  canAssign:true,  canDelete:false, canMove:true,  canComment:true  },
-  tech_ref:     { canCreate:true,  canEdit:true,  canAssign:true,  canDelete:false, canMove:true,  canComment:true  },
   developer:    { canCreate:false, canEdit:false, canAssign:false, canDelete:false, canMove:true,  canComment:true  },
 };
 // Ahora los permisos salen de la matriz (Herramientas › Roles y permisos); ROLE_PERMS queda como referencia
@@ -505,7 +504,7 @@ export default function KanbanBoard({ userRole }: KanbanBoardProps) {
           <div style={{ display:'flex', alignItems:'center', gap:10 }}>
             <h1 style={{ margin:0, fontSize:20, fontWeight:600, color:'#111' }}>Tablero</h1>
             {/* Badge de rol para Referente Técnico — distintivo visual muy importante */}
-            {role === 'tech_ref' && (
+            {role === 'tech_lead' && (
               <span style={{
                 display:'inline-flex', alignItems:'center', gap:5,
                 padding:'3px 10px', borderRadius:20,

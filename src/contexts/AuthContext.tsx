@@ -5,10 +5,12 @@ import { persist, apiMe, apiLoginDemo, apiLoginGoogle, apiLogout, loadStateFromA
 
 // pm: Rodolfo Pereda → vista ejecutiva total, acceso admin y estimaciones
 // tech_lead: Juan Pablo/Diego/David → multi-proyecto de su área, marca etapas
-// project_lead: lidera un proyecto específico
-// tech_ref: Juliana → referente técnico, apoya líder en actividades asignadas
 // developer: Sergio/Fabrizio/Ana → ejecuta sus tareas asignadas
-export type UserRole = 'pm' | 'tech_lead' | 'project_lead' | 'tech_ref' | 'developer';
+// Roles (4 niveles): account_manager (gerente de cuenta) · pm · tech_lead (líder/referente técnico) · developer
+export type UserRole = 'account_manager' | 'pm' | 'tech_lead' | 'developer';
+/** Roles antiguos → nuevos (datos guardados en navegadores/DB viejos) */
+export const LEGACY_ROLE_MAP: Record<string, UserRole> = { project_lead: 'tech_lead', tech_ref: 'tech_lead' };
+export function normalizeRole(r: string | undefined | null): UserRole { const x = LEGACY_ROLE_MAP[r ?? ''] ?? r; return (['account_manager','pm','tech_lead','developer'] as string[]).includes(x as string) ? x as UserRole : 'developer'; }
 
 export interface AuthUser {
   id: string;
@@ -24,6 +26,12 @@ export interface AuthUser {
 // ─── Permisos por rol ─────────────────────────────────────────────────────────
 
 export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
+  account_manager: [
+    'view_all_projects', 'view_analytics', 'view_bank_status', 'view_audit', 'view_team_overview', 'view_standards',
+    's_audit', 'u_roles', 'create_projects', 'view_estimaciones', 'edit_estimaciones', 'view_admin',
+    'view_bitacora', 'write_bitacora', 'view_circuitos', 'edit_circuitos', 'view_plan_trabajo', 'mark_etapas',
+    'generate_standup', 'export_pptx',
+  ],
   pm: [
     'view_all_projects', 'view_analytics', 'view_bank_status',
     'view_audit', 'view_team_overview', 'view_standards',
@@ -46,20 +54,6 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     // Admin: el líder ve y gestiona solo los proyectos que tiene asignados
     'view_admin',
   ],
-  project_lead: [
-    'view_project', 'view_bank_status', 'manage_tasks', 'assign_tasks',
-    'view_inventory', 'view_bitacora', 'view_controlm', 'assign_tech_ref',
-    'view_plan_trabajo',
-  ],
-  // Referente Técnico: apoya al líder, puede crear borradores de estimaciones
-  tech_ref: [
-    'view_project', 'view_bank_status', 'manage_tasks',
-    'update_task_status', 'comment_tasks',
-    'view_inventory', 'view_bitacora', 'write_bitacora', 'view_controlm',
-    'view_plan_trabajo', 'mark_etapas',
-    // tech_ref puede crear borradores; el líder técnico los revisa y aprueba
-    'view_estimaciones', 'edit_estimaciones',
-  ],
   developer: [
     'view_my_tasks', 'update_task_status', 'comment_tasks',
     'view_inventory', 'view_bitacora', 'write_bitacora',
@@ -76,18 +70,16 @@ export function canAccess(role: UserRole, permission: string): boolean {
 
 // Vista inicial según rol
 export const ROLE_LANDING: Record<UserRole, string> = {
+  account_manager: 'analytics',
   pm:           'analytics',
   tech_lead:    'plan-trabajo',
-  project_lead: 'plan-trabajo',
-  tech_ref:     'plan-trabajo',
   developer:    'dashboard',
 };
 
 export const ROLE_LABEL: Record<UserRole, string> = {
+  account_manager: 'Gerente de cuenta',
   pm:           'Project Manager',
-  tech_lead:    'Líder Técnico',
-  project_lead: 'Líder de Proyecto',
-  tech_ref:     'Referente Técnico',
+  tech_lead:    'Líder / Referente técnico',
   developer:    'Desarrollador',
 };
 
@@ -108,6 +100,8 @@ export const PROJECTS = [
   { id: 'BCBS239',  name: 'BCBS239',  area: 'Diego Sánchez', color: '#7e22ce' },
   // David Huamán — Credicorp Capital
   { id: 'OPTIM',    name: 'Optimización', area: 'David Huamán', color: '#0369a1' },
+  // Piloto SDATOOL-54364
+  { id: 'MIGBD',    name: 'Migración BD a ADA', area: 'Juan Pablo Arévalo', color: '#0e7490' },
   { id: 'FABRICA',  name: 'Fábrica',  area: 'David Huamán', color: '#be185d' },
 ];
 
@@ -118,33 +112,33 @@ export const MOCK_ACCOUNTS: AuthUser[] = [
   // ── Project Manager ───────────────────────────────────────────────────────
   {
     id: 'u-rodolfo', name: 'Rodolfo Pereda', email: 'rodolfo.pereda@timia.ai',
-    initials: 'RP', role: 'pm', avatarColor: '#dc2626',
+    initials: 'RP', role: 'account_manager', avatarColor: '#dc2626',
     projectIds: PROJECTS.map(p => p.id),
     areaLabel: 'Project Manager · BBVA CO & Credicorp Capital',
   },
   // ── Líderes Técnicos ──────────────────────────────────────────────────────
   {
     id: 'u-juan', name: 'Juan Pablo Arévalo', email: 'juanpablo.arevalo@timia.ai',
-    initials: 'JA', role: 'tech_lead', avatarColor: '#7c3aed',
+    initials: 'JA', role: 'pm', avatarColor: '#7c3aed',
     projectIds: ['FICO', 'NGA', 'CRONOS', 'PINTO', 'QA'],
     areaLabel: 'Líder Técnico · FICO · NGA · CRONOS · PINTO · QA',
   },
   {
     id: 'u-david', name: 'David Huamán', email: 'david.huaman@timia.ai',
-    initials: 'DH', role: 'tech_lead', avatarColor: '#0369a1',
+    initials: 'DH', role: 'pm', avatarColor: '#0369a1',
     projectIds: ['OPTIM', 'FABRICA', 'SDM1', 'SDM2'],
     areaLabel: 'Líder Técnico · Credicorp Capital · SDM',
   },
   {
     id: 'u-diego', name: 'Diego Sánchez', email: 'diego.sanchez@timia.ai',
-    initials: 'DS', role: 'tech_lead', avatarColor: '#2563eb',
+    initials: 'DS', role: 'pm', avatarColor: '#2563eb',
     projectIds: ['SDM1', 'SDM2', 'MURIC', 'BRICKELL', 'BCBS239'],
     areaLabel: 'Líder Técnico · SDM · MURIC · BRICKELL · BCBS239',
   },
   // ── Referente Técnico ─────────────────────────────────────────────────────
   {
     id: 'u-juliana', name: 'Juliana Garzón', email: 'juliana.garzon@timia.ai',
-    initials: 'JG', role: 'tech_ref', avatarColor: '#0f766e',
+    initials: 'JG', role: 'tech_lead', avatarColor: '#0f766e',
     projectIds: ['FICO', 'NGA'],
     areaLabel: 'Referente Técnico · FICO · NGA',
   },
@@ -206,7 +200,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (persist.mode === 'api') {
         // Sesión en cookie httpOnly: la API dice quién soy (el estado ya se cargó en seedFromRemote)
         const me = await apiMe();
-        if (me) setUser(me as AuthUser);
+        if (me) setUser({ ...(me as AuthUser), role: normalizeRole(me.role) });
         setIsLoading(false);
         return;
       }
@@ -244,12 +238,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
   const loginDemo = async (userId: string) => {
     const r = await apiLoginDemo(userId);
-    if (r.user) { await afterApiLogin(r.user as AuthUser); return {}; }
+    if (r.user) { await afterApiLogin({ ...(r.user as AuthUser), role: normalizeRole(r.user.role) }); return {}; }
     return { error: r.error };
   };
   const loginWithGoogle = async (credential: string) => {
     const r = await apiLoginGoogle(credential);
-    if (r.user) { await afterApiLogin(r.user as AuthUser); return {}; }
+    if (r.user) { await afterApiLogin({ ...(r.user as AuthUser), role: normalizeRole(r.user.role) }); return {}; }
     return { error: r.error };
   };
 

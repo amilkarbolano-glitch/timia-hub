@@ -12,11 +12,10 @@ import { PROJECTS, useAuth, canAccess } from '../contexts/AuthContext';
 // ─── Paleta colores ────────────────────────────────────────────────────────────
 const COLORS = ['#dc2626','#7c3aed','#2563eb','#0891b2','#059669','#d97706','#be185d','#0369a1','#0f766e','#4f46e5','#b45309','#7e22ce'];
 const ROLES: { value: UserRole; label: string }[] = [
-  { value: 'pm',           label: 'Project Manager' },
-  { value: 'tech_lead',    label: 'Líder Técnico' },
-  { value: 'project_lead', label: 'Líder de Proyecto' },
-  { value: 'tech_ref',     label: 'Referente Técnico' },
-  { value: 'developer',    label: 'Desarrollador' },
+  { value: 'account_manager', label: 'Gerente de cuenta' },
+  { value: 'pm',              label: 'Project Manager' },
+  { value: 'tech_lead',       label: 'Líder / Referente técnico' },
+  { value: 'developer',       label: 'Desarrollador' },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -260,11 +259,10 @@ function TabProyectos({ onViewChange, allowedProjectIds }: { onViewChange?: (vie
   const PRIORIDADES: Priority[] = ['Baja', 'Media', 'Alta', 'Crítica'];
   const PRIO_COLOR: Record<Priority, string> = { Baja: '#64748b', Media: '#2563eb', Alta: '#d97706', Crítica: '#dc2626' };
   const ROLE_COLOR: Record<UserRole, string> = {
-    pm: '#7c3aed', tech_lead: '#dc2626', project_lead: '#0891b2',
-    tech_ref: '#059669', developer: '#d97706',
+    account_manager: '#dc2626', pm: '#7c3aed', tech_lead: '#0d9488', developer: '#d97706',
   };
   const ROLE_LABEL: Record<UserRole, string> = {
-    pm: 'PM', tech_lead: 'TL', project_lead: 'PL', tech_ref: 'TR', developer: 'DEV',
+    account_manager: 'GC', pm: 'PM', tech_lead: 'TL', developer: 'DEV',
   };
 
   function updateProject(proj: AdminProject) {
@@ -488,8 +486,7 @@ function TabEquipo() {
   const [showNew, setShowNew] = useState(false);
 
   const ROLE_COLOR: Record<UserRole, string> = {
-    pm: '#7c3aed', tech_lead: '#dc2626', project_lead: '#0891b2',
-    tech_ref: '#059669', developer: '#d97706',
+    account_manager: '#dc2626', pm: '#7c3aed', tech_lead: '#0d9488', developer: '#d97706',
   };
 
   function upsert(u: AdminUser) {
