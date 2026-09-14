@@ -142,7 +142,7 @@ interface AuthContextType {
   /** Login con Google (ID token del botón de Google) contra la API */
   loginWithGoogle: (credential: string) => Promise<{ error?: string }>;
   /** Login con Google vía Firebase Authentication (popup) contra la API */
-  loginWithFirebase: () => Promise<{ error?: string }>;
+  loginWithFirebase: () => Promise<{ error?: string; pending?: boolean }>;
   logout: () => void;
   isLoading: boolean;
 }
@@ -216,7 +216,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const r = await apiLoginFirebase(idToken);
       if (r.user) { await afterApiLogin({ ...(r.user as AuthUser), role: normalizeRole(r.user.role) }); return {}; }
       await signOutFirebase();
-      return { error: r.error };
+      return { error: r.error, pending: r.pending };
     } catch (e: any) {
       const code = String(e?.code ?? '');
       if (code.includes('popup-closed') || code.includes('cancelled')) return { error: 'Se cerró la ventana de Google antes de terminar.' };

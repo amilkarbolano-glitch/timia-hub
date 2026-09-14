@@ -203,6 +203,7 @@ export default function Layout({ children, currentView, onViewChange, userRole }
           </div>
           
           <div className="flex items-center gap-2">
+            <PendingRequestsBadge onClick={() => onViewChange('admin')}/>
             <PersistBadge/>
             <button
               onClick={() => { setShowUserMenu(false); setShowProfile(true); }}
@@ -276,6 +277,21 @@ export default function Layout({ children, currentView, onViewChange, userRole }
 
 
 // ─── Indicador de persistencia: API (Mongo compartida) o Local (db.json + navegador) ──
+export function PendingRequestsBadge({ onClick }: { onClick?: () => void }) {
+  const { user } = useAuth();
+  const [n, setN] = React.useState(0);
+  React.useEffect(() => {
+    const read = () => { try { const r = JSON.parse(localStorage.getItem('timia_access_requests') ?? '[]'); setN(Array.isArray(r) ? r.filter((x: any) => x.status === 'pending').length : 0); } catch { setN(0); } };
+    read(); const t = setInterval(read, 15000); return () => clearInterval(t);
+  }, []);
+  if (!user || !canAccess(user.role, 'team.manage') || n === 0) return null;
+  return (
+    <button onClick={onClick} title={`${n} solicitud(es) de acceso pendiente(s)`} style={{ display:'inline-flex', alignItems:'center', gap:5, fontSize:10, fontWeight:700, color:'#92400e', background:'#fef3c7', border:'0.5px solid #fde68a', borderRadius:10, padding:'3px 8px', cursor:'pointer' }}>
+      {n} acceso{n !== 1 ? 's' : ''} por aprobar
+    </button>
+  );
+}
+
 export function PersistBadge() {
   const [, force] = React.useState(0);
   React.useEffect(() => persist.onChange(() => force(v => v + 1)), []);

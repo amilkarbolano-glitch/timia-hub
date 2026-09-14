@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import {
   Folders, Users, Clock, Calendar, Building2, Plus, Trash2,
-  Edit2, Save, X, CheckCircle, AlertTriangle,
+  Edit2, Save, X, CheckCircle, AlertTriangle, UserPlus, Check,
 } from 'lucide-react';
 import {
   adminStore, AdminProject, AdminUser, AnsConfig,
-  BbvaAnsConfig, Holiday, Priority, UserRole,
+  BbvaAnsConfig, Holiday, Priority, UserRole, type AccessRequest,
 } from '../lib/adminStore';
 import { PROJECTS, useAuth, canAccess } from '../contexts/AuthContext';
 import { persistSet } from '../lib/persist';
@@ -768,11 +768,12 @@ function TabFestivos() {
 // Panel Principal
 // ═══════════════════════════════════════════════════════════════════════════════
 
-type AdminTab = 'proyectos' | 'usuarios' | 'ans' | 'festivos';
+type AdminTab = 'proyectos' | 'usuarios' | 'solicitudes' | 'ans' | 'festivos';
 
 const ADMIN_TABS: { id: AdminTab; label: string; icon: React.ReactNode; desc: string }[] = [
   { id: 'proyectos', label: 'Proyectos & Equipo', icon: <Folders size={16}/>, desc: 'Proyectos con gestión de equipo integrada' },
   { id: 'usuarios',  label: 'Usuarios',  icon: <Users size={16}/>,     desc: 'CRUD de cuentas y roles' },
+  { id: 'solicitudes', label: 'Solicitudes de acceso', icon: <UserPlus size={16}/>, desc: 'Correos del dominio que pidieron entrar' },
   { id: 'ans',       label: 'Config ANS', icon: <Clock size={16}/>,    desc: 'Días máximos por prioridad y circuito' },
   { id: 'festivos',  label: 'Festivos',  icon: <Calendar size={16}/>,  desc: 'Calendario Colombia' },
 ];
@@ -820,8 +821,96 @@ export default function AdminPanel({ onViewChange }: { onViewChange?: (view: str
       {/* Content */}
       {tab === 'proyectos' && <TabProyectos onViewChange={onViewChange} allowedProjectIds={allowedProjectIds}/>}
       {tab === 'usuarios'  && isPM && <TabEquipo/>}
+      {tab === 'solicitudes' && isPM && <TabSolicitudes/>}
       {tab === 'ans'       && isPM && <TabAns/>}
       {tab === 'festivos'  && isPM && <TabFestivos/>}
+    </div>
+  );
+}
+
+
+// ─── Tab: Solicitudes de acceso ───────────────────────────────────────────────
+// Correos del dominio que se autenticaron con Google pero no están en el panel.
+// Aprobar = crear el usuario (rol + proyectos) y marcar la solicitud; el servidor
+// exige team.manage para escribir timia_access_requests y timia_admin_users.
+
+function TabSolicitudes() {
+  const { user } = useAuth();
+  const [reqs, setReqs] = useState<AccessRequest[]>(() => adminStore.getAccessRequests());
+  const [draft, setDraft] = useState<Record<string, { role: UserRole; projectIds: string[] }>>({});
+  const projects = adminStore.getProjects().filter(p => p.active);
+  const pending = reqs.filter(r => r.status === 'pending').sort((a, b) => (b.lastAttemptAt ?? b.requestedAt).localeCompare(a.lastAttemptAt ?? a.requestedAt));
+  const resolved = reqs.filter(r => r.status !== 'pending').sort((a, b) => (b.resolvedAt ?? '').localeCompare(a.resolvedAt ?? '')).slice(0, 20);
+  const d = (r: AccessRequest) => draft[r.id] ?? { role: 'developer' as UserRole, projectIds: [] };
+  const setD = (r: AccessRequest, patch: Partial<{ role: UserRole; projectIds: string[] }>) => setDraft(x => ({ ...x, [r.id]: { ...d(r), ...patch } }));
+
+  function approve(r: AccessRequest) {
+    const cfg = d(r);
+    if (!cfg.projectIds.length && cfg.role !== 'account_manager') { alert('Asigna al menos un proyecto.'); return; }
+    const users = adminStore.getUsers();
+    if (users.some(u => u.email.toLowerCase() === r.email)) { alert('Ese correo ya existe en Usuarios.'); return; }
+    const name = r.name || r.email.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    const ini = name.split(' ').filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('') || 'US';
+    const color = COLORS[users.length % COLORS.length];
+    const id = 'u-' + r.email.split('@')[0].replace(/[^a-z0-9]/gi, '').toLowerCase();
+    const newUser: AdminUser = { id: users.some(u => u.id === id) ? `${id}-${Date.now().toString(36)}` : id, name, email: r.email, role: cfg.role,
+      projectIds: cfg.role === 'account_manager' ? projects.map(p => p.id) : cfg.projectIds, initials: ini, avatarColor: color, active: true,
+      areaLabel: `${({ account_manager: 'Gerente de cuenta', pm: 'Project Manager', tech_lead: 'Líder técnico', developer: 'Desarrollador' } as Record<string, string>)[cfg.role]} · ${cfg.projectIds.map(pid => projects.find(p => p.id === pid)?.name ?? pid).join(' · ') || 'todos los proyectos'}` };
+    adminStore.saveUsers([...users, newUser]);
+    const next = reqs.map(x => x.id === r.id ? { ...x, status: 'approved' as const, resolvedAt: new Date().toISOString(), resolvedBy: user?.name ?? '' } : x);
+    setReqs(next); adminStore.saveAccessRequests(next);
+  }
+  function reject(r: AccessRequest) {
+    if (!confirm(`¿Rechazar la solicitud de ${r.email}?`)) return;
+    const next = reqs.map(x => x.id === r.id ? { ...x, status: 'rejected' as const, resolvedAt: new Date().toISOString(), resolvedBy: user?.name ?? '' } : x);
+    setReqs(next); adminStore.saveAccessRequests(next);
+  }
+  const fmt = (iso?: string) => iso ? new Date(iso).toLocaleString('es-CO', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+        <p style={{ margin: 0, fontSize: 11, color: '#64748b', flex: 1 }}>
+          Autenticarse con Google no da acceso: solo entran los correos registrados aquí. Las personas del dominio que intentaron entrar aparecen abajo para que las apruebes con su rol y proyectos.
+        </p>
+        <button onClick={() => setReqs(adminStore.getAccessRequests())} style={{ fontSize: 10, padding: '5px 10px', background: '#fff', border: '0.5px solid #e2e8f0', borderRadius: 7, cursor: 'pointer' }}>Actualizar</button>
+      </div>
+      {pending.length === 0 && <div style={{ background: '#fff', border: '0.5px dashed #e2e8f0', borderRadius: 12, padding: 30, textAlign: 'center', fontSize: 12, color: '#94a3b8' }}>No hay solicitudes pendientes.</div>}
+      {pending.map(r => {
+        const cfg = d(r);
+        return (
+          <div key={r.id} style={{ background: '#fff', border: '0.5px solid #fde68a', borderLeft: '4px solid #f59e0b', borderRadius: 12, padding: '12px 16px', marginBottom: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <div style={{ flex: 1, minWidth: 220 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: '#111' }}>{r.name || r.email}</div>
+                <div style={{ fontSize: 11, color: '#64748b' }}>{r.email} · vía {r.provider} · solicitó {fmt(r.requestedAt)}{(r.attempts ?? 1) > 1 ? ` · ${r.attempts} intentos (último ${fmt(r.lastAttemptAt)})` : ''}</div>
+              </div>
+              <select value={cfg.role} onChange={e => setD(r, { role: e.target.value as UserRole })} style={{ padding: '6px 8px', fontSize: 11, border: '0.5px solid #e2e8f0', borderRadius: 7, background: '#fff' }}>
+                {ROLES.map(x => <option key={x.value} value={x.value}>{x.label}</option>)}
+              </select>
+              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                {projects.map(p => { const on = cfg.projectIds.includes(p.id); return (
+                  <button key={p.id} onClick={() => setD(r, { projectIds: on ? cfg.projectIds.filter(x => x !== p.id) : [...cfg.projectIds, p.id] })}
+                    style={{ fontSize: 10, padding: '3px 9px', borderRadius: 10, cursor: 'pointer', border: `0.5px solid ${on ? p.color : '#e2e8f0'}`, background: on ? p.color : '#fff', color: on ? '#fff' : '#374151', fontWeight: on ? 600 : 500 }}>{p.name}</button>
+                ); })}
+              </div>
+              <button onClick={() => approve(r)} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 600, padding: '7px 12px', background: '#15803d', color: '#fff', border: 'none', borderRadius: 7, cursor: 'pointer' }}><Check size={12}/> Aprobar</button>
+              <button onClick={() => reject(r)} style={{ fontSize: 11, padding: '7px 10px', background: '#fff', color: '#b91c1c', border: '0.5px solid #fecaca', borderRadius: 7, cursor: 'pointer' }}>Rechazar</button>
+            </div>
+          </div>
+        );
+      })}
+      {resolved.length > 0 && (
+        <div style={{ marginTop: 14 }}>
+          <p style={{ margin: '0 0 6px', fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '.06em' }}>Historial</p>
+          {resolved.map(r => (
+            <div key={r.id} style={{ display: 'flex', gap: 8, fontSize: 11, padding: '5px 0', borderTop: '0.5px solid #f1f5f9', color: '#64748b' }}>
+              <span style={{ color: r.status === 'approved' ? '#15803d' : '#b91c1c', fontWeight: 700 }}>{r.status === 'approved' ? '✓ aprobada' : '✗ rechazada'}</span>
+              <span style={{ color: '#111' }}>{r.email}</span><span>· {fmt(r.resolvedAt)} · {r.resolvedBy}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
