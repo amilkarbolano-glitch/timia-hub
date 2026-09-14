@@ -39,11 +39,13 @@ export default function Login() {
   const firebaseEnabled = apiMode && !!cfg?.firebase;
   const googleEnabled = apiMode && !firebaseEnabled && !!cfg?.google && !!cfg?.googleClientId;
   const [busy, setBusy] = useState(false);
+  const [pending, setPending] = useState<string>('');
   const handleFirebase = async () => {
-    setError(''); setBusy(true);
+    setError(''); setPending(''); setBusy(true);
     const r = await loginWithFirebase();
     setBusy(false);
-    if (r.error) setError(r.error);
+    if (r.pending) setPending(r.error ?? 'Solicitud registrada');
+    else if (r.error) setError(r.error);
   };
   const demoEnabled = !apiMode || !!cfg?.demo;
   const [apiAccounts, setApiAccounts] = useState<AuthUser[] | null>(null);
@@ -153,6 +155,12 @@ export default function Login() {
             </div>
             {error && (
               <div className="mb-4 px-3 py-2 rounded-lg text-xs" style={{ background:'#fef2f2', border:'0.5px solid #fecaca', color:'#b91c1c' }}>{error}</div>
+            )}
+            {pending && (
+              <div className="mb-4 px-3 py-3 rounded-lg text-xs" style={{ background:'#fffbeb', border:'0.5px solid #fde68a', color:'#92400e', lineHeight:1.5 }}>
+                <strong>Solicitud de acceso enviada.</strong> {pending}
+                <div style={{ marginTop:4, color:'#a16207' }}>Cuando te aprueben, vuelve a entrar con "Continuar con Google".</div>
+              </div>
             )}
 
             {/* Paso 1: botón inicial */}
