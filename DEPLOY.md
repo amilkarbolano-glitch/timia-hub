@@ -35,7 +35,13 @@ base de datos es la fuente de verdad: lo que cambie cualquier usuario lo ven tod
 - Servicio ECS con las dos tareas en la misma task definition (web escucha 80, api 8000); nginx resuelve `api` por `localhost` → cambia `proxy_pass http://api:8000` por `http://127.0.0.1:8000` en `docker/nginx.conf` o usa Service Connect.
 - `MONGO_URL` apuntando a Atlas o DocumentDB (con TLS: `mongodb://user:pass@host:27017/?tls=true&tlsCAFile=...`).
 
-## Autenticación (Google Sign-In)
+## Autenticación (Google vía Firebase Authentication)
+0. **Firebase** (recomendado, es lo que usa DevOps en los otros proyectos): crear proyecto en console.firebase.google.com,
+   Authentication › Sign-in method › **Google** (habilitar), Settings › Authorized domains (agregar `localhost` y el dominio
+   del front), Configuración del proyecto › Tus apps › **Web** → copiar `apiKey`, `authDomain`, `projectId`, `appId` a
+   `FIREBASE_*` en `.env`. Con eso el login muestra "Continuar con Google" y la API valida el token contra el proyecto.
+
+### Alternativa: Google Sign-In directo (sin Firebase)
 1. En Google Cloud → **APIs y servicios → Credenciales → Crear credencial → ID de cliente OAuth → Aplicación web**.
    Orígenes JavaScript autorizados: `http://localhost` (pruebas) y `https://<dominio de la app>`. No hace falta URI de redirección.
 2. En `.env`: `GOOGLE_CLIENT_ID=xxxx.apps.googleusercontent.com`, `ALLOWED_EMAIL_DOMAINS=timia.ai`,

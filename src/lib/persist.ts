@@ -62,7 +62,7 @@ async function fetchWithTimeout(url: string, init: RequestInit, ms: number): Pro
 }
 
 // ─── Autenticación contra la API ─────────────────────────────────────────────
-export interface ApiAuthConfig { google: boolean; googleClientId: string | null; demo: boolean; allowedDomains: string[] }
+export interface ApiAuthConfig { firebase?: { apiKey: string; authDomain: string; projectId: string; appId?: string } | null; google: boolean; googleClientId: string | null; demo: boolean; allowedDomains: string[] }
 export interface ApiUser { id: string; name: string; email: string; role: string; projectIds: string[]; initials: string; avatarColor: string; areaLabel?: string }
 
 /** Detecta la API (público). Si responde, entra en modo API aunque no haya sesión todavía. */
@@ -91,6 +91,10 @@ export async function apiMe(): Promise<ApiUser | null> {
 }
 export async function apiLoginGoogle(credential: string): Promise<{ user?: ApiUser; error?: string }> {
   const r = await authCall('/api/auth/google', { credential });
+  return r.ok ? { user: r.data.user } : { error: r.data?.detail ?? `Error ${r.status}` };
+}
+export async function apiLoginFirebase(idToken: string): Promise<{ user?: ApiUser; error?: string }> {
+  const r = await authCall('/api/auth/firebase', { idToken });
   return r.ok ? { user: r.data.user } : { error: r.data?.detail ?? `Error ${r.status}` };
 }
 export async function apiLoginDemo(userId: string): Promise<{ user?: ApiUser; error?: string }> {
