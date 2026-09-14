@@ -4,7 +4,7 @@ Son **dos piezas independientes** + base de datos, y quien despliega decide cóm
 
 | Pieza | Carpeta | Imagen | Puede ir a |
 |---|---|---|---|
-| Front | raíz (`docker/web.Dockerfile`) | nginx + estáticos | S3+CloudFront, Amplify, ECS, EC2, GitHub Pages |
+| Front | raíz (`Dockerfile` (raíz)) | nginx + estáticos | S3+CloudFront, Amplify, ECS, EC2, GitHub Pages |
 | API | repo **timia-hub-api** | FastAPI | App Runner, ECS Fargate, EC2 — ver su README |
 | DB | — | mongo:7 o servicio | Atlas, DocumentDB, contenedor con volumen |
 
@@ -31,7 +31,7 @@ base de datos es la fuente de verdad: lo que cambie cualquier usuario lo ven tod
 6. Backups de Mongo: `docker exec timia-mongo mongodump --archive > backup-$(date +%F).archive` (cron + S3).
 
 ## AWS — opción gestionada (ECS Fargate + DocumentDB/Atlas)
-- Sube las dos imágenes a ECR (`docker build -f docker/web.Dockerfile -t timia-web .` y `docker build -t timia-api ../timia-hub-api`).
+- Sube las dos imágenes a ECR (`docker build -t timia-web .` y `docker build -t timia-api ../timia-hub-api`).
 - Servicio ECS con las dos tareas en la misma task definition (web escucha 80, api 8000); nginx resuelve `api` por `localhost` → cambia `proxy_pass http://api:8000` por `http://127.0.0.1:8000` en `docker/nginx.conf` o usa Service Connect.
 - `MONGO_URL` apuntando a Atlas o DocumentDB (con TLS: `mongodb://user:pass@host:27017/?tls=true&tlsCAFile=...`).
 
