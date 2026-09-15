@@ -27,7 +27,7 @@ const features = [
 declare global { interface Window { google?: any } }
 
 export default function Login() {
-  const { login, loginDemo, loginWithGoogle } = useAuth();
+  const { login, loginDemo, loginWithGoogle, loginWithFirebase } = useAuth();
   const [step, setStep] = useState<Step>('initial');
   const [selected, setSelected] = useState<AuthUser | null>(null);
   const [progress, setProgress] = useState(0);
@@ -36,7 +36,17 @@ export default function Login() {
   // Modo API: qué métodos hay (Google real / demo) y cuentas demo desde el servidor
   const apiMode = persist.mode === 'api';
   const cfg = apiAuthConfig();
-  const googleEnabled = apiMode && !!cfg?.google && !!cfg?.googleClientId;
+  const firebaseEnabled = apiMode && !!cfg?.firebase;
+  const googleEnabled = apiMode && !firebaseEnabled && !!cfg?.google && !!cfg?.googleClientId;
+  const [busy, setBusy] = useState(false);
+  const [pending, setPending] = useState<string>('');
+  const handleFirebase = async () => {
+    setError(''); setPending(''); setBusy(true);
+    const r = await loginWithFirebase();
+    setBusy(false);
+    if (r.pending) setPending(r.error ?? 'Solicitud registrada');
+    else if (r.error) setError(r.error);
+  };
   const demoEnabled = !apiMode || !!cfg?.demo;
   const [apiAccounts, setApiAccounts] = useState<AuthUser[] | null>(null);
   const [apiAccountsError, setApiAccountsError] = useState('');
@@ -146,11 +156,32 @@ export default function Login() {
             {error && (
               <div className="mb-4 px-3 py-2 rounded-lg text-xs" style={{ background:'#fef2f2', border:'0.5px solid #fecaca', color:'#b91c1c' }}>{error}</div>
             )}
+            {pending && (
+              <div className="mb-4 px-3 py-3 rounded-lg text-xs" style={{ background:'#fffbeb', border:'0.5px solid #fde68a', color:'#92400e', lineHeight:1.5 }}>
+                <strong>Solicitud de acceso enviada.</strong> {pending}
+                <div style={{ marginTop:4, color:'#a16207' }}>Cuando te aprueben, vuelve a entrar con "Continuar con Google".</div>
+              </div>
+            )}
 
             {/* Paso 1: botón inicial */}
             {step === 'initial' && (
               <div>
-                {googleEnabled ? (
+                {firebaseEnabled ? (
+                  <div>
+                    <button onClick={handleFirebase} disabled={busy}
+                      className="w-full flex items-center justify-center gap-2.5 px-4 py-2.5 rounded-lg border text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 transition-colors"
+                      style={{ borderColor: '#dadce0', opacity: busy ? .6 : 1 }}>
+                      <GoogleIcon />
+                      {busy ? 'Conectando con Google…' : 'Continuar con Google'}
+                    </button>
+                    <p className="text-xs text-slate-400 text-center mt-3">Se abrirá la ventana de Google (Firebase Authentication)</p>
+                    {demoEnabled && (
+                      <button onClick={() => setStep('picker')} className="w-full mt-3 text-xs text-slate-400 hover:text-slate-600 transition-colors">
+                        Acceso de prueba (cuentas demo)
+                      </button>
+                    )}
+                  </div>
+                ) : googleEnabled ? (
                   <div>
                     <div ref={gBtn} className="flex justify-center" style={{ minHeight: 44 }}/>
                     <p className="text-xs text-slate-400 text-center mt-3">Inicia sesión con tu cuenta corporativa de Google</p>
@@ -172,7 +203,7 @@ export default function Login() {
                       <ChevronRight size={14} className="text-slate-400" />
                     </button>
                     <p className="text-xs text-slate-400 text-center mt-3">
-                      {apiMode ? 'Modo demo: elige una cuenta del equipo (Google Sign-In no configurado aún)' : 'Se abrirá el selector de cuenta Google'}
+                      {apiMode ? 'Modo demo: elige una cuenta del equipo (Firebase/Google aún no configurado)' : 'Se abrirá el selector de cuenta Google'}
                     </p>
                   </div>
                 )}

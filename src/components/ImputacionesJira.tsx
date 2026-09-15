@@ -1,8 +1,9 @@
 // ─── ImputacionesJira — gestión de tickets Jira por Q / proyecto ─────────────
 import React, { useState, useRef } from 'react';
-import { Plus, Copy, Check, Search, X } from 'lucide-react';
+import { Plus, Copy, Check, Search, X, Download, Upload, Clock, ChevronRight } from 'lucide-react';
+import { downloadTemplate, parseImport, applyImport, IMP_STATUSES, type ParsedRow } from '../lib/imputacionesExcel';
 import { PROJECTS, MOCK_ACCOUNTS, canAccess, AuthUser } from '../contexts/AuthContext';
-import { adminStore, ImputacionEntry, JiraStatus } from '../lib/adminStore';
+import { adminStore, ImputacionEntry, JiraStatus, type AdminUser } from '../lib/adminStore';
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
@@ -233,9 +234,18 @@ export default function ImputacionesJira({ user }: Props) {
   // Proyecto y usuarios del proyecto seleccionado
   const proj        = PROJECTS.find((p: any) => p.id === selectedProj);
   const projColor   = (proj as any)?.color ?? '#dc2626';
-  const projectPool = MOCK_ACCOUNTS.filter(u =>
-    u.role === 'pm' || u.projectIds.includes(selectedProj)
-  );
+  const allUsers = adminStore.getUsers().filter(u => u.active);
+  const projectPool = (allUsers.length ? allUsers : (MOCK_ACCOUNTS as unknown as AdminUser[])).filter(u =>
+    u.role === 'pm' || u.role === 'account_manager' || u.projectIds.includes(selectedProj)
+  ) as unknown as AuthUser[];
+  const today = () => new Date().toISOString().slice(0, 10);
+  const me = user?.name ?? 'Sistema';
+  // Panel lateral (línea de tiempo) e importación
+  const [drawerId, setDrawerId] = useState<string | null>(null);
+  const [importRows, setImportRows] = useState<ParsedRow[] | null>(null);
+  const [importError, setImportError] = useState('');
+  const fileRef = useRef<HTMLInputElement>(null);
+  const drawerEntry = entries.find(e => e.id === drawerId) ?? null;
 
   // Filtrado de entries visibles
   const visibleEntries = entries.filter(e => {
@@ -286,13 +296,19 @@ export default function ImputacionesJira({ user }: Props) {
   function submitForm() {
     if (!form.jiraId.trim()) return;
     if (editId) {
-      persist(entries.map(e => e.id === editId ? { ...e, ...form } : e));
+      persist(entries.map(e => {
+        if (e.id !== editId) return e;
+        const history = [...(e.history ?? [{ status: e.status, date: e.createdAt, by: e.createdBy }])];
+        if (e.status !== form.status) history.push({ status: form.status, date: today(), by: me });
+        return { ...e, ...form, history };
+      }));
     } else {
       const newEntry: ImputacionEntry = {
         id: `imp-${Date.now()}`,
         projectId: selectedProj,
-        createdBy: user?.name ?? 'Sistema',
-        createdAt: new Date().toISOString().slice(0, 10),
+        createdBy: me,
+        createdAt: today(),
+        history: [{ status: form.status, date: today(), by: me }],
         ...form,
       };
       persist([...entries, newEntry]);
@@ -308,8 +324,23 @@ export default function ImputacionesJira({ user }: Props) {
   }
 
   // Cambio de estado inline (disponible para todos)
-  function updateStatus(id: string, status: JiraStatus) {
-    persist(entries.map(e => e.id === id ? { ...e, status } : e));
+  function updateStatus(id: string, status: JiraStatus, date = today()) {
+    persist(entries.map(e => {
+      if (e.id !== id || e.status === status) return e;
+      const history = [...(e.history ?? [{ status: e.status, date: e.createdAt, by: e.createdBy }]), { status, date, by: me }];
+      return { ...e, status, history };
+    }));
+  }
+  async function onImportFile(f: File) {
+    setImportError('');
+    try { setImportRows(await parseImport(f, allUsers, entries.filter(e => e.projectId === selectedProj))); }
+    catch (e: any) { setImportError(e?.message ?? 'No se pudo leer el archivo'); }
+  }
+  function confirmImport() {
+    if (!importRows) return;
+    const r = applyImport(importRows, selectedProj, entries, me);
+    persist(r.entries); setImportRows(null);
+    alert(`Importación lista: ${r.created} creada(s), ${r.updated} actualizada(s).`);
   }
 
   // ── Estilos helper ─────────────────────────────────────────────────────────
@@ -405,7 +436,22 @@ export default function ImputacionesJira({ user }: Props) {
             />
           </div>
 
-          {/* Nueva imputación (sólo write_bitacora) */}
+          {/* Plantilla / importación Excel */}
+          {canWrite && (
+            <>
+              <button onClick={() => downloadTemplate(selectedProj, (proj as any)?.name ?? selectedProj, allUsers.filter(u => u.projectIds.includes(selectedProj) || u.role === 'pm' || u.role === 'account_manager'), entries.filter(e => e.projectId === selectedProj))}
+                title="Descarga la plantilla (con las imputaciones actuales del proyecto si las hay)"
+                style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '7px 12px', fontSize: 11, fontWeight: 600, background: '#fff', color: '#374151', border: '0.5px solid #e2e8f0', borderRadius: 8, cursor: 'pointer', marginLeft: 'auto' }}>
+                <Download size={12}/> Plantilla Excel
+              </button>
+              <button onClick={() => fileRef.current?.click()}
+                style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '7px 12px', fontSize: 11, fontWeight: 600, background: '#fff', color: '#374151', border: '0.5px solid #e2e8f0', borderRadius: 8, cursor: 'pointer' }}>
+                <Upload size={12}/> Importar Excel
+              </button>
+              <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) onImportFile(f); e.target.value = ''; }}/>
+            </>
+          )}
+          {/* Nueva imputación */}
           {canWrite && (
             <button
               onClick={openCreate}
@@ -413,7 +459,7 @@ export default function ImputacionesJira({ user }: Props) {
                 display: 'flex', alignItems: 'center', gap: 6,
                 padding: '7px 14px', fontSize: 12, fontWeight: 600,
                 background: projColor, color: '#fff',
-                border: 'none', borderRadius: 8, cursor: 'pointer', marginLeft: 'auto',
+                border: 'none', borderRadius: 8, cursor: 'pointer',
               }}
             >
               <Plus size={13}/> Nueva imputación
@@ -477,9 +523,10 @@ export default function ImputacionesJira({ user }: Props) {
                   {visibleEntries.map(e => (
                     <tr
                       key={e.id}
-                      style={{ borderBottom: '0.5px solid #f8fafc', transition: 'background .1s' }}
-                      onMouseEnter={ev => (ev.currentTarget.style.background = '#fafafa')}
-                      onMouseLeave={ev => (ev.currentTarget.style.background = 'transparent')}
+                      style={{ borderBottom: '0.5px solid #f8fafc', transition: 'background .1s', cursor: 'pointer', background: drawerId === e.id ? '#f5f3ff' : 'transparent' }}
+                      onClick={() => setDrawerId(e.id)}
+                      onMouseEnter={ev => { if (drawerId !== e.id) ev.currentTarget.style.background = '#fafafa'; }}
+                      onMouseLeave={ev => { if (drawerId !== e.id) ev.currentTarget.style.background = 'transparent'; }}
                     >
                       {/* Ticket */}
                       <td style={{ padding: '10px 12px' }}>
@@ -503,8 +550,8 @@ export default function ImputacionesJira({ user }: Props) {
                         )}
                       </td>
                       {/* Estado */}
-                      <td style={{ padding: '10px 12px' }}>
-                        <StatusSelect value={e.status} onChange={v => updateStatus(e.id, v)}/>
+                      <td style={{ padding: '10px 12px' }} onClick={ev => ev.stopPropagation()}>
+                        {canWrite ? <StatusSelect value={e.status} onChange={v => updateStatus(e.id, v)}/> : <StatusBadge status={e.status}/>}
                       </td>
                       {/* Asignados */}
                       <td style={{ padding: '10px 12px' }}>
@@ -771,6 +818,139 @@ export default function ImputacionesJira({ user }: Props) {
           </div>
         </div>
       )}
+      {/* ── Panel lateral: línea de tiempo de la feature ─────────────────── */}
+      {drawerEntry && (
+        <ImputacionDrawer entry={drawerEntry} pool={projectPool} canWrite={canWrite} onClose={() => setDrawerId(null)}
+          onStatus={(st, date) => updateStatus(drawerEntry.id, st, date)} onEdit={() => { setDrawerId(null); openEdit(drawerEntry); }}/>
+      )}
+
+      {/* ── Vista previa de importación ──────────────────────────────────── */}
+      {(importRows || importError) && (
+        <div onClick={() => { setImportRows(null); setImportError(''); }} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div onClick={ev => ev.stopPropagation()} style={{ background: '#fff', borderRadius: 14, width: 'min(1100px, 96vw)', maxHeight: '88vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 16px', borderBottom: '0.5px solid #e2e8f0' }}>
+              <Upload size={14}/><strong style={{ fontSize: 13, flex: 1 }}>Importar imputaciones · {(proj as any)?.name ?? selectedProj}</strong>
+              {importRows && <span style={{ fontSize: 11, color: '#64748b' }}>{importRows.filter(r => !r.errors.length).length} válidas · {importRows.filter(r => r.errors.length).length} con error · {importRows.filter(r => r.existing).length} actualizan · {importRows.filter(r => !r.existing && !r.errors.length).length} nuevas</span>}
+              <button onClick={() => { setImportRows(null); setImportError(''); }} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#94a3b8', display: 'flex' }}><X size={16}/></button>
+            </div>
+            {importError && <div style={{ padding: 16, fontSize: 12, color: '#b91c1c' }}>{importError}</div>}
+            {importRows && (
+              <div style={{ overflow: 'auto', flex: 1 }}>
+                <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: 11 }}>
+                  <thead><tr style={{ background: '#fafafa', position: 'sticky', top: 0 }}>{['Fila', 'ID Feature', 'Descripción', 'Estado', 'Fecha', 'Fase', 'Responsables', 'Est.', 'Imp.', 'Resultado'].map(h => <th key={h} style={{ padding: '7px 10px', textAlign: 'left', fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', borderBottom: '0.5px solid #e2e8f0' }}>{h}</th>)}</tr></thead>
+                  <tbody>
+                    {importRows.map(r => (
+                      <tr key={r.row} style={{ borderBottom: '0.5px solid #f1f5f9', background: r.errors.length ? '#fef2f2' : undefined }}>
+                        <td style={{ padding: '6px 10px', color: '#94a3b8' }}>{r.row}</td>
+                        <td style={{ padding: '6px 10px', fontWeight: 700, color: '#1d4ed8' }}>{r.jiraId}</td>
+                        <td style={{ padding: '6px 10px', maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.summary}>{r.summary}</td>
+                        <td style={{ padding: '6px 10px' }}>{IMP_STATUSES.includes(r.status as JiraStatus) ? <StatusBadge status={r.status as JiraStatus}/> : <span style={{ color: '#b91c1c' }}>{r.status}</span>}</td>
+                        <td style={{ padding: '6px 10px', whiteSpace: 'nowrap' }}>{r.statusDate}</td>
+                        <td style={{ padding: '6px 10px' }}>{r.phase}</td>
+                        <td style={{ padding: '6px 10px' }}><AssigneeAvatars ids={r.assigneeIds} pool={projectPool}/></td>
+                        <td style={{ padding: '6px 10px', textAlign: 'right' }}>{r.hoursEst}</td>
+                        <td style={{ padding: '6px 10px', textAlign: 'right' }}>{r.hoursImputed}</td>
+                        <td style={{ padding: '6px 10px' }}>
+                          {r.errors.length ? <span style={{ color: '#b91c1c', fontWeight: 600 }}>✗ {r.errors.join(' · ')}</span>
+                            : <span style={{ color: r.existing ? '#a16207' : '#15803d', fontWeight: 600 }}>{r.existing ? (r.existing.status !== r.status ? `actualiza · ${r.existing.status} → ${r.status}` : 'actualiza') : 'nueva'}</span>}
+                          {r.warnings.length > 0 && <div style={{ fontSize: 9, color: '#a16207' }}>{r.warnings.join(' · ')}</div>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <div style={{ padding: '10px 16px', borderTop: '0.5px solid #e2e8f0', display: 'flex', gap: 8, justifyContent: 'flex-end', background: '#fafafe' }}>
+              <button onClick={() => { setImportRows(null); setImportError(''); }} style={{ padding: '7px 12px', fontSize: 11, background: '#fff', border: '0.5px solid #e2e8f0', borderRadius: 7, cursor: 'pointer' }}>Cancelar</button>
+              {importRows && <button onClick={confirmImport} disabled={!importRows.some(r => !r.errors.length)} style={{ padding: '7px 14px', fontSize: 11, fontWeight: 600, background: importRows.some(r => !r.errors.length) ? '#15803d' : '#cbd5e1', color: '#fff', border: 'none', borderRadius: 7, cursor: 'pointer' }}>Importar {importRows.filter(r => !r.errors.length).length} fila(s)</button>}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
+  );
+}
+
+// ─── Panel lateral: detalle + línea de tiempo de estados ─────────────────────
+function ImputacionDrawer({ entry: e, pool, canWrite, onClose, onStatus, onEdit }: {
+  entry: ImputacionEntry; pool: AuthUser[]; canWrite: boolean; onClose: () => void;
+  onStatus: (st: JiraStatus, date: string) => void; onEdit: () => void;
+}) {
+  const [newStatus, setNewStatus] = useState<JiraStatus>(e.status);
+  const [newDate, setNewDate] = useState(new Date().toISOString().slice(0, 10));
+  React.useEffect(() => { setNewStatus(e.status); }, [e.status]);
+  const hist = (e.history?.length ? e.history : [{ status: e.status, date: e.createdAt, by: e.createdBy }]).slice().sort((a, b) => a.date.localeCompare(b.date));
+  const days = (a: string, b: string) => Math.max(0, Math.round((new Date(b + 'T12:00:00').getTime() - new Date(a + 'T12:00:00').getTime()) / 86400000));
+  const todayISO = new Date().toISOString().slice(0, 10);
+  const fmt = (iso: string) => { const d = new Date(iso + 'T12:00:00'); return `${d.getDate()} ${['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'][d.getMonth()]} ${d.getFullYear()}`; };
+  const pct = e.hoursEst ? Math.min(100, Math.round(e.hoursImputed / e.hoursEst * 100)) : 0;
+  return (
+    <>
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', zIndex: 998 }}/>
+      <div style={{ position: 'fixed', right: 0, top: 0, height: '100vh', width: 460, background: '#fff', boxShadow: '-4px 0 32px rgba(0,0,0,0.15)', zIndex: 999, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div style={{ padding: '14px 18px 12px', borderBottom: '1px solid #f1f5f9' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <JiraBadge jiraId={e.jiraId}/>
+            <StatusBadge status={e.status}/>
+            <span style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', background: '#eff6ff', color: '#1d4ed8', padding: '2px 7px', borderRadius: 4 }}>{e.type}</span>
+            <button onClick={onClose} style={{ marginLeft: 'auto', border: 'none', background: 'none', cursor: 'pointer', color: '#94a3b8', display: 'flex' }}><X size={16}/></button>
+          </div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: '#111', marginTop: 8, lineHeight: 1.4 }}>{e.summary || <em style={{ color: '#94a3b8' }}>Sin descripción</em>}</div>
+          <div style={{ fontSize: 10, color: '#64748b', marginTop: 3 }}>{e.q}{e.month ? ` · ${e.month}` : ''}{e.weeks ? ` · sem. ${e.weeks}` : ''} · {e.phase}{e.context ? ` · ${e.context}` : ''}</div>
+        </div>
+        <div style={{ padding: '12px 18px', borderBottom: '1px solid #f1f5f9', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <div>
+            <div style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 4 }}>Horas</div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: '#111' }}>{e.hoursImputed}<span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 500 }}> / {e.hoursEst} h</span></div>
+            <div style={{ height: 5, background: '#f1f5f9', borderRadius: 3, overflow: 'hidden', marginTop: 4 }}><div style={{ width: `${pct}%`, height: '100%', background: e.hoursImputed > e.hoursEst && e.hoursEst ? '#dc2626' : '#1d4ed8' }}/></div>
+          </div>
+          <div>
+            <div style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 4 }}>Responsables</div>
+            <AssigneeAvatars ids={e.assigneeIds} pool={pool}/>
+          </div>
+        </div>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '12px 18px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+            <Clock size={13} color="#64748b"/><span style={{ fontSize: 11, fontWeight: 700, color: '#374151' }}>Línea de tiempo de estados</span>
+            <span style={{ fontSize: 10, color: '#94a3b8', marginLeft: 'auto' }}>{days(hist[0].date, todayISO)} días desde su creación</span>
+          </div>
+          <div style={{ position: 'relative', paddingLeft: 18 }}>
+            <div style={{ position: 'absolute', left: 5, top: 6, bottom: 6, width: 2, background: '#e2e8f0' }}/>
+            {hist.map((h, i) => {
+              const next = hist[i + 1]; const dur = days(h.date, next ? next.date : todayISO); const cfg = JIRA_STATUS_CFG[h.status] ?? JIRA_STATUS_CFG.New;
+              return (
+                <div key={i} style={{ position: 'relative', marginBottom: 14 }}>
+                  <div style={{ position: 'absolute', left: -18, top: 3, width: 12, height: 12, borderRadius: '50%', background: cfg.solid ? cfg.color : cfg.bg, border: `2px solid ${cfg.color}` }}/>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <StatusBadge status={h.status}/>
+                    <span style={{ fontSize: 10, color: '#64748b' }}>{fmt(h.date)}</span>
+                    {!next && <span style={{ fontSize: 9, color: '#15803d', fontWeight: 700 }}>· actual</span>}
+                  </div>
+                  <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2 }}>{dur} día{dur !== 1 ? 's' : ''} en esta fase{h.by ? ` · ${h.by}` : ''}{h.note ? ` · ${h.note}` : ''}</div>
+                </div>
+              );
+            })}
+          </div>
+          {canWrite && (
+            <div style={{ marginTop: 8, padding: '10px 12px', background: '#f8fafc', border: '0.5px solid #e2e8f0', borderRadius: 8 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: '#374151', marginBottom: 6 }}>Registrar cambio de estado</div>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <select value={newStatus} onChange={ev => setNewStatus(ev.target.value as JiraStatus)} style={{ flex: 1, padding: '6px 8px', fontSize: 11, border: '0.5px solid #e2e8f0', borderRadius: 6, background: '#fff' }}>
+                  {IMP_STATUSES.map(st => <option key={st} value={st}>{st}</option>)}
+                </select>
+                <input type="date" value={newDate} max={todayISO} onChange={ev => setNewDate(ev.target.value)} style={{ padding: '5px 6px', fontSize: 11, border: '0.5px solid #e2e8f0', borderRadius: 6 }}/>
+                <button onClick={() => onStatus(newStatus, newDate)} disabled={newStatus === e.status} style={{ padding: '6px 10px', fontSize: 11, fontWeight: 600, background: newStatus === e.status ? '#cbd5e1' : '#111', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' }}>Guardar</button>
+              </div>
+            </div>
+          )}
+        </div>
+        {canWrite && (
+          <div style={{ padding: '10px 18px', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'flex-end' }}>
+            <button onClick={onEdit} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '7px 12px', fontSize: 11, fontWeight: 600, background: '#fff', border: '0.5px solid #e2e8f0', borderRadius: 7, cursor: 'pointer' }}>Editar imputación <ChevronRight size={12}/></button>
+          </div>
+        )}
+      </div>
+    </>
   );
 }

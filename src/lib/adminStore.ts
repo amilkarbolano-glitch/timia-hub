@@ -16,6 +16,9 @@ export type JiraStatus =
   | 'Ready to Verify' | 'Ready to Deploy' | 'Deployed'
   | 'Blocked' | 'Discarded' | 'Test' | 'Accepted';
 
+/** Paso por una fase/estado Jira de una feature (línea de tiempo) */
+export interface ImputacionHistory { status: JiraStatus; date: string; by: string; note?: string }
+
 export interface ImputacionEntry {
   id: string;
   projectId: string;
@@ -33,6 +36,7 @@ export interface ImputacionEntry {
   context: string;
   createdBy: string;
   createdAt: string;    // YYYY-MM-DD
+  history?: ImputacionHistory[];   // cambios de estado con fecha (New → Analysing → …)
 }
 
 export interface AdminProject {
@@ -234,6 +238,14 @@ export function issueImpacts(i: PlanIssue): PlanImpact[] {
   return [];
 }
 
+/** Solicitud de acceso: correo del dominio autenticado con Google pero no registrado en el panel */
+export interface AccessRequest {
+  id: string; email: string; name: string; provider: string;
+  status: 'pending' | 'approved' | 'rejected';
+  requestedAt: string; lastAttemptAt?: string; attempts?: number;
+  resolvedAt?: string; resolvedBy?: string;
+}
+
 /** Asignados a una actividad específica */
 export type ActivityAssignees = Record<string, string[]>;
 // key: `${projectId}__${entregableId}__${actIdx}`, value: array de user IDs
@@ -418,6 +430,10 @@ export const adminStore = {
   saveActivityAssignees: (a: ActivityAssignees)      => save('activity_assignees', a),
 
   // Tickets Jira por actividad: key = `${projectId}__${entregableId}__${actIdx}`
+  // Solicitudes de acceso
+  getAccessRequests:  (): AccessRequest[]  => load('access_requests', []),
+  saveAccessRequests: (r: AccessRequest[]) => save('access_requests', r),
+
   // Activity Report (TR)
   getTrFeatures:  (): TrFeature[]     => load('tr_features', []),
   saveTrFeatures: (f: TrFeature[])    => save('tr_features', f),

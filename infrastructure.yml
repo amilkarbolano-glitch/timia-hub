@@ -1,0 +1,170 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Timia Hub (front) - AWS Amplify Hosting desde GitHub. SPA Vite + React que consume timia-hub-api'
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label: { default: "Configuracion General" }
+        Parameters: [ProjectName, AppName, EnvironmentName, CostCenter, Owner, Region]
+      - Label: { default: "Configuracion de GitHub" }
+        Parameters: [Repository, Branch, GitHubToken]
+      - Label: { default: "Variables de Entorno" }
+        Parameters: [ApiUrl, GoogleClientId]
+    ParameterLabels:
+      ProjectName: { default: "Nombre del Proyecto" }
+      AppName: { default: "Nombre de la Aplicacion" }
+      EnvironmentName: { default: "Ambiente" }
+      CostCenter: { default: "Centro de Costos" }
+      Owner: { default: "Propietario" }
+      Region: { default: "Region AWS" }
+      Repository: { default: "Repositorio GitHub (owner/repo)" }
+      Branch: { default: "Rama" }
+      GitHubToken: { default: "Token de Acceso de GitHub" }
+      ApiUrl: { default: "URL de la API (output ApiUrl del stack de timia-hub-api)" }
+      GoogleClientId: { default: "Google Client ID [GOOGLE] (informativo; el login lo valida la API)" }
+
+Parameters:
+  ProjectName: { Type: String, Default: 'timia', MinLength: 1, MaxLength: 20, AllowedPattern: '[a-zA-Z0-9\-]+' }
+  AppName: { Type: String, Default: 'hub', MinLength: 1, MaxLength: 20, AllowedPattern: '[a-zA-Z0-9\-]+' }
+  EnvironmentName: { Type: String, Default: 'dev', AllowedValues: [dev, stg, prd] }
+  CostCenter: { Type: String, Default: 'operations', MinLength: 1, MaxLength: 50 }
+  Owner: { Type: String, Default: 'timia-hub', MinLength: 1, MaxLength: 50 }
+  Region: { Type: String, Default: 'us-east-1', AllowedValues: [us-east-1, us-east-2, us-west-1, us-west-2, eu-west-1, eu-west-2, eu-central-1, sa-east-1, ap-southeast-1, ap-southeast-2, ap-northeast-1, ap-northeast-2] }
+  Repository:
+    Type: String
+    Default: 'amilkarbolano-glitch/timia-hub'
+    AllowedPattern: '^[a-zA-Z0-9\-]+\/[a-zA-Z0-9\-]+$'
+  Branch:
+    Type: String
+    Description: 'dev → develop · prd → main'
+    Default: 'develop'
+    AllowedPattern: '[a-zA-Z0-9\-\/]+'
+  GitHubToken: { Type: String, NoEcho: true }
+  ApiUrl:
+    Type: String
+    Description: 'Ej: http://timia-hub-api-dev-123.us-east-1.elb.amazonaws.com (sin barra final)'
+    AllowedPattern: '^https?:\/\/.*'
+  GoogleClientId: { Type: String, Default: '', NoEcho: true }
+
+Mappings:
+  EnvironmentMap:
+    dev: { autoBuildEnabled: true, amplifyStage: DEVELOPMENT }
+    stg: { autoBuildEnabled: true, amplifyStage: BETA }
+    prd: { autoBuildEnabled: false, amplifyStage: PRODUCTION }
+
+Conditions:
+  IsPrd: !Equals [!Ref EnvironmentName, 'prd']
+  IsNotPrd: !Not [!Equals [!Ref EnvironmentName, 'prd']]
+
+Resources:
+  AmplifyApp:
+    Type: AWS::Amplify::App
+    Properties:
+      Name: !Sub '${ProjectName}-${AppName}-${EnvironmentName}'
+      Repository: !Sub 'https://github.com/${Repository}'
+      AccessToken: !Ref GitHubToken
+      Platform: WEB
+      IAMServiceRole: !GetAtt AmplifyRole.Arn
+      BuildSpec: |
+        version: 1
+        frontend:
+          phases:
+            preBuild:
+              commands:
+                - npm ci --legacy-peer-deps
+            build:
+              commands:
+                # La API se inyecta en runtime (public/config.js) para no recompilar por ambiente
+                - 'echo "window.TIMIA_API_URL = \"$VITE_API_URL\";" > public/config.js'
+                - npm run build:client
+          artifacts:
+            baseDirectory: dist
+            files:
+              - '**/*'
+          cache:
+            paths:
+              - node_modules/**/*
+      CustomRules:
+        # SPA: cualquier ruta que no sea un archivo → index.html
+        - Source: '</^[^.]+$|\.(?!(css|gif|ico|jpg|js|png|txt|svg|woff|woff2|ttf|map|json)$)([^.]+$)/'
+          Target: '/index.html'
+          Status: '200'
+      EnvironmentVariables:
+        - { Name: VITE_API_URL, Value: !Ref ApiUrl }
+        - { Name: VITE_GOOGLE_CLIENT_ID, Value: !Ref GoogleClientId }
+        - { Name: APP_ENV, Value: !Ref EnvironmentName }
+      AutoBranchCreationConfig:
+        EnableAutoBuild: !FindInMap [EnvironmentMap, !Ref EnvironmentName, autoBuildEnabled]
+        EnablePullRequestPreview: !If [IsNotPrd, true, false]
+        EnablePerformanceMode: !If [IsPrd, true, false]
+      Tags:
+        - { Key: Environment, Value: !Ref EnvironmentName }
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: CostCenter, Value: !Ref CostCenter }
+        - { Key: Owner, Value: !Ref Owner }
+        - { Key: ManagedBy, Value: CloudFormation }
+        - { Key: CreatedBy, Value: !Ref 'AWS::StackName' }
+  AmplifyBranch:
+    Type: AWS::Amplify::Branch
+    Properties:
+      AppId: !GetAtt AmplifyApp.AppId
+      BranchName: !Ref Branch
+      EnableAutoBuild: !FindInMap [EnvironmentMap, !Ref EnvironmentName, autoBuildEnabled]
+      Framework: 'React'
+      Stage: !FindInMap [EnvironmentMap, !Ref EnvironmentName, amplifyStage]
+      EnvironmentVariables:
+        - { Name: VITE_API_URL, Value: !Ref ApiUrl }
+        - { Name: VITE_GOOGLE_CLIENT_ID, Value: !Ref GoogleClientId }
+        - { Name: APP_ENV, Value: !Ref EnvironmentName }
+      Tags:
+        - { Key: Environment, Value: !Ref EnvironmentName }
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: CostCenter, Value: !Ref CostCenter }
+        - { Key: Owner, Value: !Ref Owner }
+        - { Key: ManagedBy, Value: CloudFormation }
+        - { Key: CreatedBy, Value: !Ref 'AWS::StackName' }
+  AmplifyLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/amplify/${ProjectName}-${AppName}-${EnvironmentName}'
+      RetentionInDays: !If [IsPrd, 90, 30]
+      Tags:
+        - { Key: Environment, Value: !Ref EnvironmentName }
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: CostCenter, Value: !Ref CostCenter }
+        - { Key: Owner, Value: !Ref Owner }
+        - { Key: ManagedBy, Value: CloudFormation }
+        - { Key: CreatedBy, Value: !Ref 'AWS::StackName' }
+  AmplifyRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${ProjectName}-${AppName}-${EnvironmentName}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement: [{ Effect: Allow, Principal: { Service: amplify.amazonaws.com }, Action: sts:AssumeRole }]
+      Policies:
+        - PolicyName: !Sub '${ProjectName}-${AppName}-${EnvironmentName}-amplify'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: [amplify:*, logs:CreateLogStream, logs:PutLogEvents, logs:CreateLogGroup]
+                Resource: '*'
+      Tags:
+        - { Key: Environment, Value: !Ref EnvironmentName }
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: CostCenter, Value: !Ref CostCenter }
+        - { Key: Owner, Value: !Ref Owner }
+        - { Key: ManagedBy, Value: CloudFormation }
+        - { Key: CreatedBy, Value: !Ref 'AWS::StackName' }
+
+Outputs:
+  AmplifyAppId:
+    Value: !GetAtt AmplifyApp.AppId
+    Export: { Name: !Sub '${AWS::StackName}-AmplifyAppId' }
+  FrontendUrl:
+    Description: 'Usar como FrontendOrigin en el stack de la API (CORS + cookies)'
+    Value: !Sub 'https://${Branch}.${AmplifyApp.DefaultDomain}'
+    Export: { Name: !Sub '${AWS::StackName}-FrontendUrl' }
+  ConsoleUrl:
+    Value: !Sub 'https://${AWS::Region}.console.aws.amazon.com/amplify/home?region=${AWS::Region}#/${AmplifyApp.AppId}'

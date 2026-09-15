@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { motion, AnimatePresence } from 'motion/react';
-import { useAuth, PROJECTS, canAccess } from '../contexts/AuthContext';
+import { useAuth, PROJECTS, canAccess, canInProject, effectiveRole, ROLE_LABEL } from '../contexts/AuthContext';
 import { adminStore, makePlanKey, type KanbanTask, type KanbanStatus, type AdminUser, type Priority } from '../lib/adminStore';
 
 // ─── Permisos por rol ─────────────────────────────────────────────────────────
@@ -26,6 +26,12 @@ const PERM_MAP: Record<keyof typeof ROLE_PERMS.pm, string> = {
 };
 function perm(role: string, key: keyof typeof ROLE_PERMS.pm) {
   return canAccess(role as any, PERM_MAP[key]);
+}
+/** Permiso evaluado con el rol que el usuario tiene EN el proyecto de la tarea (líder en uno, dev en otro). */
+function permIn(user: { id: string; role: string; projectIds?: string[] } | null | undefined, projectId: string | undefined, key: keyof typeof ROLE_PERMS.pm) {
+  if (!user) return false;
+  if (!projectId) return canAccess(user.role as any, PERM_MAP[key]);
+  return canInProject(user, PERM_MAP[key], projectId);
 }
 
 // ─── Columnas Kanban ──────────────────────────────────────────────────────────
@@ -96,9 +102,10 @@ function TaskDrawer({ task, allUsers, role, onSave, onDelete, onClose }: DrawerP
 
   if (!t) return null;
 
-  const canEdit   = perm(role, 'canEdit');
-  const canAssign = perm(role, 'canAssign');
-  const canDelete = perm(role, 'canDelete');
+  const canEdit   = permIn(user, t.projectId, 'canEdit');
+  const canAssign = permIn(user, t.projectId, 'canAssign');
+  const canDelete = permIn(user, t.projectId, 'canDelete');
+  void role;
 
   function save(patch: Partial<KanbanTask>) {
     const updated = { ...t!, ...patch };
@@ -403,7 +410,11 @@ export default function KanbanBoard({ userRole }: KanbanBoardProps) {
     : (user?.projectIds ?? []);
 
   // ── Filtro de proyecto (dropdown) ────────────────────────────────────────────
-  const [projectFilter, setProjectFilter] = useState<string>('all');
+  // Con un solo proyecto se selecciona directo; con varios arranca en "todos".
+  const [projectFilter, setProjectFilter] = useState<string>(() => userProjectIds.length === 1 ? userProjectIds[0] : 'all');
+  // Rol efectivo del usuario en el proyecto seleccionado (o base si es "todos")
+  const roleInSelected = projectFilter === 'all' ? role : (effectiveRole(user, projectFilter) ?? role);
+  const isDevIn = (pid?: string) => (pid ? effectiveRole(user, pid) : role) === 'developer';
 
   // ── Reglas de visibilidad por rol ────────────────────────────────────────────
   // developer → solo sus tareas asignadas
@@ -416,10 +427,8 @@ export default function KanbanBoard({ userRole }: KanbanBoardProps) {
     ? tasks.filter(t => !t.projectId || userProjectIds.includes(t.projectId))
     : tasks.filter(t => t.projectId === projectFilter);
 
-  // Paso 2: filtrar por asignee si es developer
-  const visibleTasks = role === 'developer'
-    ? projectFiltered.filter(t => t.assigneeIds.includes(user?.id ?? ''))
-    : projectFiltered;
+  // Paso 2: donde soy developer (en ese proyecto) solo veo mis tareas asignadas
+  const visibleTasks = projectFiltered.filter(t => !isDevIn(t.projectId) || t.assigneeIds.includes(user?.id ?? ''));
 
   // Tareas por columna
   const byColumn = (col: KanbanStatus) => visibleTasks.filter(t => t.status === col);
@@ -434,12 +443,13 @@ export default function KanbanBoard({ userRole }: KanbanBoardProps) {
   const [newPrio, setNewPrio]     = useState<Priority>('Media');
   const [newDate, setNewDate]     = useState('');
   const [newJira, setNewJira]     = useState('');
-  const [newProject, setNewProject] = useState('FICO');
-
-  // Proyectos visibles para el usuario
+  // Proyectos visibles para el usuario y en cuáles puede crear tareas (rol en cada proyecto)
   const userProjects = canAccess(role as any, 'projects.view_all')
     ? PROJECTS
     : PROJECTS.filter(p => (user?.projectIds ?? []).includes(p.id));
+  const manageableProjects = userProjects.filter(p => permIn(user, p.id, 'canCreate'));
+  const [newProject, setNewProject] = useState(() => manageableProjects[0]?.id ?? userProjects[0]?.id ?? '');
+  const canCreateHere = projectFilter === 'all' ? manageableProjects.length > 0 : permIn(user, projectFilter, 'canCreate');
 
   function save(updated: KanbanTask[]) {
     setTasks(updated);
@@ -482,9 +492,9 @@ export default function KanbanBoard({ userRole }: KanbanBoardProps) {
     const { destination, source, draggableId } = result;
     if (!destination) return;
     if (destination.droppableId === source.droppableId && destination.index === source.index) return;
-    if (!perm(role, 'canMove')) return;
     const t = tasks.find(x => x.id === draggableId);
     if (!t) return;
+    if (!permIn(user, t.projectId, 'canMove')) return;
     saveTask({ ...t, status: destination.droppableId as KanbanStatus });
   };
 
@@ -503,8 +513,8 @@ export default function KanbanBoard({ userRole }: KanbanBoardProps) {
         <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
           <div style={{ display:'flex', alignItems:'center', gap:10 }}>
             <h1 style={{ margin:0, fontSize:20, fontWeight:600, color:'#111' }}>Tablero</h1>
-            {/* Badge de rol para Referente Técnico — distintivo visual muy importante */}
-            {role === 'tech_lead' && (
+            {/* Badge: rol en el proyecto seleccionado (puede ser distinto por proyecto) */}
+            {roleInSelected === 'tech_lead' && (
               <span style={{
                 display:'inline-flex', alignItems:'center', gap:5,
                 padding:'3px 10px', borderRadius:20,
@@ -514,11 +524,16 @@ export default function KanbanBoard({ userRole }: KanbanBoardProps) {
                 letterSpacing:'0.02em',
               }}>
                 <span style={{ width:6, height:6, borderRadius:'50%', background:'#0f766e', flexShrink:0 }}/>
-                Referente Técnico
+                Líder técnico{projectFilter !== 'all' ? ` en ${PROJECTS.find(p => p.id === projectFilter)?.name ?? projectFilter}` : ''}
               </span>
             )}
-            {/* Badge para otros roles — más sutil */}
-            {role === 'developer' && (
+            {(roleInSelected === 'pm' || roleInSelected === 'account_manager') && (
+              <span style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'3px 10px', borderRadius:20, background:'#f5f3ff', border:'1px solid #ddd6fe', color:'#6d28d9', fontSize:11, fontWeight:700 }}>
+                <span style={{ width:6, height:6, borderRadius:'50%', background:'#7c3aed', flexShrink:0 }}/>{ROLE_LABEL[roleInSelected]}
+              </span>
+            )}
+            {/* Badge para developer — más sutil */}
+            {roleInSelected === 'developer' && (
               <span style={{
                 display:'inline-flex', alignItems:'center', gap:5,
                 padding:'3px 10px', borderRadius:20,
@@ -526,17 +541,19 @@ export default function KanbanBoard({ userRole }: KanbanBoardProps) {
                 color:'#64748b', fontSize:11, fontWeight:600,
               }}>
                 <span style={{ width:6, height:6, borderRadius:'50%', background:'#94a3b8', flexShrink:0 }}/>
-                Desarrollador
+                Desarrollador{projectFilter !== 'all' ? ` en ${PROJECTS.find(p => p.id === projectFilter)?.name ?? projectFilter}` : ''}
               </span>
             )}
           </div>
           <p style={{ margin:0, fontSize:12, color:'#94a3b8' }}>
-            {role === 'developer' ? `Mis tareas asignadas · ${user?.name?.split(' ')[0]}` : `${visibleTasks.length} tareas · ${projectFilter === 'all' ? 'todos mis proyectos' : projectFilter}`}
+            {roleInSelected === 'developer' && projectFilter !== 'all'
+              ? `Mis tareas asignadas · ${user?.name?.split(' ')[0]}`
+              : `${visibleTasks.length} tareas · ${projectFilter === 'all' ? 'todos mis proyectos (cada tarjeta según mi rol en su proyecto)' : (PROJECTS.find(p => p.id === projectFilter)?.name ?? projectFilter)}`}
           </p>
         </div>
         <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
           {/* Filtro de proyecto */}
-          {filterProjects.length > 1 && (
+          {filterProjects.length > 0 && (
             <div style={{ display:'flex', alignItems:'center', gap:6, padding:'6px 10px', background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:8 }}>
               <Search size={11} color="#94a3b8" style={{ flexShrink:0 }}/>
               <select
@@ -544,14 +561,15 @@ export default function KanbanBoard({ userRole }: KanbanBoardProps) {
                 onChange={e => setProjectFilter(e.target.value)}
                 style={{ fontSize:11, border:'none', background:'transparent', outline:'none', color:'#374151', fontWeight:600, cursor:'pointer' }}
               >
-                <option value="all">Todos mis proyectos</option>
-                {filterProjects.map(p => (
-                  <option key={p.id} value={p.id}>{p.id} — {p.name}</option>
-                ))}
+                {filterProjects.length > 1 && <option value="all">Todos mis proyectos</option>}
+                {filterProjects.map(p => {
+                  const r = effectiveRole(user, p.id) ?? role;
+                  return <option key={p.id} value={p.id}>{p.name} · {ROLE_LABEL[r as keyof typeof ROLE_LABEL] ?? r}</option>;
+                })}
               </select>
             </div>
           )}
-          {perm(role,'canCreate') && (
+          {canCreateHere && (
             <button onClick={()=>setShowNew(true)}
               style={{ display:'flex', alignItems:'center', gap:5, padding:'8px 14px', background:'#111', color:'#fff', border:'none', borderRadius:8, cursor:'pointer', fontSize:12, fontWeight:500 }}>
               <Plus size={13}/> Nueva tarea
@@ -587,7 +605,7 @@ export default function KanbanBoard({ userRole }: KanbanBoardProps) {
                     <span style={{ fontSize:13, fontWeight:700, color:'#111' }}>{col.title}</span>
                     <span style={{ fontSize:11, padding:'1px 6px', borderRadius:8, background:'#f1f5f9', color:'#64748b', fontWeight:600 }}>{colTasks.length}</span>
                   </div>
-                  {perm(role,'canCreate') && (
+                  {(projectFilter === 'all' ? manageableProjects.length > 0 : permIn(user, projectFilter, 'canCreate')) && (
                     <button onClick={()=>setShowNew(true)} style={{ border:'none', background:'none', cursor:'pointer', color:'#94a3b8', padding:2, display:'flex' }}><Plus size={15}/></button>
                   )}
                 </div>
@@ -713,7 +731,7 @@ export default function KanbanBoard({ userRole }: KanbanBoardProps) {
                     <label style={{ display:'block', fontSize:9, fontWeight:700, color:'#374151', textTransform:'uppercase', marginBottom:4 }}>Proyecto</label>
                     <select value={newProject} onChange={e=>setNewProject(e.target.value)}
                       style={{ width:'100%', padding:'7px 10px', border:'1px solid #e2e8f0', borderRadius:7, outline:'none', fontSize:12 }}>
-                      {userProjects.map(p=><option key={p.id} value={p.id}>{p.id}</option>)}
+                      {manageableProjects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
                     </select>
                   </div>
                   <div>

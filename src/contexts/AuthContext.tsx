@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { persist, apiMe, apiLoginDemo, apiLoginGoogle, apiLogout, loadStateFromApi } from '../lib/persist';
+import { persist, apiMe, apiLoginDemo, apiLoginGoogle, apiLoginFirebase, apiLogout, loadStateFromApi, apiAuthConfig } from '../lib/persist';
+import { signInWithGoogleFirebase, signOutFirebase } from '../lib/firebaseAuth';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -140,12 +141,15 @@ interface AuthContextType {
   loginDemo: (userId: string) => Promise<{ error?: string }>;
   /** Login con Google (ID token del botón de Google) contra la API */
   loginWithGoogle: (credential: string) => Promise<{ error?: string }>;
+  /** Login con Google vía Firebase Authentication (popup) contra la API */
+  loginWithFirebase: () => Promise<{ error?: string; pending?: boolean }>;
   logout: () => void;
   isLoading: boolean;
 }
 
 const AuthContext = createContext<AuthContextType>({
   loginWithGoogle: async () => ({ error: 'no disponible' }),
+  loginWithFirebase: async () => ({ error: 'no disponible' }),
   loginDemo: async () => ({ error: 'no disponible' }),
   user: null, login: () => {}, logout: () => {}, isLoading: true,
 });
@@ -203,6 +207,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (r.user) { await afterApiLogin({ ...(r.user as AuthUser), role: normalizeRole(r.user.role) }); return {}; }
     return { error: r.error };
   };
+  const loginWithFirebase = async () => {
+    const cfg = apiAuthConfig()?.firebase ?? window.TIMIA_FIREBASE;
+    if (!cfg) return { error: 'Firebase no está configurado' };
+    try {
+      const hd = apiAuthConfig()?.allowedDomains?.length === 1 ? apiAuthConfig()!.allowedDomains[0] : undefined;
+      const { idToken } = await signInWithGoogleFirebase(cfg, hd);
+      const r = await apiLoginFirebase(idToken);
+      if (r.user) { await afterApiLogin({ ...(r.user as AuthUser), role: normalizeRole(r.user.role) }); return {}; }
+      await signOutFirebase();
+      return { error: r.error, pending: r.pending };
+    } catch (e: any) {
+      const code = String(e?.code ?? '');
+      if (code.includes('popup-closed') || code.includes('cancelled')) return { error: 'Se cerró la ventana de Google antes de terminar.' };
+      if (code.includes('unauthorized-domain')) return { error: 'Este dominio no está autorizado en Firebase (Authentication › Settings › Authorized domains).' };
+      return { error: e?.message ?? 'No se pudo iniciar sesión con Google' };
+    }
+  };
   const loginWithGoogle = async (credential: string) => {
     const r = await apiLoginGoogle(credential);
     if (r.user) { await afterApiLogin({ ...(r.user as AuthUser), role: normalizeRole(r.user.role) }); return {}; }
@@ -212,11 +233,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = () => {
     setUser(null);
     try { localStorage.removeItem(STORAGE_KEY); } catch {}
-    if (persist.mode === 'api') apiLogout();
+    if (persist.mode === 'api') { apiLogout(); signOutFirebase(); }
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, loginDemo, loginWithGoogle, logout, isLoading }}>
+    <AuthContext.Provider value={{ user, login, loginDemo, loginWithGoogle, loginWithFirebase, logout, isLoading }}>
       {children}
     </AuthContext.Provider>
   );
