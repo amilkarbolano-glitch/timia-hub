@@ -16,6 +16,9 @@ export type JiraStatus =
   | 'Ready to Verify' | 'Ready to Deploy' | 'Deployed'
   | 'Blocked' | 'Discarded' | 'Test' | 'Accepted';
 
+/** Paso por una fase/estado Jira de una feature (línea de tiempo) */
+export interface ImputacionHistory { status: JiraStatus; date: string; by: string; note?: string }
+
 export interface ImputacionEntry {
   id: string;
   projectId: string;
@@ -33,6 +36,7 @@ export interface ImputacionEntry {
   context: string;
   createdBy: string;
   createdAt: string;    // YYYY-MM-DD
+  history?: ImputacionHistory[];   // cambios de estado con fecha (New → Analysing → …)
 }
 
 export interface AdminProject {
