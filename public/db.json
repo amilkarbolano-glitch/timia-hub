@@ -1,6 +1,6 @@
 {
  "_version": "1.0.0",
- "_note": "Seed de PRUEBAS (develop/Pages): piloto MIGBD + CRONOS + BCBS239 con avance e issues para ver la Vista cuenta. El dataset completo está en seed/db.full.json.",
+ "_note": "Seed del piloto: solo el proyecto MIGBD (SDATOOL-54364). Dataset completo en seed/db.full.json.",
  "timia_admin_projects": [
   {
    "id": "MIGBD",
@@ -12,28 +12,6 @@
    "startDate": "2026-02-18",
    "active": true,
    "sda": "SDATOOL-54364"
-  },
-  {
-   "id": "CRONOS",
-   "name": "CRONOS",
-   "area": "Juan Pablo Arévalo",
-   "color": "#0891b2",
-   "priority": "Alta",
-   "client": "BBVA Colombia",
-   "startDate": "2026-06-02",
-   "active": true,
-   "sda": "SDATOOL-52210"
-  },
-  {
-   "id": "BCBS239",
-   "name": "BCBS239",
-   "area": "Diego Sánchez",
-   "color": "#7e22ce",
-   "priority": "Alta",
-   "client": "BBVA Colombia",
-   "startDate": "2026-04-13",
-   "active": true,
-   "sda": "SDATOOL-51877"
   }
  ],
  "timia_admin_users": [
@@ -43,9 +21,7 @@
    "email": "rodolfo.pereda@timia.ai",
    "role": "account_manager",
    "projectIds": [
-    "MIGBD",
-    "CRONOS",
-    "BCBS239"
+    "MIGBD"
    ],
    "initials": "RP",
    "avatarColor": "#dc2626",
@@ -59,8 +35,7 @@
    "email": "juanpablo.arevalo@timia.ai",
    "role": "pm",
    "projectIds": [
-    "MIGBD",
-    "CRONOS"
+    "MIGBD"
    ],
    "initials": "JA",
    "avatarColor": "#7c3aed",
@@ -107,32 +82,6 @@
    "avatarColor": "#0e7490",
    "active": true,
    "areaLabel": "Desarrollador · Migración BD a ADA"
-  },
-  {
-   "id": "u-diego",
-   "name": "Diego Sánchez",
-   "email": "diego.sanchez@timia.ai",
-   "role": "pm",
-   "projectIds": [
-    "BCBS239"
-   ],
-   "initials": "DS",
-   "avatarColor": "#2563eb",
-   "active": true,
-   "areaLabel": "Project Manager · BCBS239"
-  },
-  {
-   "id": "u-sergio",
-   "name": "Sergio David Rodriguez",
-   "email": "sergio.rodriguez@timia.ai",
-   "role": "developer",
-   "projectIds": [
-    "CRONOS"
-   ],
-   "initials": "SR",
-   "avatarColor": "#b45309",
-   "active": true,
-   "areaLabel": "Desarrollador · CRONOS"
   }
  ],
  "timia_project_roles": {},
@@ -806,368 +755,6 @@
      ]
     }
    ]
-  },
-  "CRONOS": {
-   "projectId": "CRONOS",
-   "startDate": "2026-06-02",
-   "totalWeeks": 13,
-   "generatedAt": "2026-06-25T12:00:00.000Z",
-   "weekLabels": [
-    "S1 · 2 jun",
-    "S2 · 10 jun",
-    "S3 · 18 jun",
-    "S4 · 25 jun",
-    "S5 · 3 jul",
-    "S6 · 10 jul",
-    "S7 · 17 jul",
-    "S8 · 27 jul",
-    "S9 · 3 ago",
-    "S10 · 11 ago",
-    "S11 · 19 ago",
-    "S12 · 26 ago",
-    "S13 · 2 sep"
-   ],
-   "entregables": [
-    {
-     "id": "doc",
-     "label": "I. Documentación y gobierno",
-     "activities": [
-      {
-       "label": "Análisis y resolución de dudas",
-       "startWeek": 1,
-       "endWeek": 2
-      },
-      {
-       "label": "Elaboración diccionario técnico",
-       "startWeek": 1,
-       "endWeek": 3,
-       "etapas": [
-        {
-         "id": "dt-1",
-         "label": "Levantamiento inicial de campos",
-         "peso": 25
-        },
-        {
-         "id": "dt-2",
-         "label": "Envío a Gobierno de datos",
-         "peso": 25
-        },
-        {
-         "id": "dt-3",
-         "label": "Correcciones de Gobierno",
-         "peso": 25,
-         "optional": true
-        },
-        {
-         "id": "dt-4",
-         "label": "Validación final del diccionario",
-         "peso": 25
-        }
-       ]
-      },
-      {
-       "label": "Inicialización en Nebula",
-       "startWeek": 1,
-       "endWeek": 1,
-       "bbva": true
-      },
-      {
-       "label": "Documentación técnica ETL",
-       "startWeek": 2,
-       "endWeek": 4
-      },
-      {
-       "label": "Circuito validación Gobierno Técnico",
-       "startWeek": 3,
-       "endWeek": 6,
-       "bbva": true
-      },
-      {
-       "label": "Construcción Modelo Solución del Dato",
-       "startWeek": 2,
-       "endWeek": 4
-      }
-     ]
-    },
-    {
-     "id": "ada",
-     "label": "II. Componentes ADA",
-     "activities": [
-      {
-       "label": "Gestión repos Bitbucket · Procesamiento",
-       "startWeek": 1,
-       "endWeek": 1,
-       "bbva": true
-      },
-      {
-       "label": "Construcción Spark · Scala",
-       "startWeek": 3,
-       "endWeek": 9,
-       "etapas": [
-        {
-         "id": "sp-1",
-         "label": "Ambientación repositorio local",
-         "peso": 10
-        },
-        {
-         "id": "sp-2",
-         "label": "Construcción clases principales",
-         "peso": 40
-        },
-        {
-         "id": "sp-3",
-         "label": "Config y utilitarios",
-         "peso": 20
-        },
-        {
-         "id": "sp-4",
-         "label": "Test unitarios y aceptación",
-         "peso": 20
-        },
-        {
-         "id": "sp-5",
-         "label": "Escritura local · validación salida",
-         "peso": 10
-        }
-       ]
-      },
-      {
-       "label": "Construcción reglas calidad (Hammurabi)",
-       "startWeek": 6,
-       "endWeek": 8
-      },
-      {
-       "label": "Pruebas en entorno local",
-       "startWeek": 8,
-       "endWeek": 9
-      },
-      {
-       "label": "Despliegue y pruebas entornos Work",
-       "startWeek": 9,
-       "endWeek": 10,
-       "bbva": true
-      },
-      {
-       "label": "Certificación calidad por equipo QA",
-       "startWeek": 10,
-       "endWeek": 11,
-       "bbva": true
-      }
-     ]
-    },
-    {
-     "id": "auto",
-     "label": "III. Automatización y orquestación",
-     "activities": [
-      {
-       "label": "Gestión acceso Control-M distribuido",
-       "startWeek": 4,
-       "endWeek": 5,
-       "bbva": true
-      },
-      {
-       "label": "Definición de la automatización",
-       "startWeek": 5,
-       "endWeek": 6
-      },
-      {
-       "label": "Construcción Mallas Control-M",
-       "startWeek": 7,
-       "endWeek": 10
-      },
-      {
-       "label": "Pruebas orquestación en Work",
-       "startWeek": 9,
-       "endWeek": 11
-      },
-      {
-       "label": "Certificación mallas Control-M",
-       "startWeek": 10,
-       "endWeek": 12,
-       "bbva": true
-      },
-      {
-       "label": "Estabilización en producción",
-       "startWeek": 12,
-       "endWeek": 13
-      }
-     ]
-    }
-   ]
-  },
-  "BCBS239": {
-   "projectId": "BCBS239",
-   "startDate": "2026-04-13",
-   "totalWeeks": 13,
-   "generatedAt": "2026-06-25T12:00:00.000Z",
-   "weekLabels": null,
-   "entregables": [
-    {
-     "id": "doc",
-     "label": "I. Documentación y gobierno",
-     "activities": [
-      {
-       "label": "Análisis y resolución de dudas",
-       "startWeek": 1,
-       "endWeek": 2
-      },
-      {
-       "label": "Elaboración diccionario técnico",
-       "startWeek": 1,
-       "endWeek": 3,
-       "etapas": [
-        {
-         "id": "dt-1",
-         "label": "Levantamiento inicial de campos",
-         "peso": 25
-        },
-        {
-         "id": "dt-2",
-         "label": "Envío a Gobierno de datos",
-         "peso": 25
-        },
-        {
-         "id": "dt-3",
-         "label": "Correcciones de Gobierno",
-         "peso": 25,
-         "optional": true
-        },
-        {
-         "id": "dt-4",
-         "label": "Validación final del diccionario",
-         "peso": 25
-        }
-       ]
-      },
-      {
-       "label": "Inicialización en Nebula",
-       "startWeek": 1,
-       "endWeek": 1,
-       "bbva": true
-      },
-      {
-       "label": "Documentación técnica ETL",
-       "startWeek": 2,
-       "endWeek": 4
-      },
-      {
-       "label": "Circuito validación Gobierno Técnico",
-       "startWeek": 3,
-       "endWeek": 6,
-       "bbva": true
-      },
-      {
-       "label": "Construcción Modelo Solución del Dato",
-       "startWeek": 2,
-       "endWeek": 4
-      }
-     ]
-    },
-    {
-     "id": "ada",
-     "label": "II. Componentes ADA",
-     "activities": [
-      {
-       "label": "Gestión repos Bitbucket · Procesamiento",
-       "startWeek": 1,
-       "endWeek": 1,
-       "bbva": true
-      },
-      {
-       "label": "Construcción Spark · Scala",
-       "startWeek": 3,
-       "endWeek": 9,
-       "etapas": [
-        {
-         "id": "sp-1",
-         "label": "Ambientación repositorio local",
-         "peso": 10
-        },
-        {
-         "id": "sp-2",
-         "label": "Construcción clases principales",
-         "peso": 40
-        },
-        {
-         "id": "sp-3",
-         "label": "Config y utilitarios",
-         "peso": 20
-        },
-        {
-         "id": "sp-4",
-         "label": "Test unitarios y aceptación",
-         "peso": 20
-        },
-        {
-         "id": "sp-5",
-         "label": "Escritura local · validación salida",
-         "peso": 10
-        }
-       ]
-      },
-      {
-       "label": "Construcción reglas calidad (Hammurabi)",
-       "startWeek": 6,
-       "endWeek": 8
-      },
-      {
-       "label": "Pruebas en entorno local",
-       "startWeek": 8,
-       "endWeek": 9
-      },
-      {
-       "label": "Despliegue y pruebas entornos Work",
-       "startWeek": 9,
-       "endWeek": 10,
-       "bbva": true
-      },
-      {
-       "label": "Certificación calidad por equipo QA",
-       "startWeek": 10,
-       "endWeek": 11,
-       "bbva": true
-      }
-     ]
-    },
-    {
-     "id": "auto",
-     "label": "III. Automatización y orquestación",
-     "activities": [
-      {
-       "label": "Gestión acceso Control-M distribuido",
-       "startWeek": 4,
-       "endWeek": 5,
-       "bbva": true
-      },
-      {
-       "label": "Definición de la automatización",
-       "startWeek": 5,
-       "endWeek": 6
-      },
-      {
-       "label": "Construcción Mallas Control-M",
-       "startWeek": 7,
-       "endWeek": 10
-      },
-      {
-       "label": "Pruebas orquestación en Work",
-       "startWeek": 9,
-       "endWeek": 11
-      },
-      {
-       "label": "Certificación mallas Control-M",
-       "startWeek": 10,
-       "endWeek": 12,
-       "bbva": true
-      },
-      {
-       "label": "Estabilización en producción",
-       "startWeek": 12,
-       "endWeek": 13
-      }
-     ]
-    }
-   ]
   }
  },
  "timia_plan_startdates": {},
@@ -1420,38 +1007,6 @@
  "timia_bitacora": [],
  "timia_plan_issues": [
   {
-   "id": "is-cro-1",
-   "planKey": "CRONOS",
-   "type": "bloqueante",
-   "title": "Acceso Control-M distribuido sin aprobar",
-   "startDate": "2026-09-08",
-   "impacts": [
-    {
-     "planKey": "CRONOS",
-     "entregableId": "auto",
-     "actIdx": 0
-    }
-   ],
-   "createdBy": "Juan Pablo Arévalo",
-   "createdAt": "2026-09-08T14:00:00Z"
-  },
-  {
-   "id": "is-cro-2",
-   "planKey": "CRONOS",
-   "type": "alerta",
-   "title": "Circuito Gobierno Técnico sin respuesta de BBVA",
-   "startDate": "2026-09-12",
-   "impacts": [
-    {
-     "planKey": "CRONOS",
-     "entregableId": "doc",
-     "actIdx": 2
-    }
-   ],
-   "createdBy": "Juan Pablo Arévalo",
-   "createdAt": "2026-09-12T09:00:00Z"
-  },
-  {
    "id": "is-mig-1",
    "planKey": "MIGBD",
    "type": "alerta",
@@ -1515,35 +1070,7 @@
   "MIGBD-pruebas-y-desp-5-4": 60,
   "MIGBD-pruebas-y-desp-5-5": 60,
   "MIGBD-automatizaci-n-7-0": 60,
-  "MIGBD-certificaci-n--8-3": 60,
-  "CRONOS-doc-0": 100,
-  "CRONOS-doc-1": 100,
-  "CRONOS-doc-2": 100,
-  "CRONOS-doc-3": 40,
-  "CRONOS-doc-4": 40,
-  "CRONOS-doc-5": 40,
-  "CRONOS-ada-0": 100,
-  "CRONOS-ada-1": 40,
-  "CRONOS-auto-0": 40,
-  "CRONOS-auto-1": 40,
-  "BCBS239-doc-0": 100,
-  "BCBS239-doc-1": 100,
-  "BCBS239-doc-2": 100,
-  "BCBS239-doc-3": 100,
-  "BCBS239-doc-4": 100,
-  "BCBS239-doc-5": 100,
-  "BCBS239-ada-0": 100,
-  "BCBS239-ada-1": 100,
-  "BCBS239-ada-2": 100,
-  "BCBS239-ada-3": 100,
-  "BCBS239-ada-4": 100,
-  "BCBS239-ada-5": 100,
-  "BCBS239-auto-0": 100,
-  "BCBS239-auto-1": 100,
-  "BCBS239-auto-2": 100,
-  "BCBS239-auto-3": 100,
-  "BCBS239-auto-4": 80,
-  "BCBS239-auto-5": 80
+  "MIGBD-certificaci-n--8-3": 60
  },
  "timia_etapa_states": {},
  "timia_activity_done_dates": {}
