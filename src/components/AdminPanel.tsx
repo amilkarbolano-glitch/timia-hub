@@ -768,7 +768,7 @@ function TabFestivos() {
 // Panel Principal
 // ═══════════════════════════════════════════════════════════════════════════════
 
-type AdminTab = 'proyectos' | 'usuarios' | 'solicitudes' | 'ans' | 'festivos';
+type AdminTab = 'proyectos' | 'usuarios' | 'solicitudes' | 'ans' | 'festivos' | 'datos';
 
 const ADMIN_TABS: { id: AdminTab; label: string; icon: React.ReactNode; desc: string }[] = [
   { id: 'proyectos', label: 'Proyectos & Equipo', icon: <Folders size={16}/>, desc: 'Proyectos con gestión de equipo integrada' },
@@ -776,6 +776,7 @@ const ADMIN_TABS: { id: AdminTab; label: string; icon: React.ReactNode; desc: st
   { id: 'solicitudes', label: 'Solicitudes de acceso', icon: <UserPlus size={16}/>, desc: 'Correos del dominio que pidieron entrar' },
   { id: 'ans',       label: 'Config ANS', icon: <Clock size={16}/>,    desc: 'Días máximos por prioridad y circuito' },
   { id: 'festivos',  label: 'Festivos',  icon: <Calendar size={16}/>,  desc: 'Calendario Colombia' },
+  { id: 'datos',     label: 'Datos',     icon: <Save size={16}/>,      desc: 'Exportar o importar un respaldo completo' },
 ];
 
 export default function AdminPanel({ onViewChange }: { onViewChange?: (view: string) => void } = {}) {
@@ -824,6 +825,7 @@ export default function AdminPanel({ onViewChange }: { onViewChange?: (view: str
       {tab === 'solicitudes' && isPM && <TabSolicitudes/>}
       {tab === 'ans'       && isPM && <TabAns/>}
       {tab === 'festivos'  && isPM && <TabFestivos/>}
+      {tab === 'datos'     && isPM && <TabDatos/>}
     </div>
   );
 }
@@ -909,6 +911,92 @@ function TabSolicitudes() {
               <span style={{ color: '#111' }}>{r.email}</span><span>· {fmt(r.resolvedAt)} · {r.resolvedBy}</span>
             </div>
           ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+// ─── Tab: Datos (respaldo) ────────────────────────────────────────────────────
+// Exporta todo el estado (proyectos, equipo, planes, imputaciones…) a un JSON y lo
+// vuelve a cargar. Sirve para llevar lo trabajado en local al servidor, o para
+// restaurar el piloto. La escritura pasa por los permisos del servidor.
+
+const BACKUP_KEYS = [
+  'timia_admin_projects', 'timia_admin_users', 'timia_project_roles', 'timia_role_permissions',
+  'timia_ans_config', 'timia_bbva_ans_config', 'timia_holidays',
+  'timia_plan_configs', 'timia_plan_startdates', 'timia_plan_pcts', 'timia_etapa_states',
+  'timia_activity_done_dates', 'timia_activity_assignees', 'timia_activity_jiras', 'timia_plan_historial',
+  'timia_plan_issues', 'timia_kanban_tasks', 'timia_bitacora', 'timia_circuitos',
+  'timia_inv_stages', 'timia_inv_v2', 'timia_links', 'timia_imputaciones',
+  'timia_tr_features', 'timia_tr_entries', 'timia_access_requests',
+];
+
+function TabDatos() {
+  const [busy, setBusy] = useState('');
+  const [preview, setPreview] = useState<{ name: string; data: Record<string, unknown> } | null>(null);
+  const fileRef = React.useRef<HTMLInputElement>(null);
+  const count = (v: unknown) => Array.isArray(v) ? v.length : (v && typeof v === 'object' ? Object.keys(v).length : 1);
+
+  function exportar() {
+    const out: Record<string, unknown> = { _exportedAt: new Date().toISOString(), _app: 'timia-hub' };
+    BACKUP_KEYS.forEach(k => { try { const raw = localStorage.getItem(k); if (raw) out[k] = JSON.parse(raw); } catch {} });
+    const blob = new Blob([JSON.stringify(out, null, 1)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = `timia-hub-respaldo-${new Date().toISOString().slice(0, 10)}.json`; a.click();
+    URL.revokeObjectURL(a.href);
+  }
+  async function elegir(f: File) {
+    try {
+      const data = JSON.parse(await f.text());
+      if (!data || typeof data !== 'object') throw new Error('Archivo inválido');
+      setPreview({ name: f.name, data });
+    } catch (e: any) { alert(`No se pudo leer el archivo: ${e?.message ?? e}`); }
+  }
+  function importar() {
+    if (!preview) return;
+    const keys = Object.keys(preview.data).filter(k => k.startsWith('timia_'));
+    if (!confirm(`Se reemplazarán ${keys.length} colecciones con el contenido del archivo. ¿Continuar?`)) return;
+    setBusy('Importando…');
+    keys.forEach(k => persistSet(k, (preview.data as any)[k]));
+    setTimeout(() => { setBusy(''); setPreview(null); alert('Respaldo importado. La página se recargará.'); window.location.reload(); }, 1200);
+  }
+
+  return (
+    <div style={{ maxWidth: 820 }}>
+      <p style={{ margin: '0 0 14px', fontSize: 11, color: '#64748b' }}>
+        El respaldo incluye proyectos, equipo, permisos, planes, avances, alertas, tareas, inventario, links, imputaciones y TR.
+        Úsalo para mover lo trabajado entre ambientes o para restaurar un estado anterior. El servidor sigue validando permisos al escribir.
+      </p>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+        <div style={{ background: '#fff', border: '0.5px solid #e2e8f0', borderRadius: 12, padding: '14px 16px' }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: '#111', marginBottom: 4 }}>Exportar</div>
+          <div style={{ fontSize: 11, color: '#64748b', marginBottom: 10 }}>Descarga un archivo .json con todo el estado actual.</div>
+          <button onClick={exportar} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', fontSize: 11, fontWeight: 600, background: '#111', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>Descargar respaldo</button>
+        </div>
+        <div style={{ background: '#fff', border: '0.5px solid #fde68a', borderRadius: 12, padding: '14px 16px' }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: '#111', marginBottom: 4 }}>Importar</div>
+          <div style={{ fontSize: 11, color: '#64748b', marginBottom: 10 }}>Reemplaza las colecciones incluidas en el archivo. Exporta antes por si acaso.</div>
+          <button onClick={() => fileRef.current?.click()} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', fontSize: 11, fontWeight: 600, background: '#fff', color: '#a16207', border: '0.5px solid #fde68a', borderRadius: 8, cursor: 'pointer' }}>Elegir archivo…</button>
+          <input ref={fileRef} type="file" accept=".json" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) elegir(f); e.target.value = ''; }}/>
+        </div>
+      </div>
+      {preview && (
+        <div style={{ marginTop: 12, background: '#fff', border: '0.5px solid #e2e8f0', borderRadius: 12, padding: '14px 16px' }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: '#111', marginBottom: 8 }}>{preview.name}</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 4, marginBottom: 12 }}>
+            {Object.keys(preview.data).filter(k => k.startsWith('timia_')).map(k => (
+              <div key={k} style={{ fontSize: 10, color: '#374151', display: 'flex', gap: 6 }}>
+                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>{k.replace('timia_', '')}</span>
+                <strong>{count((preview.data as any)[k])}</strong>
+              </div>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <button onClick={() => setPreview(null)} style={{ padding: '7px 12px', fontSize: 11, background: '#f1f5f9', border: 'none', borderRadius: 7, cursor: 'pointer' }}>Cancelar</button>
+            <button onClick={importar} disabled={!!busy} style={{ padding: '7px 14px', fontSize: 11, fontWeight: 600, background: busy ? '#cbd5e1' : '#a16207', color: '#fff', border: 'none', borderRadius: 7, cursor: 'pointer' }}>{busy || 'Importar respaldo'}</button>
+          </div>
         </div>
       )}
     </div>
