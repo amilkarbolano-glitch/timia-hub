@@ -20,6 +20,7 @@ import ActivityReport from './components/ActivityReport';
 import Estimaciones from './components/Estimaciones';
 import PlanDeTrabajo from './components/PlanDeTrabajo';
 import { INITIAL_TEMPLATES } from './lib/templates';
+import { pathFor, parsePath } from './lib/routes';
 import { ProjectTemplate } from './types';
 
 // ─── Pantalla de acceso denegado ──────────────────────────────────────────────
@@ -50,41 +51,45 @@ function AppInner() {
   const { user } = useAuth();
   const role = (user?.role ?? 'developer') as UserRole;
 
-  // Restaura la vista guardada en localStorage; si no hay, usa la landing del rol
+  // Vista inicial: la URL manda (enlaces directos); si no, la landing del rol.
   const [currentView, setCurrentView] = useState<View>(() => {
-    try {
-      const saved = localStorage.getItem('timia_current_view') as View | null;
-      const setupViews: View[] = ['setup-project', 'setup-team', 'setup-tasks'];
-      if (saved && !setupViews.includes(saved)) return saved;
-    } catch {}
+    const { view, param } = parsePath();
+    if (view) {
+      if (view === 'plan-trabajo' && param) { try { localStorage.setItem('timia_last_plan_project', param); } catch {} }
+      return view;
+    }
     return (ROLE_LANDING[role] as View) ?? 'dashboard';
   });
   const currentViewRef = useRef<View>(currentView);
   currentViewRef.current = currentView;
 
   // Navegación con historial del navegador para que el botón "Atrás" funcione dentro de la app
-  const navigate = useCallback((view: View) => {
+  const navigate = useCallback((view: View, param?: string) => {
     setCurrentView(view);
     try { localStorage.setItem('timia_current_view', view); } catch {}
-    window.history.pushState({ view }, '', window.location.href);
+    const url = pathFor(view, param);
+    if (window.location.pathname !== url) window.history.pushState({ view, param }, '', url);
   }, []);
 
-  // Sincroniza el historial al montar y maneja el botón Atrás del navegador
+  // Botón Atrás/Adelante del navegador: la URL manda
   useEffect(() => {
-    window.history.replaceState({ view: currentView }, '', window.location.href);
-    const handlePop = (e: PopStateEvent) => {
-      const v = (e.state?.view as View | undefined) ?? (ROLE_LANDING[role] as View) ?? 'dashboard';
-      setCurrentView(v);
-      try { localStorage.setItem('timia_current_view', v); } catch {}
+    const { view, param } = parsePath();
+    window.history.replaceState({ view: currentView, param }, '', view ? window.location.pathname : pathFor(currentView));
+    const handlePop = () => {
+      const { view: v, param: p } = parsePath();
+      const next = v ?? (ROLE_LANDING[role] as View) ?? 'dashboard';
+      if (next === 'plan-trabajo' && p) { try { localStorage.setItem('timia_last_plan_project', p); } catch {} }
+      setCurrentView(next);
     };
     window.addEventListener('popstate', handlePop);
     return () => window.removeEventListener('popstate', handlePop);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Si el rol cambia (ej: cambio de cuenta), limpia vista guardada y va a la landing
+  // Si el rol cambia (cambio de cuenta): si la URL no es válida para el rol, ir a la landing
+  const firstRole = useRef(true);
   useEffect(() => {
-    try { localStorage.removeItem('timia_current_view'); } catch {}
+    if (firstRole.current) { firstRole.current = false; return; }
     navigate((ROLE_LANDING[role] as View) ?? 'dashboard');
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [role]);
