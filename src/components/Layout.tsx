@@ -203,6 +203,7 @@ export default function Layout({ children, currentView, onViewChange, userRole }
           </div>
           
           <div className="flex items-center gap-2">
+            <BuildBadge/>
             <PendingRequestsBadge onClick={() => onViewChange('admin')}/>
             <PersistBadge/>
             <button
@@ -290,6 +291,13 @@ export function PendingRequestsBadge({ onClick }: { onClick?: () => void }) {
       {n} acceso{n !== 1 ? 's' : ''} por aprobar
     </button>
   );
+}
+
+declare global { interface Window { TIMIA_BUILD?: { branch: string; sha: string; at: string } } }
+export function BuildBadge() {
+  const b = typeof window !== 'undefined' ? window.TIMIA_BUILD : undefined;
+  if (!b || b.branch === 'main') return null;
+  return <span title={`Build de pruebas · ${b.sha} · ${b.at}`} style={{ fontSize:10, fontWeight:700, color:'#7c3aed', background:'#f5f3ff', border:'0.5px solid #ddd6fe', borderRadius:10, padding:'3px 8px', whiteSpace:'nowrap' }}>pruebas · {b.branch}</span>;
 }
 
 export function PersistBadge() {

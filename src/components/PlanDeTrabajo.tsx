@@ -12,7 +12,7 @@ import { snapToBusinessDay, addBusinessDays, computeBusinessWeekIdx, dateToBusin
 import {
   adminStore,
   type PlanEtapa, type EtapaStates, type PlanHistorialEntry,
-  type ActivityAssignees, type AdminUser, type PlanConfig, type PlanIssue, type PlanImpact, type BitacoraEntry,
+  type ActivityAssignees, type AdminUser, type AdminProject, type PlanConfig, type PlanIssue, type PlanImpact, type BitacoraEntry,
   issueImpacts, changeExtensionDays, makePlanKey, splitPlanKey, planKeyOf, CRONO_MAIN_NAME,
 } from '../lib/adminStore';
 
@@ -1435,6 +1435,162 @@ function GeneralGantt({ plans, holidays, getActivityPct, issues, changes, onOpen
   );
 }
 
+// ─── AccountView — vista de cuenta: todos los proyectos, números y Gantt por PM ─
+// Para el gerente de cuenta (todos los PM) y para un PM (sus proyectos).
+
+function AccountView({ summaries, onOpenProject, projectIds }: { summaries: PlanSummary[]; onOpenProject: (projectId: string) => void; projectIds: string[] }) {
+  const projects = adminStore.getProjects().filter(p => p.active && projectIds.includes(p.id));
+  const users = adminStore.getUsers().filter(u => u.active);
+  const issues = adminStore.getPlanIssues().filter(i => !i.endDate);
+  const today = new Date(); today.setHours(12, 0, 0, 0);
+  const DAY = 86400000;
+  const MES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  const fmt = (d: Date | null) => d ? `${d.getDate()} ${MES[d.getMonth()]}` : '—';
+
+  type Row = { p: AdminProject; pm: string; pmUser?: AdminUser; real: number; exp: number; dif: number; n: number; done: number; late: number; bloq: number; alert: number; lost: number; start: Date | null; end: Date | null; crons: number; risk: number };
+  const rows: Row[] = projects.map(p => {
+    const ps = summaries.filter(s => s.projectId === p.id);
+    const n = ps.reduce((a, s) => a + s.nActs, 0);
+    const real = n ? ps.reduce((a, s) => a + s.real * s.nActs, 0) / n : 0;
+    const exp = n ? ps.reduce((a, s) => a + s.exp * s.nActs, 0) / n : 0;
+    const pmUser = users.find(u => u.role === 'pm' && u.projectIds.includes(p.id)) ?? users.find(u => u.name === p.area);
+    const pi = issues.filter(i => i.planKey.split('::')[0] === p.id || issueImpacts(i).some(m => m.planKey.split('::')[0] === p.id));
+    const starts = ps.map(s => s.start).filter(Boolean) as Date[]; const ends = ps.map(s => s.end).filter(Boolean) as Date[];
+    const late = ps.reduce((a, s) => a + s.late, 0), bloq = pi.filter(i => i.type === 'bloqueante').length, lost = ps.reduce((a, s) => a + s.blockDays + s.changeDays, 0);
+    const dif = real - exp;
+    let risk = 0; if (dif < -10) risk += 35; else if (dif < -3) risk += 15; risk += Math.min(30, 15 * bloq) + Math.min(20, 5 * late) + Math.min(15, lost); if (!ps.length) risk += 10;
+    return { p, pm: pmUser?.name ?? p.area, pmUser, real, exp, dif, n, done: ps.reduce((a, s) => a + s.done, 0), late, bloq, alert: pi.filter(i => i.type === 'alerta').length, lost,
+      start: starts.length ? new Date(Math.min(...starts.map(d => d.getTime()))) : null, end: ends.length ? new Date(Math.max(...ends.map(d => d.getTime()))) : null, crons: ps.length, risk: Math.min(100, risk) };
+  });
+  const byPm = new Map<string, Row[]>(); rows.forEach(r => byPm.set(r.pm, [...(byPm.get(r.pm) ?? []), r]));
+  const totalN = rows.reduce((a, r) => a + r.n, 0);
+  const gReal = totalN ? rows.reduce((a, r) => a + r.real * r.n, 0) / totalN : 0;
+  const gExp = totalN ? rows.reduce((a, r) => a + r.exp * r.n, 0) / totalN : 0;
+  const riskColor = (r: number) => r >= 60 ? '#dc2626' : r >= 30 ? '#d97706' : '#15803d';
+
+  // Eje calendario común
+  const dated = rows.filter(r => r.start && r.end);
+  const axisStart = dated.length ? new Date(Math.min(...dated.map(r => r.start!.getTime()))) : today;
+  const axisEnd = dated.length ? new Date(Math.max(...dated.map(r => r.end!.getTime()), today.getTime())) : today;
+  axisStart.setDate(1); axisEnd.setMonth(axisEnd.getMonth() + 1, 0);
+  const span = Math.max(1, (axisEnd.getTime() - axisStart.getTime()) / DAY);
+  const pos = (d: Date) => Math.min(100, Math.max(0, (d.getTime() - axisStart.getTime()) / DAY / span * 100));
+  const months: { label: string; left: number; width: number }[] = [];
+  { const c = new Date(axisStart); while (c <= axisEnd) { const nx = new Date(c.getFullYear(), c.getMonth() + 1, 1); months.push({ label: `${MES[c.getMonth()]} ${String(c.getFullYear()).slice(2)}`, left: pos(c), width: pos(nx > axisEnd ? axisEnd : nx) - pos(c) }); c.setMonth(c.getMonth() + 1); } }
+
+  const KPI = ({ label, value, sub, color }: { label: string; value: string | number; sub?: string; color: string }) => (
+    <div style={{ background:'#fff', border:'0.5px solid #e2e8f0', borderLeft:`4px solid ${color}`, borderRadius:12, padding:'12px 16px' }}>
+      <div style={{ fontSize:22, fontWeight:700, color:'#111', lineHeight:1 }}>{value}</div>
+      <div style={{ fontSize:11, color:'#374151', marginTop:4 }}>{label}</div>
+      {sub && <div style={{ fontSize:10, color:'#94a3b8' }}>{sub}</div>}
+    </div>
+  );
+
+  return (
+    <div>
+      <div style={{ display:'flex', alignItems:'center', gap:12, padding:'14px 18px', background:'#fff', border:'0.5px solid #e2e8f0', borderRadius:12, marginBottom:12 }}>
+        <div style={{ width:40, height:40, borderRadius:10, background:'#fef2f2', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}><LayoutList size={18} color="#dc2626"/></div>
+        <div style={{ flex:1 }}>
+          <h3 style={{ margin:0, fontSize:15, fontWeight:600, color:'#111' }}>Cuenta · {Array.from(new Set(projects.map(p => p.client))).join(' · ') || 'Todos los proyectos'}</h3>
+          <p style={{ margin:'2px 0 0', fontSize:10, color:'#64748b' }}>{rows.length} proyectos · {byPm.size} PM · {totalN} tareas de plan · avance ponderado por tarea</p>
+        </div>
+      </div>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(170px, 1fr))', gap:8, marginBottom:14 }}>
+        <KPI label="Avance real" value={`${gReal.toFixed(0)}%`} sub={`esperado ${gExp.toFixed(0)}%`} color="#111"/>
+        <KPI label="Desviación" value={fmt1(parseFloat((gReal - gExp).toFixed(1)))} sub={gReal - gExp >= 0 ? 'a tiempo o adelante' : 'por debajo de lo esperado'} color={difColor(gReal - gExp)}/>
+        <KPI label="Tareas atrasadas" value={rows.reduce((a, r) => a + r.late, 0)} sub={`${rows.reduce((a, r) => a + r.done, 0)}/${totalN} completadas`} color="#c2410c"/>
+        <KPI label="Bloqueantes abiertos" value={rows.reduce((a, r) => a + r.bloq, 0)} sub={`${rows.reduce((a, r) => a + r.alert, 0)} alertas`} color="#dc2626"/>
+        <KPI label="Días perdidos" value={rows.reduce((a, r) => a + r.lost, 0)} sub="bloqueos + cambios (hábiles)" color="#6d28d9"/>
+        <KPI label="Proyectos en riesgo" value={rows.filter(r => r.risk >= 60).length} sub={`${rows.filter(r => r.risk >= 30 && r.risk < 60).length} en observación`} color="#d97706"/>
+      </div>
+
+      {/* Gantt de proyectos por PM */}
+      <div style={{ background:'#fff', border:'0.5px solid #e2e8f0', borderRadius:12, marginBottom:12, overflow:'hidden' }}>
+        <div style={{ padding:'10px 14px', borderBottom:'0.5px solid #f1f5f9', display:'flex', alignItems:'center', gap:8 }}>
+          <p style={{ margin:0, fontSize:11, fontWeight:700, color:'#111', flex:1 }}>Cronograma de proyectos</p>
+          <span style={{ fontSize:9, color:'#94a3b8' }}>barra = duración del plan · relleno = % real · marca = esperado · HOY en verde · clic abre el plan</span>
+        </div>
+        <div style={{ display:'grid', gridTemplateColumns:'260px 1fr' }}>
+          <div style={{ borderRight:'0.5px solid #e2e8f0', borderBottom:'0.5px solid #e2e8f0', padding:'6px 12px', fontSize:9, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'.06em', fontWeight:700, display:'flex', alignItems:'flex-end' }}>PM › proyecto</div>
+          <div style={{ position:'relative', height:26, borderBottom:'0.5px solid #e2e8f0' }}>
+            {months.map(m => <div key={m.label} style={{ position:'absolute', top:6, left:`${m.left}%`, width:`${m.width}%`, fontSize:9, fontWeight:700, color:'#64748b', borderLeft:'0.5px solid #e2e8f0', paddingLeft:4 }}>{m.label}</div>)}
+            <div style={{ position:'absolute', top:0, bottom:0, left:`${pos(today)}%`, width:2, background:'#16a34a' }}/>
+            <span style={{ position:'absolute', top:0, left:`${pos(today)}%`, transform:'translateX(-50%)', fontSize:7, fontWeight:800, color:'#16a34a', background:'#fff', padding:'0 2px' }}>HOY</span>
+          </div>
+          {Array.from(byPm.entries()).map(([pm, prs]) => {
+            const pmUser = prs[0].pmUser; const n = prs.reduce((a, r) => a + r.n, 0); const avg = n ? prs.reduce((a, r) => a + r.real * r.n, 0) / n : 0;
+            return (
+              <React.Fragment key={pm}>
+                <div style={{ background:'#f8fafc', borderTop:'0.5px solid #e2e8f0', borderRight:'0.5px solid #e2e8f0', padding:'6px 12px', display:'flex', alignItems:'center', gap:6 }}>
+                  {pmUser && <div style={{ width:22, height:22, borderRadius:'50%', background:pmUser.avatarColor + '20', color:pmUser.avatarColor, display:'flex', alignItems:'center', justifyContent:'center', fontSize:9, fontWeight:700 }}>{pmUser.initials}</div>}
+                  <span style={{ fontSize:11, fontWeight:700, color:'#111', flex:1 }}>{pm}</span>
+                  <span style={{ fontSize:9, color:'#64748b' }}>{prs.length} proy · {avg.toFixed(0)}%</span>
+                </div>
+                <div style={{ background:'#f8fafc', borderTop:'0.5px solid #e2e8f0', position:'relative', height:34 }}>
+                  {months.map(m => <div key={m.label} style={{ position:'absolute', top:0, bottom:0, left:`${m.left}%`, borderLeft:'0.5px solid #f1f5f9' }}/>)}
+                  <div style={{ position:'absolute', top:0, bottom:0, left:`${pos(today)}%`, width:2, background:'#16a34a', opacity:.4 }}/>
+                </div>
+                {prs.map(r => (
+                  <React.Fragment key={r.p.id}>
+                    <div onClick={() => onOpenProject(r.p.id)} style={{ borderTop:'0.5px solid #f1f5f9', borderRight:'0.5px solid #e2e8f0', borderLeft:`3px solid ${r.bloq ? '#dc2626' : r.late ? '#f97316' : 'transparent'}`, padding:'6px 10px 6px 28px', cursor:'pointer' }}>
+                      <div style={{ display:'flex', alignItems:'center', gap:5 }}>
+                        <span style={{ width:7, height:7, borderRadius:'50%', background:r.p.color, flexShrink:0 }}/>
+                        <span style={{ fontSize:11, fontWeight:600, color:'#111', flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{r.p.name}</span>
+                        {r.bloq > 0 && <span style={{ fontSize:10 }}>⛔{r.bloq > 1 ? r.bloq : ''}</span>}{r.alert > 0 && <span style={{ fontSize:10 }}>⚠</span>}
+                        <span style={{ fontSize:9, fontWeight:700, color:riskColor(r.risk) }}>{r.risk}</span>
+                      </div>
+                      <div style={{ fontSize:9, color:'#94a3b8' }}>{r.p.sda ? `${r.p.sda} · ` : ''}{r.done}/{r.n} tareas{r.late ? ` · ${r.late} atr.` : ''}{r.crons > 1 ? ` · ${r.crons} cronogramas` : ''}</div>
+                    </div>
+                    <div onClick={() => onOpenProject(r.p.id)} style={{ position:'relative', height:40, borderTop:'0.5px solid #f1f5f9', cursor:'pointer' }}>
+                      {months.map(m => <div key={m.label} style={{ position:'absolute', top:0, bottom:0, left:`${m.left}%`, borderLeft:'0.5px solid #f1f5f9' }}/>)}
+                      {r.start && r.end ? (
+                        <div title={`${fmt(r.start)} → ${fmt(r.end)} · ${r.real.toFixed(0)}% real · ${r.exp.toFixed(0)}% esperado`}
+                          style={{ position:'absolute', top:10, height:20, left:`${pos(r.start)}%`, width:`${Math.max(1, pos(r.end) - pos(r.start))}%`, background:`${r.p.color}22`, border:`0.5px solid ${r.p.color}66`, borderRadius:5, overflow:'hidden' }}>
+                          <div style={{ width:`${Math.min(100, r.real)}%`, height:'100%', background:r.p.color, opacity:.75 }}/>
+                          <div style={{ position:'absolute', top:0, bottom:0, left:`${Math.min(100, r.exp)}%`, width:2, background:'#111', opacity:.6 }}/>
+                          <span style={{ position:'absolute', left:6, top:3, fontSize:9, fontWeight:700, color: r.real > 12 ? '#fff' : '#374151' }}>{r.real.toFixed(0)}% <span style={{ fontWeight:500, opacity:.8 }}>/ {r.exp.toFixed(0)}%</span></span>
+                        </div>
+                      ) : <span style={{ position:'absolute', left:8, top:13, fontSize:9, color:'#94a3b8' }}>sin plan generado</span>}
+                      <div style={{ position:'absolute', top:0, bottom:0, left:`${pos(today)}%`, width:2, background:'#16a34a', opacity:.4 }}/>
+                    </div>
+                  </React.Fragment>
+                ))}
+              </React.Fragment>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Tabla por PM */}
+      <div style={{ background:'#fff', border:'0.5px solid #e2e8f0', borderRadius:12, overflow:'auto' }}>
+        <table style={{ borderCollapse:'collapse', width:'100%' }}>
+          <thead><tr style={{ background:'#fafafa' }}>{['PM', 'Proyectos', 'Tareas', 'Real', 'Esperado', 'Desv.', 'Atrasadas', '⛔', '⚠', 'Días perdidos', 'Riesgo'].map((h, i) => <th key={h} style={{ padding:'8px 12px', fontSize:9, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'.05em', textAlign: i < 2 ? 'left' : 'center', borderBottom:'0.5px solid #e2e8f0' }}>{h}</th>)}</tr></thead>
+          <tbody>
+            {Array.from(byPm.entries()).map(([pm, prs]) => {
+              const n = prs.reduce((a, r) => a + r.n, 0); const real = n ? prs.reduce((a, r) => a + r.real * r.n, 0) / n : 0; const exp = n ? prs.reduce((a, r) => a + r.exp * r.n, 0) / n : 0; const risk = Math.max(...prs.map(r => r.risk));
+              return (
+                <tr key={pm} style={{ borderBottom:'0.5px solid #f1f5f9' }}>
+                  <td style={{ padding:'8px 12px', fontSize:11, fontWeight:700, color:'#111' }}>{pm}</td>
+                  <td style={{ padding:'8px 12px', fontSize:10, color:'#374151' }}>{prs.map(r => r.p.name).join(', ')}</td>
+                  <td style={{ padding:'8px 12px', fontSize:11, textAlign:'center' }}>{prs.reduce((a, r) => a + r.done, 0)}/{n}</td>
+                  <td style={{ padding:'8px 12px', fontSize:12, fontWeight:700, textAlign:'center' }}>{real.toFixed(0)}%</td>
+                  <td style={{ padding:'8px 12px', fontSize:11, color:'#64748b', textAlign:'center' }}>{exp.toFixed(0)}%</td>
+                  <td style={{ padding:'8px 12px', fontSize:11, fontWeight:700, textAlign:'center', color:difColor(real - exp) }}>{fmt1(parseFloat((real - exp).toFixed(1)))}</td>
+                  <td style={{ padding:'8px 12px', fontSize:11, textAlign:'center', color: prs.some(r => r.late) ? '#c2410c' : '#64748b' }}>{prs.reduce((a, r) => a + r.late, 0)}</td>
+                  <td style={{ padding:'8px 12px', fontSize:11, textAlign:'center' }}>{prs.reduce((a, r) => a + r.bloq, 0)}</td>
+                  <td style={{ padding:'8px 12px', fontSize:11, textAlign:'center' }}>{prs.reduce((a, r) => a + r.alert, 0)}</td>
+                  <td style={{ padding:'8px 12px', fontSize:11, textAlign:'center' }}>{prs.reduce((a, r) => a + r.lost, 0)}</td>
+                  <td style={{ padding:'8px 12px', textAlign:'center' }}><span style={{ fontSize:10, fontWeight:700, color:riskColor(risk), background:`${riskColor(risk)}15`, borderRadius:10, padding:'2px 8px' }}>{risk}</span></td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 // ─── ConsolidadoView — vista de proyecto con varios cronogramas ───────────────
 // Muestra el % ponderado por actividades del proyecto completo, una tarjeta por
 // cronograma y una línea de tiempo calendario donde se ve el solapamiento.
@@ -2057,6 +2213,14 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
   const [drawer,            setDrawer]            = useState<DrawerState | null>(null);
   // Vista consolidada del proyecto (solo aplica si tiene varios cronogramas)
   const [consolidado,       setConsolidado]       = useState<boolean>(false);
+  // Vista de cuenta (todos los proyectos): por defecto para gerente de cuenta y PM
+  const canAccount = !!user && (user.role === 'account_manager' || user.role === 'pm');
+  const [accountView,       setAccountView]       = useState<boolean>(() => {
+    const seg = window.location.pathname.split('/plan/')[1]?.split('/')[0];
+    if (seg === 'cuenta') return true;
+    if (seg) return false;
+    return !!user && user.role === 'account_manager';
+  });
   const [exportingPptx,     setExportingPptx]     = useState(false);
   const [exportingPdf,      setExportingPdf]      = useState(false);
   const [exportError,       setExportError]       = useState<string>('');
@@ -2084,6 +2248,14 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
   // Permisos con el rol efectivo en el proyecto del plan activo
   const canMark = !!user && !!plan && canInProject(user, 'plan.edit_progress', plan.projectId);
   const canIssues = !!user && !!plan && canInProject(user, 'plan.manage_issues', plan.projectId);
+  // URL refleja el proyecto/cuenta seleccionado (enlaces compartibles): /plan/MIGBD · /plan/cuenta
+  useEffect(() => {
+    if (!window.location.pathname.includes('/plan')) return;
+    const base = window.location.pathname.split('/plan')[0];
+    const target = accountView ? `${base}/plan/cuenta` : (plan ? `${base}/plan/${encodeURIComponent(plan.projectId)}` : `${base}/plan`);
+    if (window.location.pathname !== target) window.history.replaceState(window.history.state, '', target);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accountView, plan?.projectId]);
 
   // Cronogramas del proyecto activo (principal + adicionales) — para tabs y consolidado
   const projectPlans = plan ? effectivePlans.filter(p => p.projectId === plan.projectId) : [];
@@ -2687,18 +2859,24 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
     <div style={{ display: 'flex', gap: 14 }}>
       {/* Sidebar — hidden on print */}
       <div id="timia-plan-sidebar" data-print-hide style={{ width: 128, flexShrink: 0 }}>
+        {canAccount && (
+          <button onClick={() => setAccountView(true)} style={{ display:'flex', alignItems:'center', gap:6, padding:'7px 10px', marginBottom:10, width:'100%', background: accountView ? '#fef2f2' : '#fff', border: accountView ? '0.5px solid #fecaca' : '0.5px solid #e2e8f0', borderRadius:8, cursor:'pointer', textAlign:'left' }}>
+            <LayoutList size={12} color="#dc2626"/>
+            <span style={{ fontSize:11, fontWeight: accountView ? 700 : 500, color: accountView ? '#dc2626' : '#374151' }}>Vista cuenta</span>
+          </button>
+        )}
         <p style={{ margin:'0 0 8px', fontSize:9, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'.06em', fontWeight:600 }}>Proyectos</p>
         <div style={{ display:'flex', flexDirection:'column', gap:3 }}>
           {Array.from(new Set(visiblePlans.map(p => p.projectId))).map(pid => {
             const group = visiblePlans.filter(p => p.projectId === pid);
-            const proj=PROJECTS.find(pr=>pr.id===pid), color=proj?.color??'#64748b', isActive=plan?.projectId===pid;
+            const proj=PROJECTS.find(pr=>pr.id===pid), color=proj?.color??'#64748b', isActive=!accountView && plan?.projectId===pid;
             // % consolidado ponderado por actividades (todos los cronogramas del proyecto)
             const agg = aggregatePlans(group);
             const overall = Math.round(agg.real);
             const hasBloq = group.some(p=>p.bloqueantes.length>0 || openIssuesOf(p.planKey).some(i=>i.type==='bloqueante'));
             const hasAlert = group.some(p=>p.alertas.length>0 || openIssuesOf(p.planKey).some(i=>i.type==='alerta'));
             return (
-              <button key={pid} onClick={()=>{ setSelected(group[0].planKey); setConsolidado(group.length>1); }} style={{ display:'flex', alignItems:'center', gap:6, padding:'7px 10px', background:isActive?`${color}15`:'transparent', border:isActive?`0.5px solid ${color}50`:'0.5px solid transparent', borderRadius:8, cursor:'pointer', textAlign:'left', transition:'all .12s' }}>
+              <button key={pid} onClick={()=>{ setSelected(group[0].planKey); setConsolidado(group.length>1); setAccountView(false); }} style={{ display:'flex', alignItems:'center', gap:6, padding:'7px 10px', background:isActive?`${color}15`:'transparent', border:isActive?`0.5px solid ${color}50`:'0.5px solid transparent', borderRadius:8, cursor:'pointer', textAlign:'left', transition:'all .12s' }}>
                 <div style={{ width:5, height:5, borderRadius:'50%', background:color, flexShrink:0 }}/>
                 <span style={{ fontSize:11, fontWeight:isActive?600:400, color:isActive?color:'#374151', flex:1 }}>
                   {pid}
@@ -2725,7 +2903,11 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
 
       {/* Plan detail */}
       <div id="timia-plan-print" style={{ flex:1, minWidth:0 }}>
-        {plan ? (
+        {accountView && canAccount ? (
+          <AccountView summaries={getPlanSummaries().filter(s => visiblePlans.some(p => p.planKey === s.planKey))}
+            projectIds={Array.from(new Set(visiblePlans.map(p => p.projectId)))}
+            onOpenProject={pid => { const g = visiblePlans.filter(p => p.projectId === pid); if (g.length) { setSelected(g[0].planKey); setConsolidado(g.length > 1); setAccountView(false); } }}/>
+        ) : plan ? (
           <>
             {/* Botones de exportar — se ocultan en print */}
             <div data-print-hide style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:6, marginBottom:10 }}>

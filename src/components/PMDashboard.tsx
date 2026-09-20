@@ -8,7 +8,7 @@ import { adminStore, issueImpacts, type AdminProject, type AdminUser, type PlanI
 import { getPlanSummaries, type PlanSummary } from './PlanDeTrabajo';
 
 type PMView = 'setup-project' | 'estimaciones' | 'plan-trabajo' | 'admin' | 'bitacora' | 'analytics';
-interface PMDashboardProps { onViewChange?: (v: PMView) => void; }
+interface PMDashboardProps { onViewChange?: (v: PMView, param?: string) => void; }
 
 const fmtD = (d: Date | null) => d ? `${d.getDate()} ${['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'][d.getMonth()]}` : '—';
 
@@ -175,7 +175,7 @@ export default function PMDashboard({ onViewChange }: PMDashboardProps) {
               <span style={{ fontSize: 10, color: '#94a3b8' }}>· {prs.length} proyecto{prs.length !== 1 ? 's' : ''} · {avg.toFixed(0)}% prom.</span>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: 10 }}>
-              {prs.map(r => <ProjectCard key={r.p.id} r={r} onOpen={onViewChange ? () => { localStorage.setItem('timia_last_plan_project', r.p.id); onViewChange('plan-trabajo'); } : undefined} />)}
+              {prs.map(r => <ProjectCard key={r.p.id} r={r} onOpen={onViewChange ? () => { localStorage.setItem('timia_last_plan_project', r.p.id); onViewChange('plan-trabajo', r.p.id); } : undefined} />)}
             </div>
           </div>
         );
