@@ -38,6 +38,7 @@ jobs:
       - name: Build frontend
         run: |
           npm run build:client
+          cp dist/index.html dist/404.html   # SPA: GitHub Pages sirve 404.html para rutas profundas
           echo "window.TIMIA_BUILD = { branch: '${GITHUB_REF_NAME}', sha: '${GITHUB_SHA::7}', at: '$(date -u +%Y-%m-%dT%H:%MZ)' };" >> dist/config.js
         env:
           GITHUB_PAGES: 'true'

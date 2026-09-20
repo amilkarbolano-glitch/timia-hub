@@ -2215,7 +2215,12 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
   const [consolidado,       setConsolidado]       = useState<boolean>(false);
   // Vista de cuenta (todos los proyectos): por defecto para gerente de cuenta y PM
   const canAccount = !!user && (user.role === 'account_manager' || user.role === 'pm');
-  const [accountView,       setAccountView]       = useState<boolean>(() => !!user && user.role === 'account_manager');
+  const [accountView,       setAccountView]       = useState<boolean>(() => {
+    const seg = window.location.pathname.split('/plan/')[1]?.split('/')[0];
+    if (seg === 'cuenta') return true;
+    if (seg) return false;
+    return !!user && user.role === 'account_manager';
+  });
   const [exportingPptx,     setExportingPptx]     = useState(false);
   const [exportingPdf,      setExportingPdf]      = useState(false);
   const [exportError,       setExportError]       = useState<string>('');
@@ -2243,6 +2248,14 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
   // Permisos con el rol efectivo en el proyecto del plan activo
   const canMark = !!user && !!plan && canInProject(user, 'plan.edit_progress', plan.projectId);
   const canIssues = !!user && !!plan && canInProject(user, 'plan.manage_issues', plan.projectId);
+  // URL refleja el proyecto/cuenta seleccionado (enlaces compartibles): /plan/MIGBD · /plan/cuenta
+  useEffect(() => {
+    if (!window.location.pathname.includes('/plan')) return;
+    const base = window.location.pathname.split('/plan')[0];
+    const target = accountView ? `${base}/plan/cuenta` : (plan ? `${base}/plan/${encodeURIComponent(plan.projectId)}` : `${base}/plan`);
+    if (window.location.pathname !== target) window.history.replaceState(window.history.state, '', target);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accountView, plan?.projectId]);
 
   // Cronogramas del proyecto activo (principal + adicionales) — para tabs y consolidado
   const projectPlans = plan ? effectivePlans.filter(p => p.projectId === plan.projectId) : [];
