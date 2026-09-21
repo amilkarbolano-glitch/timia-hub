@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   ChevronDown, ChevronRight, Plus, Trash2, Save, ArrowRight, ArrowLeft,
-  LayoutList, Clock, CalendarDays, Settings2, CheckSquare, Users, BarChart3,
+  LayoutList, Clock, CalendarDays, Settings2, CheckSquare, Users, BarChart3, Grid3x3, List, Sparkles,
 } from 'lucide-react';
 import { PROJECTS, useAuth, canAccess } from '../contexts/AuthContext';
 import { adminStore, makePlanKey, CRONO_MAIN_NAME, type PlanEtapa, type PlanActivityConfig, type PlanEntregableConfig, type PlanConfig } from '../lib/adminStore';
@@ -9,6 +9,8 @@ import type { View } from './Layout';
 import { FlowStepper } from './SetupProject';
 import { snapToBusinessDay, addBusinessDays } from '../lib/businessDays';
 import { marcasDe, factorFase, marcasFase, type PesoModo, PESO_MODO_DEFAULT } from '../lib/avance';
+import MatrizCronograma from './MatrizCronograma';
+import { PLANTILLAS, generarDesdePlantilla } from '../lib/plantillas';
 
 // ─── Week label computation (días hábiles reales) ─────────────────────────────
 // Cada semana = 5 días hábiles. S1 empieza en startDate (snapped a día hábil),
@@ -792,6 +794,10 @@ export default function Estimaciones({ onViewChange, onBack }: EstimacionesProps
     setSelectedCronoId('');
   }
 
+  // Vista de edición: matriz (todo el cronograma junto) o lista (detalle por actividad)
+  const [vista, setVista] = useState<'matriz' | 'lista'>('matriz');
+  const [showPlantillas, setShowPlantillas] = useState(false);
+
   function updateConfig(patch: Partial<PlanConfig>) {
     const next = { ...configs, [planKey]: { ...currentConfig, ...patch } };
     setConfigs(next);
@@ -1295,35 +1301,110 @@ export default function Estimaciones({ onViewChange, onBack }: EstimacionesProps
           ))}
         </div>
 
-        {/* Tip */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, marginBottom: 14 }}>
-          <span style={{ fontSize: 11 }}>💡</span>
-          <p style={{ margin: 0, fontSize: 11, color: '#92400e' }}>
-            <strong>Tip:</strong> expande una actividad para definir sus etapas de avance. Los pesos deben sumar 100% — esto controla la propagación del % en el Plan de Trabajo.
+        {/* Vista: matriz (todo junto, como el Excel) o lista (detalle por actividad) */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', border: '1px solid #e2e8f0', borderRadius: 8, overflow: 'hidden' }}>
+            {([['matriz', 'Matriz', <Grid3x3 size={12} key="g"/>], ['lista', 'Detalle', <List size={12} key="l"/>]] as const).map(([v, lbl, ic]) => (
+              <button key={v} onClick={() => setVista(v as 'matriz' | 'lista')}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', fontSize: 11, cursor: 'pointer',
+                  border: 'none', fontWeight: vista === v ? 700 : 500,
+                  background: vista === v ? '#0d9488' : '#fff', color: vista === v ? '#fff' : '#64748b',
+                }}>
+                {ic} {lbl}
+              </button>
+            ))}
+          </div>
+          <button onClick={() => setShowPlantillas(v => !v)}
+            style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', fontSize: 11, cursor: 'pointer', border: '1px solid #c4b5fd', borderRadius: 8, background: '#faf5ff', color: '#6d28d9', fontWeight: 600 }}>
+            <Sparkles size={12}/> Cargar plantilla
+          </button>
+          <p style={{ margin: 0, fontSize: 10, color: '#94a3b8' }}>
+            {vista === 'matriz'
+              ? 'Pintá las semanas de cada actividad arrastrando, como en el Excel.'
+              : 'Editá nombres, etapas de avance y el detalle de cada actividad.'}
           </p>
         </div>
 
-        {/* Entregables */}
-        {currentConfig.entregables.map((ent, i) => (
-          <EntregablePanel
-            key={ent.id} ent={ent} entIdx={i} totalWeeks={currentConfig.totalWeeks}
-            porSemana={(currentConfig.pesoModo ?? PESO_MODO_DEFAULT) === 'actividad-semana'}
-            weekLabels={currentConfig.weekLabels}
-            onChange={e => updateEntregable(i, e)}
-            onDelete={() => deleteEntregable(i)}
-          />
-        ))}
+        {/* Plantillas — reemplazan las fases y actividades del cronograma actual */}
+        {showPlantillas && (
+          <div style={{ marginBottom: 14, padding: '12px 14px', background: '#faf5ff', border: '1px solid #ddd6fe', borderRadius: 10 }}>
+            <p style={{ margin: '0 0 8px', fontSize: 11, fontWeight: 700, color: '#6d28d9' }}>
+              Plantillas — fases, actividades y semanas ya armadas
+            </p>
+            <p style={{ margin: '0 0 10px', fontSize: 10, color: '#7c3aed' }}>
+              Las duraciones son la mediana de lo que duró cada actividad en los cronogramas reales de MIGBD y FICO.
+              Reemplaza lo que haya en <b>{currentConfig.cronoName ?? CRONO_MAIN_NAME}</b> — después ajustás en la matriz.
+            </p>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(230px,1fr))', gap: 8 }}>
+              {PLANTILLAS.map(pl => {
+                const nAct = pl.bloques.reduce((s, b) => s + b.actividades.length, 0);
+                return (
+                  <button key={pl.id}
+                    onClick={() => {
+                      if (!confirm(`Cargar "${pl.nombre}"? Se reemplazan las ${currentConfig.entregables.length} fases actuales de este cronograma.`)) return;
+                      const gen = generarDesdePlantilla(pl, {
+                        projectId: currentConfig.projectId,
+                        cronoId: currentConfig.cronoId,
+                        cronoName: currentConfig.cronoName,
+                        startDate: currentConfig.startDate ?? startDate,
+                      });
+                      const labels = computeWeekLabels(currentConfig.startDate ?? startDate, gen.totalWeeks, holidayDates);
+                      updateConfig({ entregables: gen.entregables, totalWeeks: gen.totalWeeks, weekLabels: labels, pesoModo: 'actividad-semana' });
+                      setShowPlantillas(false);
+                      setVista('matriz');
+                    }}
+                    style={{ textAlign: 'left', padding: '9px 11px', border: '1px solid #ddd6fe', borderRadius: 8, background: '#fff', cursor: 'pointer' }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: '#6d28d9', marginBottom: 2 }}>{pl.nombre}</div>
+                    <div style={{ fontSize: 9, color: '#94a3b8', marginBottom: 4 }}>{pl.bloques.length} fases · {nAct} actividades</div>
+                    <div style={{ fontSize: 9, color: '#64748b', lineHeight: 1.35 }}>{pl.descripcion}</div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
-        {/* Add entregable */}
-        <button onClick={addEntregable} style={{
-          display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px',
-          width: '100%', marginTop: 4, borderRadius: 10, cursor: 'pointer',
-          background: '#f8fafc', border: '1.5px dashed #d1d5db',
-          fontSize: 12, color: '#64748b', justifyContent: 'center',
-          fontWeight: 500,
-        }}>
-          <Plus size={14}/> Agregar entregable
-        </button>
+        {vista === 'matriz' ? (
+          <MatrizCronograma
+            entregables={currentConfig.entregables}
+            totalWeeks={currentConfig.totalWeeks}
+            weekLabels={currentConfig.weekLabels}
+            onChange={ents => updateConfig({ entregables: ents })}
+          />
+        ) : (
+          <>
+            {/* Tip */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, marginBottom: 14 }}>
+              <span style={{ fontSize: 11 }}>💡</span>
+              <p style={{ margin: 0, fontSize: 11, color: '#92400e' }}>
+                <strong>Tip:</strong> expande una actividad para definir sus etapas de avance. Los pesos deben sumar 100% — esto controla la propagación del % en el Plan de Trabajo.
+              </p>
+            </div>
+
+            {/* Entregables */}
+            {currentConfig.entregables.map((ent, i) => (
+              <EntregablePanel
+                key={ent.id} ent={ent} entIdx={i} totalWeeks={currentConfig.totalWeeks}
+                porSemana={(currentConfig.pesoModo ?? PESO_MODO_DEFAULT) === 'actividad-semana'}
+                weekLabels={currentConfig.weekLabels}
+                onChange={e => updateEntregable(i, e)}
+                onDelete={() => deleteEntregable(i)}
+              />
+            ))}
+
+            {/* Add entregable */}
+            <button onClick={addEntregable} style={{
+              display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px',
+              width: '100%', marginTop: 4, borderRadius: 10, cursor: 'pointer',
+              background: '#f8fafc', border: '1.5px dashed #d1d5db',
+              fontSize: 12, color: '#64748b', justifyContent: 'center',
+              fontWeight: 500,
+            }}>
+              <Plus size={14}/> Agregar entregable
+            </button>
+          </>
+        )}
 
         {/* Bottom CTA */}
         <div style={{ marginTop: 24, padding: '16px 20px', background: 'linear-gradient(135deg,#0f172a,#1e293b)', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>

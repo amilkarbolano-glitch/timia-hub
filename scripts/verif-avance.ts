@@ -66,4 +66,28 @@ if (doc) {
   console.log(`  Excel                              : ${esp.join(' ')}`);
 }
 console.log(fail === 0 ? '\nverif-avance OK' : `\nverif-avance: ${fail} fallas`);
-process.exit(fail === 0 ? 0 : 1);
+if (fail) process.exit(1);
+
+// ── Plantillas: el cronograma generado debe ser coherente ───────────────────
+import { PLANTILLAS, generarDesdePlantilla } from '../src/lib/plantillas';
+import { marcasDe as _marcasDe } from '../src/lib/avance';
+
+console.log('\n── Plantillas ──');
+let pf = 0;
+for (const pl of PLANTILLAS) {
+  const cfg = generarDesdePlantilla(pl, { projectId: 'TEST', startDate: '2026-09-21' });
+  const acts = cfg.entregables.flatMap(e => e.activities);
+  const casillas = acts.reduce((s, a) => s + _marcasDe({ weeks: a.weeks, startWeek: a.startWeek, endWeek: a.endWeek }).length, 0);
+  const malas = acts.filter(a => !a.weeks?.length || a.startWeek > a.endWeek || a.endWeek > cfg.totalWeeks || a.startWeek < 1);
+  const ser = seriePlanConsolidada(
+    cfg.entregables.map(e => ({ id: e.id, label: e.label, activities: e.activities.map(a => ({ weeks: a.weeks, startWeek: a.startWeek, endWeek: a.endWeek })) })),
+    cfg.totalWeeks,
+  );
+  const cierra = Math.abs((ser.acumulado[cfg.totalWeeks - 1] ?? 0) - 100) < 0.05;
+  const ok = malas.length === 0 && cierra && cfg.totalWeeks > 0;
+  if (!ok) pf++;
+  console.log(`${ok ? '✓' : '✗'} ${pl.nombre}: ${cfg.entregables.length} fases · ${acts.length} act · ${casillas} casillas · ${cfg.totalWeeks} semanas · cierra en ${(ser.acumulado[cfg.totalWeeks - 1] ?? 0).toFixed(1)}%`);
+  if (malas.length) console.log(`   actividades mal secuenciadas: ${malas.map(m => m.label).join(', ')}`);
+}
+console.log(pf === 0 ? 'plantillas OK' : `plantillas: ${pf} fallas`);
+if (pf) process.exit(1);
