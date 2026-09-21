@@ -10,6 +10,7 @@ import { FlowStepper } from './SetupProject';
 import { snapToBusinessDay, addBusinessDays } from '../lib/businessDays';
 import { marcasDe, factorFase, marcasFase, type PesoModo, PESO_MODO_DEFAULT } from '../lib/avance';
 import MatrizCronograma from './MatrizCronograma';
+import PreviewPlantilla, { type PreviewProps } from './PreviewPlantilla';
 import { PLANTILLAS, BLOQUES, generarDesdePlantilla, insertarBloque, resumenBloque } from '../lib/plantillas';
 
 // ─── Week label computation (días hábiles reales) ─────────────────────────────
@@ -808,6 +809,15 @@ export default function Estimaciones({ onViewChange, onBack }: EstimacionesProps
   /** 'proyecto' reemplaza todo el cronograma; 'entregable' agrega una fase al final. */
   const [tipoPlantilla, setTipoPlantilla] = useState<'proyecto' | 'entregable'>('proyecto');
   const [propias, setPropias] = useState<PlantillaPropia[]>(() => adminStore.getPlantillasPropias());
+  /** Plantilla en vista previa, antes de aplicarla al cronograma. */
+  const [preview, setPreview] = useState<Omit<PreviewProps, 'onCerrar' | 'totalWeeksActual' | 'weekLabels' | 'fasesActuales'> | null>(null);
+
+  /** Aplica el resultado de una vista previa al cronograma actual. */
+  function aplicarPreview(entregables: PlanEntregableConfig[], totalWeeks: number) {
+    const labels = computeWeekLabels(currentConfig.startDate ?? startDate, totalWeeks, holidayDates);
+    updateConfig({ entregables, totalWeeks, weekLabels: labels, pesoModo: 'actividad-semana' });
+    setPreview(null); setShowPlantillas(false); setVista('matriz');
+  }
 
   /** Guarda el cronograma actual (o una de sus fases) como plantilla reutilizable. */
   function guardarComoPlantilla(tipo: 'proyecto' | 'entregable', entIdx?: number) {
@@ -1395,16 +1405,13 @@ export default function Estimaciones({ onViewChange, onBack }: EstimacionesProps
                   const r = resumenBloque(b);
                   return (
                     <button key={b.id}
-                      onClick={() => {
-                        const desde = prompt(`¿En qué semana arranca "${b.label}"?`, String(Math.min(currentConfig.totalWeeks, 1)));
-                        if (desde === null) return;
-                        const sem = Math.max(1, Math.min(52, parseInt(desde, 10) || 1));
-                        const ents = insertarBloque(currentConfig.entregables, b, sem);
-                        const maxW = Math.max(currentConfig.totalWeeks, ...ents.flatMap(e => e.activities.map(a => a.endWeek)));
-                        const labels = computeWeekLabels(currentConfig.startDate ?? startDate, maxW, holidayDates);
-                        updateConfig({ entregables: ents, totalWeeks: maxW, weekLabels: labels });
-                        setShowPlantillas(false); setVista('matriz');
-                      }}
+                      onClick={() => setPreview({
+                        titulo: b.label,
+                        descripcion: `${r.actividades} actividades encadenadas · ${r.casillas} casillas`,
+                        modo: 'agrega',
+                        construir: sem => insertarBloque(currentConfig.entregables, b, sem),
+                        onAplicar: aplicarPreview,
+                      })}
                       style={{ textAlign: 'left', padding: '9px 11px', border: '1px solid #ddd6fe', borderRadius: 8, background: '#fff', cursor: 'pointer' }}>
                       <div style={{ fontSize: 11, fontWeight: 700, color: '#6d28d9', marginBottom: 2 }}>{b.label}</div>
                       <div style={{ fontSize: 9, color: '#94a3b8' }}>
@@ -1423,19 +1430,16 @@ export default function Estimaciones({ onViewChange, onBack }: EstimacionesProps
                 const nAct = pl.bloques.reduce((s, b) => s + b.actividades.length, 0);
                 return (
                   <button key={pl.id}
-                    onClick={() => {
-                      if (!confirm(`Cargar "${pl.nombre}"? Se reemplazan las ${currentConfig.entregables.length} fases actuales de este cronograma.`)) return;
-                      const gen = generarDesdePlantilla(pl, {
+                    onClick={() => setPreview({
+                      titulo: pl.nombre, descripcion: pl.descripcion, modo: 'reemplaza',
+                      construir: () => generarDesdePlantilla(pl, {
                         projectId: currentConfig.projectId,
                         cronoId: currentConfig.cronoId,
                         cronoName: currentConfig.cronoName,
                         startDate: currentConfig.startDate ?? startDate,
-                      });
-                      const labels = computeWeekLabels(currentConfig.startDate ?? startDate, gen.totalWeeks, holidayDates);
-                      updateConfig({ entregables: gen.entregables, totalWeeks: gen.totalWeeks, weekLabels: labels, pesoModo: 'actividad-semana' });
-                      setShowPlantillas(false);
-                      setVista('matriz');
-                    }}
+                      }).entregables,
+                      onAplicar: aplicarPreview,
+                    })}
                     style={{ textAlign: 'left', padding: '9px 11px', border: '1px solid #ddd6fe', borderRadius: 8, background: '#fff', cursor: 'pointer' }}>
                     <div style={{ fontSize: 11, fontWeight: 700, color: '#6d28d9', marginBottom: 2 }}>{pl.nombre}</div>
                     <div style={{ fontSize: 9, color: '#94a3b8', marginBottom: 4 }}>{pl.bloques.length} fases · {nAct} actividades</div>
@@ -1463,22 +1467,31 @@ export default function Estimaciones({ onViewChange, onBack }: EstimacionesProps
                       return (
                         <div key={pl.id} style={{ padding: '9px 11px', border: '1px solid #ddd6fe', borderRadius: 8, background: '#fff' }}>
                           <div style={{ display: 'flex', alignItems: 'start', gap: 6 }}>
-                            <button onClick={() => {
-                              const copia: PlanEntregableConfig[] = JSON.parse(JSON.stringify(pl.entregables));
-                              if (pl.tipo === 'proyecto') {
-                                if (!confirm(`Cargar "${pl.nombre}"? Se reemplazan las fases actuales.`)) return;
-                                const maxW = Math.max(pl.totalWeeks, ...copia.flatMap(e => e.activities.map(a => a.endWeek)));
-                                updateConfig({ entregables: copia, totalWeeks: maxW, weekLabels: computeWeekLabels(currentConfig.startDate ?? startDate, maxW, holidayDates) });
-                              } else {
+                            <button onClick={() => setPreview({
+                              titulo: pl.nombre, descripcion: pl.descripcion,
+                              modo: pl.tipo === 'proyecto' ? 'reemplaza' : 'agrega',
+                              construir: sem => {
+                                const copia: PlanEntregableConfig[] = JSON.parse(JSON.stringify(pl.entregables));
+                                if (pl.tipo === 'proyecto') return copia;
+                                // Al agregar, se corre la fase para que arranque en la semana elegida.
+                                const ini = Math.min(...copia[0].activities.map(a => a.startWeek), 1);
+                                const delta = sem - ini;
+                                const movida = {
+                                  ...copia[0],
+                                  activities: copia[0].activities.map(a => ({
+                                    ...a,
+                                    startWeek: a.startWeek + delta,
+                                    endWeek: a.endWeek + delta,
+                                    weeks: (a.weeks ?? []).map(w => w + delta),
+                                  })),
+                                };
                                 const usados = new Set(currentConfig.entregables.map(e => e.id));
-                                let id = copia[0].id, n = 2;
-                                while (usados.has(id)) id = `${copia[0].id}-${n++}`;
-                                const ents = [...currentConfig.entregables, { ...copia[0], id }];
-                                const maxW = Math.max(currentConfig.totalWeeks, ...ents.flatMap(e => e.activities.map(a => a.endWeek)));
-                                updateConfig({ entregables: ents, totalWeeks: maxW, weekLabels: computeWeekLabels(currentConfig.startDate ?? startDate, maxW, holidayDates) });
-                              }
-                              setShowPlantillas(false); setVista('matriz');
-                            }} style={{ flex: 1, textAlign: 'left', border: 'none', background: 'none', cursor: 'pointer', padding: 0 }}>
+                                let id = movida.id, n = 2;
+                                while (usados.has(id)) id = `${movida.id}-${n++}`;
+                                return [...currentConfig.entregables, { ...movida, id }];
+                              },
+                              onAplicar: aplicarPreview,
+                            })} style={{ flex: 1, textAlign: 'left', border: 'none', background: 'none', cursor: 'pointer', padding: 0 }}>
                               <div style={{ fontSize: 11, fontWeight: 700, color: '#6d28d9' }}>{pl.nombre}</div>
                               <div style={{ fontSize: 9, color: '#94a3b8' }}>
                                 {pl.entregables.length} fases · {nAct} actividades
@@ -1503,6 +1516,16 @@ export default function Estimaciones({ onViewChange, onBack }: EstimacionesProps
               );
             })()}
           </div>
+        )}
+
+        {preview && (
+          <PreviewPlantilla
+            {...preview}
+            totalWeeksActual={currentConfig.totalWeeks}
+            weekLabels={currentConfig.weekLabels}
+            fasesActuales={currentConfig.entregables.length}
+            onCerrar={() => setPreview(null)}
+          />
         )}
 
         {vista === 'matriz' ? (

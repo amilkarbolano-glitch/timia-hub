@@ -26,10 +26,21 @@ interface Props {
   totalWeeks: number;
   weekLabels?: string[];
   onChange: (entregables: PlanEntregableConfig[]) => void;
+  /** Solo lectura: se usa como vista previa antes de aplicar una plantilla. */
+  readOnly?: boolean;
+  /** Título de la cabecera; por defecto "Matriz del cronograma". */
+  titulo?: string;
+  /** Alto máximo del área desplazable. */
+  maxAlto?: string;
+  /** Densidad inicial. */
+  zoomInicial?: 'compacto' | 'normal' | 'amplio';
 }
 
-export default function MatrizCronograma({ entregables, totalWeeks, weekLabels, onChange }: Props) {
-  const [zoom, setZoom] = useState<Zoom>('normal');
+export default function MatrizCronograma({
+  entregables, totalWeeks, weekLabels, onChange,
+  readOnly, titulo, maxAlto, zoomInicial,
+}: Props) {
+  const [zoom, setZoom] = useState<Zoom>(zoomInicial ?? 'normal');
   const Z = ZOOM[zoom];
   const CELL_W = Z.cell, LABEL_W = Z.label;
   const weeks = Array.from({ length: totalWeeks }, (_, i) => i + 1);
@@ -65,12 +76,14 @@ export default function MatrizCronograma({ entregables, totalWeeks, weekLabels, 
   }
 
   function onDown(ei: number, ai: number, w: number, marcada: boolean) {
+    if (readOnly) return;
     const pintar = !marcada;
     drag.current = { ei, ai, pintar };
     setPintando(true);
     aplicar(ei, ai, w, pintar);
   }
   function onEnter(ei: number, ai: number, w: number) {
+    if (readOnly) return;
     const d = drag.current;
     if (!d || d.ei !== ei || d.ai !== ai) return;   // solo se pinta dentro de la misma fila
     aplicar(ei, ai, w, d.pintar);
@@ -94,10 +107,12 @@ export default function MatrizCronograma({ entregables, totalWeeks, weekLabels, 
     <div style={{ border: '1px solid #e2e8f0', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderBottom: '1px solid #f1f5f9', flexWrap: 'wrap' }}>
         <Paintbrush size={13} color="#0d9488"/>
-        <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: '#334155' }}>Matriz del cronograma</p>
-        <span style={{ fontSize: 9, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 4 }}>
-          <Info size={10}/> clic para marcar una semana, arrastrá para pintar varias
-        </span>
+        <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: '#334155' }}>{titulo ?? 'Matriz del cronograma'}</p>
+        {!readOnly && (
+          <span style={{ fontSize: 9, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 4 }}>
+            <Info size={10}/> clic para marcar una semana, arrastrá para pintar varias
+          </span>
+        )}
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
           <span style={{ fontSize: 10, color: '#0f766e', fontWeight: 600 }}>
             {casillasTotal} casillas · factor global {casillasTotal ? factorGlobal(fases).toFixed(4) : '—'}
@@ -117,7 +132,7 @@ export default function MatrizCronograma({ entregables, totalWeeks, weekLabels, 
         </div>
       </div>
 
-      <div style={{ overflowX: 'auto', maxHeight: '70vh', overflowY: 'auto', userSelect: pintando ? 'none' : 'auto' }}>
+      <div style={{ overflowX: 'auto', maxHeight: maxAlto ?? '70vh', overflowY: 'auto', userSelect: pintando ? 'none' : 'auto' }}>
         <table style={{ borderCollapse: 'collapse', fontSize: 10 }}>
           <thead>
             <tr>
@@ -168,7 +183,7 @@ export default function MatrizCronograma({ entregables, totalWeeks, weekLabels, 
                               onMouseEnter={() => onEnter(ei, ai, w)}
                               title={`${act.label} · S${w}${weekLabels?.[w - 1] ? ` (${weekLabels[w - 1]})` : ''}`}
                               style={{
-                                width: CELL_W, height: Z.fila, cursor: 'pointer', textAlign: 'center',
+                                width: CELL_W, height: Z.fila, cursor: readOnly ? 'default' : 'pointer', textAlign: 'center',
                                 border: '0.5px solid #f1f5f9',
                                 background: on ? (esBBVA ? '#bfdbfe' : esMixto ? '#fde68a' : '#99d9ce') : '#fff',
                               }}
@@ -194,9 +209,11 @@ export default function MatrizCronograma({ entregables, totalWeeks, weekLabels, 
         <Chip color="#99d9ce" texto="Timia"/>
         <Chip color="#bfdbfe" texto="BBVA (espera, no son horas nuestras)"/>
         <Chip color="#fde68a" texto="Mixto (no cierra sin VoBo de negocio)"/>
-        <span style={{ fontSize: 9, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 4 }}>
-          <Eraser size={10}/> volvé a arrastrar sobre casillas marcadas para borrarlas
-        </span>
+        {!readOnly && (
+          <span style={{ fontSize: 9, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 4 }}>
+            <Eraser size={10}/> volvé a arrastrar sobre casillas marcadas para borrarlas
+          </span>
+        )}
       </div>
     </div>
   );

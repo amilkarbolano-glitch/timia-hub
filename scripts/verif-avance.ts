@@ -176,3 +176,33 @@ console.log('\n── Visibilidad de plantillas ──');
   console.log(vf === 0 ? 'visibilidad OK' : `visibilidad: ${vf} fallas`);
   if (vf) process.exit(1);
 }
+
+// ── Vista previa: construir el resultado antes de aplicarlo ────────────────
+console.log('\n── Vista previa de plantillas ──');
+{
+  let pf = 0;
+  // Agregar un bloque en la semana N: la fase nueva debe arrancar exactamente ahí
+  // y las fases que ya estaban no se tocan.
+  const actual = insertarBloque([], BLOQUES[0], 1);
+  const antes = JSON.stringify(actual);
+  for (const sem of [1, 5, 12]) {
+    const res = insertarBloque(actual, BLOQUES[2], sem);
+    const nueva = res[res.length - 1];
+    const arranca = Math.min(...nueva.activities.map(a => a.startWeek));
+    const intacto = JSON.stringify(res.slice(0, actual.length)) === antes;
+    const ok = arranca === sem && intacto && res.length === actual.length + 1;
+    if (!ok) pf++;
+    console.log(`${ok ? '✓' : '✗'} agregar en S${sem}: la fase arranca en S${arranca}, las anteriores intactas (${intacto})`);
+  }
+  // Mover una fase guardada a otra semana conserva la forma (mismo nº de casillas y huecos)
+  const base = insertarBloque([], BLOQUES[1], 1)[0];
+  const delta = 7;
+  const movida = base.activities.map(a => ({ ...a, startWeek: a.startWeek + delta, endWeek: a.endWeek + delta, weeks: (a.weeks ?? []).map(w => w + delta) }));
+  const mismaForma = movida.every((a, i) =>
+    (a.weeks?.length ?? 0) === (base.activities[i].weeks?.length ?? 0) &&
+    a.startWeek === base.activities[i].startWeek + delta);
+  if (!mismaForma) pf++;
+  console.log(`${mismaForma ? '✓' : '✗'} mover una fase guardada +${delta} semanas conserva su forma`);
+  console.log(pf === 0 ? 'vista previa OK' : `vista previa: ${pf} fallas`);
+  if (pf) process.exit(1);
+}
