@@ -13,8 +13,13 @@ import type { PlanEntregableConfig, PlanActivityConfig } from '../lib/adminStore
 import { marcasDe, factorFase, marcasFase, seriePlanFase, seriePlanConsolidada, factorGlobal, type AvanceFase } from '../lib/avance';
 import { metaActividad } from '../lib/plantillas';
 
-const CELL_W = 26;
-const LABEL_W = 300;
+/** Tres densidades: la matriz se lee distinto según si el plan tiene 10 o 40 semanas. */
+const ZOOM = {
+  compacto: { cell: 24, fila: 20, label: 260, fuente: 9,  num: 7.5 },
+  normal:   { cell: 34, fila: 28, label: 340, fuente: 11, num: 9   },
+  amplio:   { cell: 46, fila: 36, label: 420, fuente: 12, num: 10  },
+} as const;
+type Zoom = keyof typeof ZOOM;
 
 interface Props {
   entregables: PlanEntregableConfig[];
@@ -24,6 +29,9 @@ interface Props {
 }
 
 export default function MatrizCronograma({ entregables, totalWeeks, weekLabels, onChange }: Props) {
+  const [zoom, setZoom] = useState<Zoom>('normal');
+  const Z = ZOOM[zoom];
+  const CELL_W = Z.cell, LABEL_W = Z.label;
   const weeks = Array.from({ length: totalWeeks }, (_, i) => i + 1);
   // Al arrastrar, todas las celdas tocadas toman el valor opuesto al de la primera.
   const drag = useRef<{ ei: number; ai: number; pintar: boolean } | null>(null);
@@ -78,7 +86,7 @@ export default function MatrizCronograma({ entregables, totalWeeks, weekLabels, 
   const th: React.CSSProperties = { position: 'sticky', top: 0, zIndex: 3, background: '#f8fafc', borderBottom: '1px solid #e2e8f0' };
   const celdaLabel: React.CSSProperties = {
     position: 'sticky', left: 0, zIndex: 2, background: '#fff', width: LABEL_W, minWidth: LABEL_W, maxWidth: LABEL_W,
-    padding: '2px 8px', fontSize: 10, borderRight: '1px solid #e2e8f0',
+    padding: '2px 10px', fontSize: Z.fuente, borderRight: '1px solid #e2e8f0',
     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
   };
 
@@ -90,20 +98,34 @@ export default function MatrizCronograma({ entregables, totalWeeks, weekLabels, 
         <span style={{ fontSize: 9, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 4 }}>
           <Info size={10}/> clic para marcar una semana, arrastrá para pintar varias
         </span>
-        <span style={{ marginLeft: 'auto', fontSize: 10, color: '#0f766e', fontWeight: 600 }}>
-          {casillasTotal} casillas · factor global {casillasTotal ? factorGlobal(fases).toFixed(4) : '—'}
-        </span>
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 10, color: '#0f766e', fontWeight: 600 }}>
+            {casillasTotal} casillas · factor global {casillasTotal ? factorGlobal(fases).toFixed(4) : '—'}
+          </span>
+          <div style={{ display: 'flex', border: '1px solid #e2e8f0', borderRadius: 6, overflow: 'hidden' }}>
+            {(Object.keys(ZOOM) as Zoom[]).map(z => (
+              <button key={z} onClick={() => setZoom(z)} title={`Tamaño ${z}`}
+                style={{
+                  padding: '3px 9px', fontSize: 9.5, cursor: 'pointer', border: 'none', textTransform: 'capitalize',
+                  fontWeight: zoom === z ? 700 : 500,
+                  background: zoom === z ? '#0d9488' : '#fff', color: zoom === z ? '#fff' : '#64748b',
+                }}>
+                {z}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
       <div style={{ overflowX: 'auto', maxHeight: '70vh', overflowY: 'auto', userSelect: pintando ? 'none' : 'auto' }}>
         <table style={{ borderCollapse: 'collapse', fontSize: 10 }}>
           <thead>
             <tr>
-              <th style={{ ...th, ...celdaLabel, zIndex: 4, textAlign: 'left', fontSize: 9, color: '#64748b', height: 34 }}>Fase · Actividad</th>
+              <th style={{ ...th, ...celdaLabel, zIndex: 4, textAlign: 'left', fontSize: Z.fuente, color: '#64748b', height: 40 }}>Fase · Actividad</th>
               {weeks.map(w => (
-                <th key={w} title={weekLabels?.[w - 1]} style={{ ...th, width: CELL_W, minWidth: CELL_W, fontSize: 8, color: '#64748b', fontWeight: 600, padding: '3px 0' }}>
+                <th key={w} title={weekLabels?.[w - 1]} style={{ ...th, width: CELL_W, minWidth: CELL_W, fontSize: Z.num, color: '#64748b', fontWeight: 600, padding: '4px 0' }}>
                   <div>S{w}</div>
-                  {weekLabels?.[w - 1] && <div style={{ fontSize: 6.5, color: '#cbd5e1', fontWeight: 400 }}>{weekLabels[w - 1].split('-')[0]}</div>}
+                  {weekLabels?.[w - 1] && <div style={{ fontSize: Z.num - 1.5, color: '#94a3b8', fontWeight: 400 }}>{weekLabels[w - 1].split('-')[0]}</div>}
                 </th>
               ))}
             </tr>
@@ -116,8 +138,8 @@ export default function MatrizCronograma({ entregables, totalWeeks, weekLabels, 
               return (
                 <React.Fragment key={ent.id}>
                   <tr>
-                    <td style={{ ...celdaLabel, background: '#f8fafc', fontWeight: 700, color: '#9f1239', height: 24 }} title={ent.label}>{ent.label}</td>
-                    <td colSpan={totalWeeks} style={{ background: '#f8fafc', fontSize: 9, color: '#0f766e', padding: '0 8px', fontWeight: 600 }}>
+                    <td style={{ ...celdaLabel, background: '#f8fafc', fontWeight: 700, color: '#9f1239', height: Z.fila + 6 }} title={ent.label}>{ent.label}</td>
+                    <td colSpan={totalWeeks} style={{ background: '#f8fafc', fontSize: Z.fuente - 1, color: '#0f766e', padding: '0 10px', fontWeight: 600 }}>
                       {marcasFase(fase)} casillas · factor {factor ? factor.toFixed(3) : '—'}
                     </td>
                   </tr>
@@ -129,9 +151,9 @@ export default function MatrizCronograma({ entregables, totalWeeks, weekLabels, 
                     const tip = [act.label, meta?.faseSDA && `Fase SDA: ${meta.faseSDA}`, meta?.nota].filter(Boolean).join('\n');
                     return (
                       <tr key={ai}>
-                        <td style={{ ...celdaLabel, paddingLeft: 18, color: esBBVA ? '#1d4ed8' : '#475569', height: 22 }} title={tip}>
-                          {esBBVA && <span style={{ fontSize: 7, marginRight: 4, color: '#1d4ed8', fontWeight: 700 }}>BBVA</span>}
-                          {esMixto && <span style={{ fontSize: 7, marginRight: 4, color: '#b45309', fontWeight: 700 }}>MIX</span>}
+                        <td style={{ ...celdaLabel, paddingLeft: 22, color: esBBVA ? '#1d4ed8' : '#475569', height: Z.fila }} title={tip}>
+                          {esBBVA && <span style={{ fontSize: Z.num - 1, marginRight: 5, color: '#1d4ed8', fontWeight: 700 }}>BBVA</span>}
+                          {esMixto && <span style={{ fontSize: Z.num - 1, marginRight: 5, color: '#b45309', fontWeight: 700 }}>MIX</span>}
                           {act.label}
                         </td>
                         {weeks.map(w => {
@@ -142,7 +164,7 @@ export default function MatrizCronograma({ entregables, totalWeeks, weekLabels, 
                               onMouseEnter={() => onEnter(ei, ai, w)}
                               title={`${act.label} · S${w}${weekLabels?.[w - 1] ? ` (${weekLabels[w - 1]})` : ''}`}
                               style={{
-                                width: CELL_W, height: 22, cursor: 'pointer', textAlign: 'center',
+                                width: CELL_W, height: Z.fila, cursor: 'pointer', textAlign: 'center',
                                 border: '0.5px solid #f1f5f9',
                                 background: on ? (esBBVA ? '#bfdbfe' : esMixto ? '#fde68a' : '#99d9ce') : '#fff',
                               }}
@@ -152,14 +174,14 @@ export default function MatrizCronograma({ entregables, totalWeeks, weekLabels, 
                       </tr>
                     );
                   })}
-                  <Totales label="Total semana" valores={serie.semanal} weeks={weeks} celdaLabel={celdaLabel}/>
-                  <Totales label="T (acumulado)" valores={serie.acumulado} weeks={weeks} celdaLabel={celdaLabel} acumulado/>
+                  <Totales label="Total semana" valores={serie.semanal} weeks={weeks} celdaLabel={celdaLabel} z={Z}/>
+                  <Totales label="T (acumulado)" valores={serie.acumulado} weeks={weeks} celdaLabel={celdaLabel} acumulado z={Z}/>
                 </React.Fragment>
               );
             })}
             <tr><td colSpan={totalWeeks + 1} style={{ height: 8 }}/></tr>
-            <Totales label="CONSOLIDADO · semana" valores={consolidado.semanal} weeks={weeks} celdaLabel={celdaLabel} fuerte/>
-            <Totales label="CONSOLIDADO · acumulado" valores={consolidado.acumulado} weeks={weeks} celdaLabel={celdaLabel} fuerte acumulado/>
+            <Totales label="CONSOLIDADO · semana" valores={consolidado.semanal} weeks={weeks} celdaLabel={celdaLabel} fuerte z={Z}/>
+            <Totales label="CONSOLIDADO · acumulado" valores={consolidado.acumulado} weeks={weeks} celdaLabel={celdaLabel} fuerte acumulado z={Z}/>
           </tbody>
         </table>
       </div>
@@ -176,19 +198,19 @@ export default function MatrizCronograma({ entregables, totalWeeks, weekLabels, 
   );
 }
 
-function Totales({ label, valores, weeks, celdaLabel, acumulado, fuerte }: {
+function Totales({ label, valores, weeks, celdaLabel, acumulado, fuerte, z }: {
   label: string; valores: number[]; weeks: number[]; celdaLabel: React.CSSProperties;
-  acumulado?: boolean; fuerte?: boolean;
+  acumulado?: boolean; fuerte?: boolean; z: { fila: number; fuente: number; num: number };
 }) {
   const bg = fuerte ? '#1e293b' : '#fafcff';
   const fg = fuerte ? '#e2e8f0' : acumulado ? '#0f766e' : '#64748b';
   return (
     <tr>
-      <td style={{ ...celdaLabel, background: bg, color: fg, fontSize: 9, fontWeight: 700, paddingLeft: 18, height: 20 }}>{label}</td>
+      <td style={{ ...celdaLabel, background: bg, color: fg, fontSize: z.fuente - 1, fontWeight: 700, paddingLeft: 22, height: z.fila - 2 }}>{label}</td>
       {weeks.map((w, i) => {
         const v = valores[i] ?? 0;
         return (
-          <td key={w} style={{ background: bg, color: fg, fontSize: 7.5, textAlign: 'center', border: '0.5px solid ' + (fuerte ? '#334155' : '#f1f5f9'), fontWeight: acumulado ? 700 : 400 }}>
+          <td key={w} style={{ background: bg, color: fg, fontSize: z.num, textAlign: 'center', border: '0.5px solid ' + (fuerte ? '#334155' : '#f1f5f9'), fontWeight: acumulado ? 700 : 400 }}>
             {v > 0.005 ? v.toFixed(acumulado ? 0 : 1) : ''}
           </td>
         );

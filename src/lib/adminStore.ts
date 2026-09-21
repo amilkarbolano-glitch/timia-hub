@@ -270,6 +270,21 @@ export interface PlanEntregableConfig {
   activities: PlanActivityConfig[];
 }
 
+/**
+ * Plantilla de cronograma creada por el usuario desde Estimaciones.
+ * `tipo: 'proyecto'` guarda todas las fases; `tipo: 'entregable'`, una sola.
+ */
+export interface PlantillaPropia {
+  id: string;
+  nombre: string;
+  descripcion?: string;
+  tipo: 'proyecto' | 'entregable';
+  entregables: PlanEntregableConfig[];
+  totalWeeks: number;
+  creadaPor?: string;
+  creadaEn: string;   // ISO
+}
+
 export interface PlanConfig {
   projectId: string;
   /** Cronograma dentro del proyecto. undefined/'' = cronograma principal. */
@@ -462,6 +477,12 @@ export const adminStore = {
 
   // Configuración de planes generados desde Estimaciones (keyed by planKey)
   getPlanConfigs:  (): Record<string, PlanConfig>   => load('plan_configs', {}),
+
+  // ── Plantillas propias de cronograma (proyecto y entregable) ──────────────
+  // Se guardan aparte del catálogo de fábrica, que vive en lib/plantillas.ts.
+  getPlantillasPropias: (): PlantillaPropia[] => load('plantillas_cronograma', [] as PlantillaPropia[]),
+  savePlantillasPropias: (p: PlantillaPropia[]) => save('plantillas_cronograma', p),
+
   savePlanConfigs: (c: Record<string, PlanConfig>)  => save('plan_configs', c),
   getPlanConfig:   (planKey: string): PlanConfig | null => {
     const all = load<Record<string, PlanConfig>>('plan_configs', {});

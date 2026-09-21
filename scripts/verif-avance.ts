@@ -91,3 +91,23 @@ for (const pl of PLANTILLAS) {
 }
 console.log(pf === 0 ? 'plantillas OK' : `plantillas: ${pf} fallas`);
 if (pf) process.exit(1);
+
+// ── Bloques como plantillas de entregable ──────────────────────────────────
+import { BLOQUES, insertarBloque, resumenBloque } from '../src/lib/plantillas';
+
+console.log('\n── Plantillas de entregable ──');
+let bf = 0;
+for (const b of BLOQUES) {
+  const r = resumenBloque(b);
+  const ok = r.actividades > 0 && r.casillas >= r.actividades && r.semanas > 0;
+  if (!ok) bf++;
+  console.log(`${ok ? '✓' : '✗'} ${b.label}: ${r.actividades} act · ${r.casillas} casillas · ${r.semanas} sem · ${r.bbva} BBVA`);
+}
+// insertar el mismo bloque dos veces no debe chocar de id ni pisar semanas
+const dos = insertarBloque(insertarBloque([], BLOQUES[2], 1), BLOQUES[2], 6);
+const idsUnicos = new Set(dos.map(e => e.id)).size === dos.length;
+const arrancaEn6 = Math.min(...dos[1].activities.map(a => a.startWeek)) === 6;
+if (!idsUnicos || !arrancaEn6) bf++;
+console.log(`${idsUnicos && arrancaEn6 ? '✓' : '✗'} insertar el mismo bloque dos veces: ids únicos (${dos.map(e => e.id).join(', ')}) y el segundo arranca en S${Math.min(...dos[1].activities.map(a => a.startWeek))}`);
+console.log(bf === 0 ? 'bloques OK' : `bloques: ${bf} fallas`);
+if (bf) process.exit(1);

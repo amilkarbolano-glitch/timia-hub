@@ -8,6 +8,8 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { ProjectTemplate, TemplateTask } from '../types';
 import { PLAN_PREVIEWS, countActivities, type PlanTemplatePreview } from '../lib/planTemplates';
+import { PLANTILLAS, BLOQUES, resumenBloque, generarDesdePlantilla } from '../lib/plantillas';
+import { adminStore, type PlantillaPropia } from '../lib/adminStore';
 
 interface ProjectTemplatesProps {
   templates: ProjectTemplate[];
@@ -157,7 +159,11 @@ function PlanPreviewAccordion({ preview }: { preview: PlanTemplatePreview }) {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
+type TabPlantilla = 'proyecto' | 'entregable' | 'tareas';
+
 export default function ProjectTemplates({ templates, setTemplates }: ProjectTemplatesProps) {
+  const [tab, setTab] = useState<TabPlantilla>('proyecto');
+  const [propias, setPropias] = useState<PlantillaPropia[]>(() => adminStore.getPlantillasPropias());
   const [editingTemplate, setEditingTemplate] = useState<ProjectTemplate | null>(null);
   const [isModalOpen,     setIsModalOpen]     = useState(false);
   const [showPredefined,  setShowPredefined]  = useState(false);
@@ -222,15 +228,49 @@ export default function ProjectTemplates({ templates, setTemplates }: ProjectTem
   const totalPeso = (editingTemplate?.tasks ?? []).reduce((s, t) => s + (t.peso ?? 0), 0);
   const pesoColor = Math.abs(totalPeso - 100) < 1 ? '#15803d' : totalPeso > 100 ? '#dc2626' : '#d97706';
 
+  const TABS: { id: TabPlantilla; label: string; sub: string }[] = [
+    { id: 'proyecto',   label: 'Proyecto',   sub: 'Cronogramas completos: todas las fases con sus actividades y semanas.' },
+    { id: 'entregable', label: 'Entregable', sub: 'Fases sueltas, para agregar a un cronograma que ya existe.' },
+    { id: 'tareas',     label: 'Tareas',     sub: 'Tareas predefinidas del tablero para cada tipo de proyecto.' },
+  ];
+  const activa = TABS.find(x => x.id === tab)!;
+
   return (
     <div className="p-8 space-y-8">
+      <div>
+        <h1 className="text-3xl font-black text-slate-900 tracking-tight flex items-center gap-3">
+          <GitBranch className="text-primary" size={32} />
+          Plantillas
+        </h1>
+        <p className="text-slate-500 mt-1">{activa.sub}</p>
+        <div className="flex gap-1 mt-4 border-b border-slate-200">
+          {TABS.map(x => (
+            <button key={x.id} onClick={() => setTab(x.id)}
+              className={`px-5 py-2.5 text-sm font-bold transition-colors border-b-2 -mb-px ${
+                tab === x.id ? 'border-primary text-primary' : 'border-transparent text-slate-400 hover:text-slate-600'
+              }`}>
+              {x.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {tab !== 'tareas' && (
+        <CatalogoCronograma
+          tipo={tab}
+          propias={propias}
+          onDeletePropia={id => {
+            if (!confirm('¿Borrar esta plantilla?')) return;
+            const next = propias.filter(p => p.id !== id);
+            setPropias(next); adminStore.savePlantillasPropias(next);
+          }}
+        />
+      )}
+
+      {tab === 'tareas' && (<>
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-black text-slate-900 tracking-tight flex items-center gap-3">
-            <GitBranch className="text-primary" size={32} />
-            Plantillas de Proyecto
-          </h1>
-          <p className="text-slate-500 mt-1">Gestiona las tareas predefinidas para cada tipo de proyecto.</p>
+          <p className="text-sm text-slate-500">Se aplican al tablero cuando se crea un proyecto nuevo.</p>
         </div>
         <button onClick={handleNewTemplate} className="flex items-center gap-2 px-6 h-12 bg-primary text-white rounded-xl font-bold hover:opacity-90 transition-all shadow-lg shadow-primary/20">
           <Plus size={20}/> Nueva Plantilla
@@ -447,6 +487,133 @@ export default function ProjectTemplates({ templates, setTemplates }: ProjectTem
           </div>
         )}
       </AnimatePresence>
+      </>)}
+    </div>
+  );
+}
+
+// ─── Catálogo de plantillas de cronograma ───────────────────────────────────
+// Solo lectura: se aplican desde Estimaciones, sobre un cronograma concreto.
+
+function CatalogoCronograma({ tipo, propias, onDeletePropia }: {
+  tipo: 'proyecto' | 'entregable';
+  propias: PlantillaPropia[];
+  onDeletePropia: (id: string) => void;
+}) {
+  const mias = propias.filter(p => p.tipo === tipo);
+
+  const base = tipo === 'proyecto'
+    ? PLANTILLAS.map(pl => {
+        const cfg = generarDesdePlantilla(pl, { projectId: '—' });
+        return {
+          id: pl.id, nombre: pl.nombre, descripcion: pl.descripcion,
+          fases: pl.bloques.length,
+          actividades: pl.bloques.reduce((s, b) => s + b.actividades.length, 0),
+          semanas: cfg.totalWeeks,
+          casillas: cfg.entregables.reduce((s, e) => s + e.activities.reduce((x, a) => x + (a.weeks?.length ?? 0), 0), 0),
+          bbva: pl.bloques.reduce((s, b) => s + b.actividades.filter(a => a.resp === 'bbva').length, 0),
+          detalle: pl.bloques.map(b => b.label),
+        };
+      })
+    : BLOQUES.map(b => {
+        const r = resumenBloque(b);
+        return {
+          id: b.id, nombre: b.label, descripcion: `${r.actividades} actividades encadenadas desde la semana que elijas.`,
+          fases: 1, actividades: r.actividades, semanas: r.semanas, casillas: r.casillas, bbva: r.bbva,
+          detalle: b.actividades.map(a => a.label),
+        };
+      });
+
+  return (
+    <div className="space-y-6">
+      <div className="rounded-xl bg-violet-50 border border-violet-200 px-5 py-3 text-sm text-violet-800">
+        Estas plantillas se aplican desde <b>Estimaciones → Plantillas</b>, sobre el cronograma que estés editando.
+        Las duraciones salen de la mediana de los cronogramas reales de MIGBD y FICO.
+      </div>
+
+      <div>
+        <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">Del catálogo</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          {base.map(p => (
+            <TarjetaPlantilla key={p.id}
+              nombre={p.nombre} descripcion={p.descripcion} fases={p.fases}
+              actividades={p.actividades} semanas={p.semanas} casillas={p.casillas}
+              bbva={p.bbva} detalle={p.detalle}
+            />
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">
+          Mis plantillas {mias.length > 0 && <span className="text-slate-300">· {mias.length}</span>}
+        </h2>
+        {mias.length === 0 ? (
+          <p className="text-sm text-slate-400 italic">
+            Todavía no guardaste ninguna. En Estimaciones, usá <b>Guardar como plantilla</b> para el cronograma completo,
+            o el ícono ✨ de un entregable en la vista Detalle.
+          </p>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {mias.map(p => (
+              <TarjetaPlantilla key={p.id}
+                nombre={p.nombre}
+                descripcion={p.descripcion ?? ''}
+                fases={p.entregables.length}
+                actividades={p.entregables.reduce((s, e) => s + e.activities.length, 0)}
+                semanas={p.totalWeeks}
+                casillas={p.entregables.reduce((s, e) => s + e.activities.reduce((x, a) => x + (a.weeks?.length ?? 0), 0), 0)}
+                bbva={p.entregables.reduce((s, e) => s + e.activities.filter(a => a.bbva).length, 0)}
+                detalle={p.entregables.flatMap(e => e.activities.map(a => a.label))}
+                onDelete={() => onDeletePropia(p.id)}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function TarjetaPlantilla({ nombre, descripcion, fases, actividades, semanas, casillas, bbva, detalle, onDelete }: {
+  nombre: string; descripcion: string; fases: number; actividades: number;
+  semanas: number; casillas: number; bbva: number; detalle: string[]; onDelete?: () => void;
+}) {
+  const [abierto, setAbierto] = useState(false);
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 p-5 hover:shadow-md transition-all">
+      <div className="flex items-start justify-between gap-2 mb-1">
+        <h3 className="text-base font-bold text-slate-900 leading-tight">{nombre}</h3>
+        {onDelete && (
+          <button onClick={onDelete} className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all shrink-0">
+            <Trash2 size={14}/>
+          </button>
+        )}
+      </div>
+      <p className="text-sm text-slate-500 mb-4">{descripcion}</p>
+      <div className="grid grid-cols-4 gap-2 mb-3">
+        {[[fases, fases === 1 ? 'fase' : 'fases'], [actividades, 'activid.'], [semanas, 'semanas'], [casillas, 'casillas']].map(([v, l]) => (
+          <div key={l as string} className="bg-slate-50 rounded-lg py-2 text-center">
+            <div className="text-lg font-bold text-slate-900 leading-none">{v as number}</div>
+            <div className="text-[10px] text-slate-400 mt-1">{l as string}</div>
+          </div>
+        ))}
+      </div>
+      {bbva > 0 && (
+        <p className="text-xs text-blue-700 mb-2">{bbva} {bbva === 1 ? 'actividad depende' : 'actividades dependen'} de BBVA</p>
+      )}
+      <button onClick={() => setAbierto(v => !v)} className="text-xs font-semibold text-primary hover:underline">
+        {abierto ? 'Ocultar actividades' : 'Ver actividades'}
+      </button>
+      {abierto && (
+        <ul className="mt-2 space-y-1 max-h-52 overflow-y-auto pr-1">
+          {detalle.map((d, i) => (
+            <li key={i} className="text-xs text-slate-500 leading-snug flex gap-2">
+              <span className="text-slate-300 shrink-0">{i + 1}.</span>{d}
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

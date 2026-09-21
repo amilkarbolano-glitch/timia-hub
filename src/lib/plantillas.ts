@@ -148,6 +148,57 @@ export interface Plantilla {
   bloques: BloquePlantilla[];
 }
 
+/**
+ * Plantillas de ENTREGABLE: cada bloque de fase, usable por separado para agregarlo
+ * a un cronograma que ya existe. Son las mismas piezas con las que están hechas las
+ * plantillas de proyecto.
+ */
+export const BLOQUES: BloquePlantilla[] = [GOBIERNO, TRANSMISION, DESARROLLO, HISTORIA, AUTOMATIZACION, CERTIFICACION, AJUSTE];
+
+/** Casillas y duración que aporta un bloque, para mostrarlo en el catálogo. */
+export function resumenBloque(b: BloquePlantilla): { actividades: number; semanas: number; casillas: number; bbva: number } {
+  const gen = insertarBloque([], b, 1);
+  const acts = gen[0]?.activities ?? [];
+  return {
+    actividades: b.actividades.length,
+    semanas: acts.reduce((m, a) => Math.max(m, a.endWeek), 0),
+    casillas: acts.reduce((s, a) => s + (a.weeks?.length ?? 0), 0),
+    bbva: b.actividades.filter(a => a.resp === 'bbva').length,
+  };
+}
+
+/**
+ * Inserta un bloque en una lista de entregables, arrancando en `desdeSemana`.
+ * Si el id ya existe se le agrega un sufijo, así se puede meter el mismo bloque
+ * dos veces (por ejemplo, un frente de desarrollo por cada procesamiento).
+ */
+export function insertarBloque(
+  entregables: PlanEntregableConfig[],
+  bloque: BloquePlantilla,
+  desdeSemana = 1,
+  etiqueta?: string,
+): PlanEntregableConfig[] {
+  let cursor = desdeSemana;
+  let anterior = desdeSemana;
+  const activities: PlanActivityConfig[] = bloque.actividades.map(a => {
+    const inicio = a.paralelo ? anterior : cursor;
+    const fin = inicio + Math.max(1, a.semanas) - 1;
+    if (!a.paralelo) anterior = inicio;
+    cursor = Math.max(cursor, fin + 1);
+    return {
+      label: a.label,
+      startWeek: inicio,
+      endWeek: fin,
+      weeks: Array.from({ length: fin - inicio + 1 }, (_, i) => inicio + i),
+      bbva: a.resp === 'bbva',
+    };
+  });
+  const usados = new Set(entregables.map(e => e.id));
+  let id = bloque.id, n = 2;
+  while (usados.has(id)) id = `${bloque.id}-${n++}`;
+  return [...entregables, { id, label: etiqueta ?? bloque.label, activities }];
+}
+
 export const PLANTILLAS: Plantilla[] = [
   {
     id: 'migracion-ada',

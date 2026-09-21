@@ -4,13 +4,13 @@ import {
   LayoutList, Clock, CalendarDays, Settings2, CheckSquare, Users, BarChart3, Grid3x3, List, Sparkles,
 } from 'lucide-react';
 import { PROJECTS, useAuth, canAccess } from '../contexts/AuthContext';
-import { adminStore, makePlanKey, CRONO_MAIN_NAME, type PlanEtapa, type PlanActivityConfig, type PlanEntregableConfig, type PlanConfig } from '../lib/adminStore';
+import { adminStore, makePlanKey, CRONO_MAIN_NAME, type PlanEtapa, type PlanActivityConfig, type PlanEntregableConfig, type PlanConfig, type PlantillaPropia } from '../lib/adminStore';
 import type { View } from './Layout';
 import { FlowStepper } from './SetupProject';
 import { snapToBusinessDay, addBusinessDays } from '../lib/businessDays';
 import { marcasDe, factorFase, marcasFase, type PesoModo, PESO_MODO_DEFAULT } from '../lib/avance';
 import MatrizCronograma from './MatrizCronograma';
-import { PLANTILLAS, generarDesdePlantilla } from '../lib/plantillas';
+import { PLANTILLAS, BLOQUES, generarDesdePlantilla, insertarBloque, resumenBloque } from '../lib/plantillas';
 
 // ─── Week label computation (días hábiles reales) ─────────────────────────────
 // Cada semana = 5 días hábiles. S1 empieza en startDate (snapped a día hábil),
@@ -587,12 +587,13 @@ function ActivityCard({
 
 function EntregablePanel({
   ent, entIdx, totalWeeks, porSemana, weekLabels,
-  onChange, onDelete,
+  onChange, onDelete, onSaveTemplate,
 }: {
   ent: PlanEntregableConfig; entIdx: number; totalWeeks: number;
   porSemana?: boolean; weekLabels?: string[];
   onChange: (e: PlanEntregableConfig) => void;
   onDelete: () => void;
+  onSaveTemplate?: () => void;
 }) {
   const [open, setOpen] = useState(entIdx === 0);
 
@@ -648,6 +649,13 @@ function EntregablePanel({
             </span>
           )}
         </div>
+        {onSaveTemplate && (
+          <button onClick={e => { e.stopPropagation(); onSaveTemplate(); }}
+            title="Guardar este entregable como plantilla reutilizable"
+            style={{ border: 'none', background: 'none', cursor: 'pointer', padding: 4, color: '#a78bfa', display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+            <Sparkles size={13}/>
+          </button>
+        )}
         <button onClick={e => { e.stopPropagation(); onDelete(); }}
           style={{ border: 'none', background: 'none', cursor: 'pointer', padding: 4, color: '#fca5a5', display: 'flex', alignItems: 'center', flexShrink: 0 }}>
           <Trash2 size={13}/>
@@ -797,6 +805,29 @@ export default function Estimaciones({ onViewChange, onBack }: EstimacionesProps
   // Vista de edición: matriz (todo el cronograma junto) o lista (detalle por actividad)
   const [vista, setVista] = useState<'matriz' | 'lista'>('matriz');
   const [showPlantillas, setShowPlantillas] = useState(false);
+  /** 'proyecto' reemplaza todo el cronograma; 'entregable' agrega una fase al final. */
+  const [tipoPlantilla, setTipoPlantilla] = useState<'proyecto' | 'entregable'>('proyecto');
+  const [propias, setPropias] = useState<PlantillaPropia[]>(() => adminStore.getPlantillasPropias());
+
+  /** Guarda el cronograma actual (o una de sus fases) como plantilla reutilizable. */
+  function guardarComoPlantilla(tipo: 'proyecto' | 'entregable', entIdx?: number) {
+    const ents = tipo === 'entregable' && entIdx !== undefined
+      ? [currentConfig.entregables[entIdx]]
+      : currentConfig.entregables;
+    if (!ents.length || !ents[0]) { alert('No hay nada que guardar.'); return; }
+    const sugerido = tipo === 'entregable' ? ents[0].label : (currentConfig.cronoName ?? currentConfig.projectId);
+    const nombre = prompt(`Nombre de la plantilla de ${tipo}:`, sugerido);
+    if (!nombre) return;
+    const nueva: PlantillaPropia = {
+      id: uid('plt'), nombre, tipo,
+      descripcion: `Guardada desde ${currentConfig.projectId}${currentConfig.cronoName ? ' · ' + currentConfig.cronoName : ''}`,
+      entregables: JSON.parse(JSON.stringify(ents)),
+      totalWeeks: currentConfig.totalWeeks,
+      creadaEn: new Date().toISOString(),
+    };
+    const next = [...propias, nueva];
+    setPropias(next); adminStore.savePlantillasPropias(next);
+  }
 
   function updateConfig(patch: Partial<PlanConfig>) {
     const next = { ...configs, [planKey]: { ...currentConfig, ...patch } };
@@ -1316,8 +1347,13 @@ export default function Estimaciones({ onViewChange, onBack }: EstimacionesProps
             ))}
           </div>
           <button onClick={() => setShowPlantillas(v => !v)}
-            style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', fontSize: 11, cursor: 'pointer', border: '1px solid #c4b5fd', borderRadius: 8, background: '#faf5ff', color: '#6d28d9', fontWeight: 600 }}>
-            <Sparkles size={12}/> Cargar plantilla
+            style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', fontSize: 11, cursor: 'pointer', border: '1px solid #c4b5fd', borderRadius: 8, background: showPlantillas ? '#ede9fe' : '#faf5ff', color: '#6d28d9', fontWeight: 600 }}>
+            <Sparkles size={12}/> Plantillas
+          </button>
+          <button onClick={() => guardarComoPlantilla('proyecto')}
+            title="Guarda todas las fases de este cronograma como una plantilla reutilizable"
+            style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', fontSize: 11, cursor: 'pointer', border: '1px solid #e2e8f0', borderRadius: 8, background: '#fff', color: '#64748b', fontWeight: 600 }}>
+            <Save size={12}/> Guardar como plantilla
           </button>
           <p style={{ margin: 0, fontSize: 10, color: '#94a3b8' }}>
             {vista === 'matriz'
@@ -1329,13 +1365,57 @@ export default function Estimaciones({ onViewChange, onBack }: EstimacionesProps
         {/* Plantillas — reemplazan las fases y actividades del cronograma actual */}
         {showPlantillas && (
           <div style={{ marginBottom: 14, padding: '12px 14px', background: '#faf5ff', border: '1px solid #ddd6fe', borderRadius: 10 }}>
-            <p style={{ margin: '0 0 8px', fontSize: 11, fontWeight: 700, color: '#6d28d9' }}>
-              Plantillas — fases, actividades y semanas ya armadas
-            </p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, flexWrap: 'wrap' }}>
+              <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: '#6d28d9' }}>Plantillas</p>
+              <div style={{ display: 'flex', border: '1px solid #ddd6fe', borderRadius: 7, overflow: 'hidden' }}>
+                {([['proyecto', 'Proyecto completo'], ['entregable', 'Un entregable']] as const).map(([v, lbl]) => (
+                  <button key={v} onClick={() => setTipoPlantilla(v)}
+                    style={{
+                      padding: '4px 11px', fontSize: 10, cursor: 'pointer', border: 'none',
+                      fontWeight: tipoPlantilla === v ? 700 : 500,
+                      background: tipoPlantilla === v ? '#6d28d9' : '#fff', color: tipoPlantilla === v ? '#fff' : '#7c3aed',
+                    }}>
+                    {lbl}
+                  </button>
+                ))}
+              </div>
+            </div>
             <p style={{ margin: '0 0 10px', fontSize: 10, color: '#7c3aed' }}>
-              Las duraciones son la mediana de lo que duró cada actividad en los cronogramas reales de MIGBD y FICO.
-              Reemplaza lo que haya en <b>{currentConfig.cronoName ?? CRONO_MAIN_NAME}</b> — después ajustás en la matriz.
+              {tipoPlantilla === 'proyecto'
+                ? <>Arman el cronograma completo. <b>Reemplazan</b> lo que haya en <b>{currentConfig.cronoName ?? CRONO_MAIN_NAME}</b>.</>
+                : <>Una fase suelta, con sus actividades y semanas. Se <b>agrega</b> al final del cronograma actual; podés meter la misma más de una vez.</>}
+              {' '}Las duraciones son la mediana de los cronogramas reales de MIGBD y FICO; después ajustás en la matriz.
             </p>
+
+            {tipoPlantilla === 'entregable' && (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(250px,1fr))', gap: 8, marginBottom: 12 }}>
+                {BLOQUES.map(b => {
+                  const r = resumenBloque(b);
+                  return (
+                    <button key={b.id}
+                      onClick={() => {
+                        const desde = prompt(`¿En qué semana arranca "${b.label}"?`, String(Math.min(currentConfig.totalWeeks, 1)));
+                        if (desde === null) return;
+                        const sem = Math.max(1, Math.min(52, parseInt(desde, 10) || 1));
+                        const ents = insertarBloque(currentConfig.entregables, b, sem);
+                        const maxW = Math.max(currentConfig.totalWeeks, ...ents.flatMap(e => e.activities.map(a => a.endWeek)));
+                        const labels = computeWeekLabels(currentConfig.startDate ?? startDate, maxW, holidayDates);
+                        updateConfig({ entregables: ents, totalWeeks: maxW, weekLabels: labels });
+                        setShowPlantillas(false); setVista('matriz');
+                      }}
+                      style={{ textAlign: 'left', padding: '9px 11px', border: '1px solid #ddd6fe', borderRadius: 8, background: '#fff', cursor: 'pointer' }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: '#6d28d9', marginBottom: 2 }}>{b.label}</div>
+                      <div style={{ fontSize: 9, color: '#94a3b8' }}>
+                        {r.actividades} actividades · {r.casillas} casillas · {r.semanas} semanas
+                        {r.bbva > 0 && <> · <span style={{ color: '#1d4ed8' }}>{r.bbva} de BBVA</span></>}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {tipoPlantilla === 'proyecto' && (<>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(230px,1fr))', gap: 8 }}>
               {PLANTILLAS.map(pl => {
                 const nAct = pl.bloques.reduce((s, b) => s + b.actividades.length, 0);
@@ -1362,6 +1442,56 @@ export default function Estimaciones({ onViewChange, onBack }: EstimacionesProps
                 );
               })}
             </div>
+            </>)}
+
+            {/* Plantillas propias — guardadas desde este mismo módulo */}
+            {(() => {
+              const mias = propias.filter(p => p.tipo === tipoPlantilla);
+              if (!mias.length) return null;
+              return (
+                <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid #ddd6fe' }}>
+                  <p style={{ margin: '0 0 6px', fontSize: 10, fontWeight: 700, color: '#6d28d9' }}>Mis plantillas</p>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(230px,1fr))', gap: 8 }}>
+                    {mias.map(pl => {
+                      const nAct = pl.entregables.reduce((s, e) => s + e.activities.length, 0);
+                      return (
+                        <div key={pl.id} style={{ padding: '9px 11px', border: '1px solid #ddd6fe', borderRadius: 8, background: '#fff' }}>
+                          <div style={{ display: 'flex', alignItems: 'start', gap: 6 }}>
+                            <button onClick={() => {
+                              const copia: PlanEntregableConfig[] = JSON.parse(JSON.stringify(pl.entregables));
+                              if (pl.tipo === 'proyecto') {
+                                if (!confirm(`Cargar "${pl.nombre}"? Se reemplazan las fases actuales.`)) return;
+                                const maxW = Math.max(pl.totalWeeks, ...copia.flatMap(e => e.activities.map(a => a.endWeek)));
+                                updateConfig({ entregables: copia, totalWeeks: maxW, weekLabels: computeWeekLabels(currentConfig.startDate ?? startDate, maxW, holidayDates) });
+                              } else {
+                                const usados = new Set(currentConfig.entregables.map(e => e.id));
+                                let id = copia[0].id, n = 2;
+                                while (usados.has(id)) id = `${copia[0].id}-${n++}`;
+                                const ents = [...currentConfig.entregables, { ...copia[0], id }];
+                                const maxW = Math.max(currentConfig.totalWeeks, ...ents.flatMap(e => e.activities.map(a => a.endWeek)));
+                                updateConfig({ entregables: ents, totalWeeks: maxW, weekLabels: computeWeekLabels(currentConfig.startDate ?? startDate, maxW, holidayDates) });
+                              }
+                              setShowPlantillas(false); setVista('matriz');
+                            }} style={{ flex: 1, textAlign: 'left', border: 'none', background: 'none', cursor: 'pointer', padding: 0 }}>
+                              <div style={{ fontSize: 11, fontWeight: 700, color: '#6d28d9' }}>{pl.nombre}</div>
+                              <div style={{ fontSize: 9, color: '#94a3b8' }}>{pl.entregables.length} fases · {nAct} actividades</div>
+                              {pl.descripcion && <div style={{ fontSize: 9, color: '#64748b', marginTop: 3 }}>{pl.descripcion}</div>}
+                            </button>
+                            <button onClick={() => {
+                              if (!confirm(`¿Borrar la plantilla "${pl.nombre}"?`)) return;
+                              const next = propias.filter(x => x.id !== pl.id);
+                              setPropias(next); adminStore.savePlantillasPropias(next);
+                            }} style={{ border: 'none', background: 'none', cursor: 'pointer', padding: 2, color: '#fca5a5' }}>
+                              <Trash2 size={12}/>
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         )}
 
@@ -1390,6 +1520,7 @@ export default function Estimaciones({ onViewChange, onBack }: EstimacionesProps
                 weekLabels={currentConfig.weekLabels}
                 onChange={e => updateEntregable(i, e)}
                 onDelete={() => deleteEntregable(i)}
+                onSaveTemplate={() => guardarComoPlantilla('entregable', i)}
               />
             ))}
 
