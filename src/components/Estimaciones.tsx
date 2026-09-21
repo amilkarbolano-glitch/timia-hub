@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import {
   ChevronDown, ChevronRight, Plus, Trash2, Save, ArrowRight, ArrowLeft,
-  LayoutList, Clock, CalendarDays, Settings2, CheckSquare, Users,
+  LayoutList, Clock, CalendarDays, Settings2, CheckSquare, Users, BarChart3,
 } from 'lucide-react';
 import { PROJECTS, useAuth, canAccess } from '../contexts/AuthContext';
 import { adminStore, makePlanKey, CRONO_MAIN_NAME, type PlanEtapa, type PlanActivityConfig, type PlanEntregableConfig, type PlanConfig } from '../lib/adminStore';
 import type { View } from './Layout';
 import { FlowStepper } from './SetupProject';
 import { snapToBusinessDay, addBusinessDays } from '../lib/businessDays';
+import { marcasDe, factorFase, marcasFase, type PesoModo, PESO_MODO_DEFAULT } from '../lib/avance';
 
 // ─── Week label computation (días hábiles reales) ─────────────────────────────
 // Cada semana = 5 días hábiles. S1 empieza en startDate (snapped a día hábil),
@@ -390,10 +391,13 @@ function EtapaRow({
 // ─── ActivityCard ─────────────────────────────────────────────────────────────
 
 function ActivityCard({
-  act, actIdx, totalWeeks,
+  act, actIdx, totalWeeks, porSemana, weekLabels,
   onChange, onDelete,
 }: {
   act: PlanActivityConfig; actIdx: number; totalWeeks: number;
+  /** true si el cronograma pondera por actividad-semana: se habilita la rejilla de casillas. */
+  porSemana?: boolean;
+  weekLabels?: string[];
   onChange: (a: PlanActivityConfig) => void;
   onDelete: () => void;
 }) {
@@ -429,6 +433,24 @@ function ActivityCard({
 
   const weeks = Array.from({ length: totalWeeks }, (_, i) => i + 1);
 
+  // ── Casillas por semana (método del Excel del PM) ──
+  const marcas = marcasDe({ weeks: act.weeks, startWeek: act.startWeek, endWeek: act.endWeek });
+  const marcasSet = new Set(marcas);
+  const discontinua = marcas.length > 0 && marcas.length !== (marcas[marcas.length - 1] - marcas[0] + 1);
+
+  /** Marca/desmarca una semana y reajusta el rango start/end para que el Gantt siga cuadrando. */
+  function toggleSemana(w: number) {
+    const next = new Set(marcas);
+    if (next.has(w)) next.delete(w); else next.add(w);
+    const arr = [...next].sort((a, b) => a - b);
+    if (!arr.length) { onChange({ ...act, weeks: undefined }); return; }
+    onChange({ ...act, weeks: arr, startWeek: arr[0], endWeek: arr[arr.length - 1] });
+  }
+  /** Vuelve al rango continuo: borra las casillas y deja start→end. */
+  function limpiarMarcas() {
+    onChange({ ...act, weeks: undefined });
+  }
+
   return (
     <div style={{ borderRadius: 8, border: '1px solid #e2e8f0', overflow: 'hidden', marginBottom: 6 }}>
       {/* Activity header row */}
@@ -455,6 +477,13 @@ function ActivityCard({
             {weeks.filter(w => w >= act.startWeek).map(w => <option key={w} value={w}>S{w}</option>)}
           </select>
         </div>
+        {/* Casillas — nº de semanas marcadas; avisa si el tramo es discontinuo */}
+        {porSemana && (
+          <span title={discontinua ? `Tramo discontinuo: ${marcas.map(w => `S${w}`).join(', ')}` : `${marcas.length} semana(s) marcada(s)`}
+            style={{ fontSize: 9, padding: '2px 7px', borderRadius: 10, background: discontinua ? '#faf5ff' : '#f1f5f9', color: discontinua ? '#7c3aed' : '#64748b', fontWeight: 600, flexShrink: 0 }}>
+            {marcas.length} ⬚{discontinua ? ' ⤳' : ''}
+          </span>
+        )}
         {/* BBVA toggle */}
         <label style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 9, color: '#1d4ed8', cursor: 'pointer', flexShrink: 0 }} onClick={e => e.stopPropagation()}>
           <input type="checkbox" checked={act.bbva ?? false}
@@ -475,9 +504,43 @@ function ActivityCard({
         </button>
       </div>
 
-      {/* Expanded: etapas editor */}
+      {/* Expanded: casillas por semana + etapas editor */}
       {open && (
         <div style={{ padding: '10px 14px 12px', borderTop: '1px solid #f1f5f9', background: '#fafcff' }}>
+          {porSemana && (
+            <div style={{ marginBottom: 12, paddingBottom: 10, borderBottom: '1px solid #f1f5f9' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                <p style={{ margin: 0, fontSize: 10, fontWeight: 600, color: '#64748b', display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <CalendarDays size={11}/> Semanas de trabajo
+                  <span style={{ fontSize: 9, color: '#94a3b8', fontWeight: 400 }}>
+                    — marcá cada semana activa; se admiten tramos discontinuos
+                  </span>
+                </p>
+                {act.weeks?.length && (
+                  <button onClick={limpiarMarcas}
+                    style={{ fontSize: 9, border: '1px solid #e2e8f0', borderRadius: 5, padding: '2px 7px', background: '#fff', color: '#64748b', cursor: 'pointer' }}>
+                    Volver al rango continuo
+                  </button>
+                )}
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
+                {weeks.map(w => {
+                  const on = marcasSet.has(w);
+                  return (
+                    <button key={w} onClick={() => toggleSemana(w)}
+                      title={weekLabels?.[w - 1] ? `S${w} · ${weekLabels[w - 1]}` : `S${w}`}
+                      style={{
+                        width: 34, height: 26, fontSize: 9, fontWeight: on ? 700 : 500, cursor: 'pointer',
+                        border: `1px solid ${on ? '#0d9488' : '#e2e8f0'}`, borderRadius: 4,
+                        background: on ? '#99d9ce' : '#fff', color: on ? '#0f766e' : '#94a3b8',
+                      }}>
+                      S{w}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
             <p style={{ margin: 0, fontSize: 10, fontWeight: 600, color: '#64748b', display: 'flex', alignItems: 'center', gap: 5 }}>
               <LayoutList size={11}/> Etapas de avance
@@ -521,10 +584,11 @@ function ActivityCard({
 // ─── EntregablePanel ──────────────────────────────────────────────────────────
 
 function EntregablePanel({
-  ent, entIdx, totalWeeks,
+  ent, entIdx, totalWeeks, porSemana, weekLabels,
   onChange, onDelete,
 }: {
   ent: PlanEntregableConfig; entIdx: number; totalWeeks: number;
+  porSemana?: boolean; weekLabels?: string[];
   onChange: (e: PlanEntregableConfig) => void;
   onDelete: () => void;
 }) {
@@ -547,6 +611,9 @@ function EntregablePanel({
 
   const totalActivities = ent.activities.length;
   const withEtapas      = ent.activities.filter(a => (a.etapas?.length ?? 0) > 0).length;
+  // Factor estático de la fase: 100 / casillas (igual que el Excel del PM)
+  const casillas = marcasFase({ id: ent.id, label: ent.label, activities: ent.activities });
+  const factor   = factorFase({ id: ent.id, label: ent.label, activities: ent.activities });
 
   return (
     <div style={{ marginBottom: 14, borderRadius: 10, border: '1.5px solid #e2e8f0', overflow: 'hidden' }}>
@@ -567,6 +634,12 @@ function EntregablePanel({
           <span style={{ fontSize: 9, padding: '2px 7px', borderRadius: 10, background: '#f1f5f9', color: '#64748b' }}>
             {totalActivities} actividades
           </span>
+          {porSemana && casillas > 0 && (
+            <span title={`Factor estático = 100 / ${casillas} casillas = ${factor.toFixed(3)}`}
+              style={{ fontSize: 9, padding: '2px 7px', borderRadius: 10, background: '#f0fdfa', color: '#0f766e', fontWeight: 600 }}>
+              {casillas} ⬚ · factor {factor.toFixed(3)}
+            </span>
+          )}
           {withEtapas > 0 && (
             <span style={{ fontSize: 9, padding: '2px 7px', borderRadius: 10, background: '#f0fdf4', color: '#15803d' }}>
               {withEtapas} con etapas
@@ -583,7 +656,7 @@ function EntregablePanel({
         <div style={{ padding: '12px 14px', background: '#fafcff' }}>
           {ent.activities.map((act, i) => (
             <ActivityCard
-              key={i} act={act} actIdx={i} totalWeeks={totalWeeks}
+              key={i} act={act} actIdx={i} totalWeeks={totalWeeks} porSemana={porSemana} weekLabels={weekLabels}
               onChange={a => updateActivity(i, a)}
               onDelete={() => deleteActivity(i)}
             />
@@ -960,6 +1033,34 @@ export default function Estimaciones({ onViewChange, onBack }: EstimacionesProps
               />
             </div>
 
+            {/* Modo de ponderación — 'actividad-semana' replica el cálculo del Excel del PM */}
+            {(() => {
+              const modo: PesoModo = currentConfig.pesoModo ?? PESO_MODO_DEFAULT;
+              const porSemana = modo === 'actividad-semana';
+              const fases = currentConfig.entregables.map(e => ({ id: e.id, label: e.label, activities: e.activities }));
+              const casillas = fases.reduce((s, f) => s + marcasFase(f), 0);
+              return (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', background: porSemana ? '#f0fdfa' : '#f8fafc', border: `1px solid ${porSemana ? '#99f6e4' : '#e2e8f0'}`, borderRadius: 8 }}>
+                  <BarChart3 size={12} color={porSemana ? '#0d9488' : '#64748b'}/>
+                  <label style={{ fontSize: 10, color: '#64748b' }}>Ponderación:</label>
+                  <select
+                    value={modo}
+                    onChange={e => updateConfig({ pesoModo: e.target.value as PesoModo })}
+                    style={{ fontSize: 10, fontWeight: 600, border: '1px solid #e2e8f0', borderRadius: 5, padding: '2px 5px', background: '#fff', cursor: 'pointer', color: porSemana ? '#0f766e' : '#475569' }}
+                  >
+                    <option value="actividad">Por actividad</option>
+                    <option value="actividad-semana">Por actividad-semana (Excel)</option>
+                  </select>
+                  {porSemana && casillas > 0 && (
+                    <span title={`Factor global = 100 / ${casillas} casillas`}
+                      style={{ fontSize: 9, color: '#0f766e', fontWeight: 600 }}>
+                      {casillas} ⬚ · {(100 / casillas).toFixed(4)}
+                    </span>
+                  )}
+                </div>
+              );
+            })()}
+
             <button onClick={saveConfig} style={{
               display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px',
               fontSize: 12, background: saved ? '#f0fdf4' : dirty ? '#fff' : '#f8fafc',
@@ -1206,6 +1307,8 @@ export default function Estimaciones({ onViewChange, onBack }: EstimacionesProps
         {currentConfig.entregables.map((ent, i) => (
           <EntregablePanel
             key={ent.id} ent={ent} entIdx={i} totalWeeks={currentConfig.totalWeeks}
+            porSemana={(currentConfig.pesoModo ?? PESO_MODO_DEFAULT) === 'actividad-semana'}
+            weekLabels={currentConfig.weekLabels}
             onChange={e => updateEntregable(i, e)}
             onDelete={() => deleteEntregable(i)}
           />

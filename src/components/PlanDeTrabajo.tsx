@@ -15,6 +15,10 @@ import {
   type ActivityAssignees, type AdminUser, type AdminProject, type PlanConfig, type PlanIssue, type PlanImpact, type BitacoraEntry,
   issueImpacts, changeExtensionDays, makePlanKey, splitPlanKey, planKeyOf, CRONO_MAIN_NAME,
 } from '../lib/adminStore';
+import {
+  type PesoModo, PESO_MODO_DEFAULT, seriePlanConsolidada, seriePlanFase, marcasDe,
+  factorFase, marcasFase, enSemana, realPlan, realFase, serieRealConsolidada, type AvanceFase,
+} from '../lib/avance';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -23,6 +27,8 @@ interface PlanSubtask { name: string; pct: number; optional?: boolean; }
 interface PlanActivity {
   name: string; pct: number; pctExp: number;
   startWeek: number; endWeek: number;
+  /** Semanas marcadas (casillas del Excel). Si falta, es el rango startWeek→endWeek. */
+  weeks?: number[];
   bbva?: boolean; subtasks?: PlanSubtask[]; etapas?: PlanEtapa[];
 }
 interface PlanEntregable { id: string; name: string; pctReal: number; pctExp: number; activities: PlanActivity[]; }
@@ -34,6 +40,9 @@ interface WorkPlan {
   cronoName?: string;
   respBBVA: string; respTimia: string; pasos: string[]; alertas: string[]; bloqueantes: string[];
   entregables: PlanEntregable[]; startDate?: string; weekLabels?: string[];
+  totalWeeks?: number;
+  /** Ponderación del avance: por actividad (defecto) o por actividad-semana (Excel del PM). */
+  pesoModo?: PesoModo;
 }
 /** Etiqueta corta de un cronograma: "FICO" o "FICO · Input" */
 function planLabel(p: Pick<WorkPlan, 'projectId' | 'cronoName' | 'cronoId'>): string {
@@ -983,20 +992,53 @@ function PlanDetail({ plan, getActivityPct, setActivityPct, onActivityClick, onG
   // todayWeekIdx disponible en todo PlanDetail para cálculos de esperado
   const todayWeekIdx = computeCurrentWeekIdx(plan.startDate, holidays);
 
-  const overallReal = parseFloat((plan.entregables.map(e => e.activities.length
-    ? e.activities.reduce((s,a,i) => s + getActivityPct(e.id,i,a), 0) / e.activities.length
-    : e.pctReal).reduce((s,v)=>s+v,0) / plan.entregables.length).toFixed(1));
+  // ── Ponderación ──────────────────────────────────────────────────────────
+  // 'actividad'       → cada actividad pesa igual (comportamiento histórico).
+  // 'actividad-semana'→ cada semana marcada pesa igual, con factor estático por fase,
+  //                     replicando el cálculo de las hojas "Plan de trabajo" del PM.
+  const pesoModo: PesoModo = plan.pesoModo ?? PESO_MODO_DEFAULT;
+  const porSemana = pesoModo === 'actividad-semana';
+  /** Fases en el formato de lib/avance, con el % real vigente de cada actividad. */
+  const fasesAvance: AvanceFase[] = plan.entregables.map(e => ({
+    id: e.id, label: e.name,
+    activities: e.activities.map((a, i) => ({
+      weeks: a.weeks, startWeek: a.startWeek, endWeek: a.endWeek, pct: getActivityPct(e.id, i, a),
+    })),
+  }));
+  /** Igual que fasesAvance pero con el fin efectivo (extensión por cambios y bloqueos). */
+  const fasesAvanceExt: AvanceFase[] = plan.entregables.map(e => ({
+    id: e.id, label: e.name,
+    activities: e.activities.map((a, i) => {
+      const eff = extensionFor(changes, plan.planKey, e.id, i, a.endWeek, issues, holidays).effEndWeek;
+      // Al extenderse, las semanas nuevas se añaden al final del tramo marcado.
+      const base = marcasDe({ weeks: a.weeks, startWeek: a.startWeek, endWeek: a.endWeek });
+      const extra: number[] = [];
+      for (let w = a.endWeek + 1; w <= eff; w++) extra.push(w);
+      return { weeks: [...base, ...extra], startWeek: a.startWeek, endWeek: eff, pct: getActivityPct(e.id, i, a) };
+    }),
+  }));
+  const planWeeks = plan.totalWeeks ?? Math.max(1, ...plan.entregables.flatMap(e => e.activities.map(a => a.endWeek)));
 
-  // overallExp dinámico: promedio de pctExp calculado por semana para cada actividad
-  const overallExp = parseFloat((plan.entregables.map(e => {
-    if (!e.activities.length) return e.pctExp;
-    return e.activities.reduce((s, a, i) => s + computeActExpPct(a.startWeek, extensionFor(changes, plan.planKey, e.id, i, a.endWeek, issues, holidays).effEndWeek, todayWeekIdx), 0) / e.activities.length;
-  }).reduce((s,v)=>s+v,0) / plan.entregables.length).toFixed(1));
+  const overallReal = porSemana
+    ? parseFloat(realPlan(fasesAvance, pesoModo).toFixed(1))
+    : parseFloat((plan.entregables.map(e => e.activities.length
+        ? e.activities.reduce((s,a,i) => s + getActivityPct(e.id,i,a), 0) / e.activities.length
+        : e.pctReal).reduce((s,v)=>s+v,0) / plan.entregables.length).toFixed(1));
+
+  // overallExp dinámico: acumulado planificado a hoy (por semana) o promedio binario (por actividad)
+  const overallExp = porSemana
+    ? parseFloat(enSemana(seriePlanConsolidada(fasesAvanceExt, Math.max(planWeeks, todayWeekIdx)), todayWeekIdx).toFixed(1))
+    : parseFloat((plan.entregables.map(e => {
+        if (!e.activities.length) return e.pctExp;
+        return e.activities.reduce((s, a, i) => s + computeActExpPct(a.startWeek, extensionFor(changes, plan.planKey, e.id, i, a.endWeek, issues, holidays).effEndWeek, todayWeekIdx), 0) / e.activities.length;
+      }).reduce((s,v)=>s+v,0) / plan.entregables.length).toFixed(1));
   // Esperado sobre la línea base (sin extensión por cambios)
-  const overallExpBase = parseFloat((plan.entregables.map(e => {
-    if (!e.activities.length) return e.pctExp;
-    return e.activities.reduce((s, a) => s + computeActExpPct(a.startWeek, a.endWeek, todayWeekIdx), 0) / e.activities.length;
-  }).reduce((s,v)=>s+v,0) / plan.entregables.length).toFixed(1));
+  const overallExpBase = porSemana
+    ? parseFloat(enSemana(seriePlanConsolidada(fasesAvance, Math.max(planWeeks, todayWeekIdx)), todayWeekIdx).toFixed(1))
+    : parseFloat((plan.entregables.map(e => {
+        if (!e.activities.length) return e.pctExp;
+        return e.activities.reduce((s, a) => s + computeActExpPct(a.startWeek, a.endWeek, todayWeekIdx), 0) / e.activities.length;
+      }).reduce((s,v)=>s+v,0) / plan.entregables.length).toFixed(1));
   const planHasExt = plan.entregables.some(e => e.activities.some((a, i) => extensionFor(changes, plan.planKey, e.id, i, a.endWeek, issues, holidays).days > 0));
 
   const overallDif  = parseFloat((overallReal-overallExp).toFixed(1));
@@ -1078,6 +1120,13 @@ function PlanDetail({ plan, getActivityPct, setActivityPct, onActivityClick, onG
           );
         })}
       </div>
+
+      {/* Curva de avance acumulado — plan vs real, como las filas "T" del Excel */}
+      <CurvaS
+        fases={fasesAvance} fasesExt={fasesAvanceExt}
+        totalWeeks={Math.max(planWeeks, todayWeekIdx)} todayWeek={todayWeekIdx}
+        weekLabels={plan.weekLabels} porSemana={porSemana}
+      />
 
       {/* Resumen de cambios funcionales (Tareas) que impactan este cronograma */}
       {changeSummary && (
@@ -1246,6 +1295,8 @@ function planConfigToWorkPlan(cfg: PlanConfig): WorkPlan {
     cronoName: cfg.cronoId ? (cfg.cronoName ?? cfg.cronoId) : undefined,
     startDate: cfg.startDate,
     weekLabels: cfg.weekLabels,
+    totalWeeks: cfg.totalWeeks,
+    pesoModo: cfg.pesoModo ?? PESO_MODO_DEFAULT,
     respBBVA:  'Por definir',
     respTimia: 'Por definir',
     pasos:      ['Plan generado desde Estimaciones — ajusta los % de avance'],
@@ -1262,11 +1313,130 @@ function planConfigToWorkPlan(cfg: PlanConfig): WorkPlan {
         pctExp:    0,
         startWeek: act.startWeek,
         endWeek:   act.endWeek,
+        weeks:     act.weeks,
         bbva:      act.bbva,
         etapas:    act.etapas,
       })),
     })),
   };
+}
+
+
+// ─── CurvaS — avance acumulado plan vs real (como las filas "T" del Excel) ───
+// Replica la lectura del Excel del PM: por cada semana, cuánto debería llevarse
+// acumulado (plan) y cuánto se lleva (real). Cuando el cronograma pondera por
+// actividad-semana, los números coinciden con los de la hoja "Plan de trabajo".
+
+function CurvaS({ fases, fasesExt, totalWeeks, todayWeek, weekLabels, porSemana }: {
+  fases: AvanceFase[]; fasesExt: AvanceFase[]; totalWeeks: number; todayWeek: number;
+  weekLabels?: string[]; porSemana: boolean;
+}) {
+  const [verFases, setVerFases] = useState(false);
+  const n = Math.max(1, totalWeeks);
+  if (!fases.length) return null;
+
+  const plan = seriePlanConsolidada(fases, n);
+  const planExt = seriePlanConsolidada(fasesExt, n);
+  const real = serieRealConsolidada(fases, n);
+  const hayExt = planExt.acumulado.some((v, i) => Math.abs(v - plan.acumulado[i]) > 0.05);
+
+  const W = 720, H = 190, PL = 34, PR = 10, PT = 10, PB = 22;
+  const x = (w: number) => PL + ((w - 1) / Math.max(1, n - 1)) * (W - PL - PR);
+  const y = (v: number) => PT + (1 - Math.min(100, Math.max(0, v)) / 100) * (H - PT - PB);
+  const path = (serie: number[], hasta = n) =>
+    serie.slice(0, hasta).map((v, i) => `${i === 0 ? 'M' : 'L'}${x(i + 1).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
+
+  const hoy = Math.max(1, Math.min(todayWeek, n));
+  const planHoy = plan.acumulado[hoy - 1] ?? 0;
+  const realHoy = real.acumulado[hoy - 1] ?? 0;
+  const dif = realHoy - planHoy;
+  const paso = n > 26 ? 4 : n > 14 ? 2 : 1;
+
+  return (
+    <div style={{ background:'#fff', border:'0.5px solid #e2e8f0', borderRadius:10, padding:'12px 14px', marginBottom:14 }}>
+      <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:6, flexWrap:'wrap' }}>
+        <p style={{ margin:0, fontSize:11, fontWeight:700, color:'#334155' }}>Curva de avance acumulado</p>
+        <span style={{ fontSize:9, color:'#94a3b8' }}>
+          {porSemana ? 'ponderado por actividad-semana (factor estático por fase)' : 'ponderado por actividad'}
+        </span>
+        <div style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:10 }}>
+          <span style={{ fontSize:10, color:'#64748b' }}>
+            S{hoy} · plan <b style={{ color:'#334155' }}>{planHoy.toFixed(1)}%</b> · real <b style={{ color:'#0f766e' }}>{realHoy.toFixed(1)}%</b>
+            <b style={{ color: difColor(dif), marginLeft:6 }}>{fmt1(parseFloat(dif.toFixed(1)))}</b>
+          </span>
+          <button onClick={() => setVerFases(v => !v)}
+            style={{ fontSize:9, border:'1px solid #e2e8f0', borderRadius:5, padding:'2px 7px', background: verFases ? '#f0fdfa' : '#fff', color: verFases ? '#0f766e' : '#64748b', cursor:'pointer' }}>
+            {verFases ? 'Ocultar fases' : 'Ver por fase'}
+          </button>
+        </div>
+      </div>
+
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width:'100%', height:'auto', display:'block' }}>
+        {[0, 25, 50, 75, 100].map(v => (
+          <g key={v}>
+            <line x1={PL} y1={y(v)} x2={W - PR} y2={y(v)} stroke="#f1f5f9" strokeWidth={1}/>
+            <text x={PL - 5} y={y(v) + 3} textAnchor="end" fontSize={8} fill="#94a3b8">{v}</text>
+          </g>
+        ))}
+        {Array.from({ length: n }, (_, i) => i + 1).filter(w => w === 1 || w % paso === 0).map(w => (
+          <text key={w} x={x(w)} y={H - 6} textAnchor="middle" fontSize={8} fill="#94a3b8">S{w}</text>
+        ))}
+        {/* hoy */}
+        <line x1={x(hoy)} y1={PT} x2={x(hoy)} y2={H - PB} stroke="#f59e0b" strokeWidth={1} strokeDasharray="3 3"/>
+        <text x={x(hoy) + 3} y={PT + 8} fontSize={8} fill="#b45309" fontWeight={700}>hoy</text>
+
+        {/* plan replanificado (si hay extensiones) */}
+        {hayExt && <path d={path(planExt.acumulado)} fill="none" stroke="#a78bfa" strokeWidth={1.5} strokeDasharray="4 3"/>}
+        {/* plan línea base */}
+        <path d={path(plan.acumulado)} fill="none" stroke="#64748b" strokeWidth={1.8}/>
+        {/* real — solo hasta hoy */}
+        <path d={path(real.acumulado, hoy)} fill="none" stroke="#0d9488" strokeWidth={2.4}/>
+        <circle cx={x(hoy)} cy={y(realHoy)} r={3} fill="#0d9488"/>
+
+        {/* por fase */}
+        {verFases && fases.map((f, i) => (
+          <path key={f.id} d={path(seriePlanFase(f, n).acumulado)} fill="none"
+            stroke={['#9f1239','#1d4ed8','#b45309','#7c3aed','#0891b2','#65a30d','#db2777'][i % 7]}
+            strokeWidth={1} opacity={0.5}/>
+        ))}
+      </svg>
+
+      <div style={{ display:'flex', gap:14, flexWrap:'wrap', marginTop:4 }}>
+        <Leyenda color="#64748b" texto="Plan (línea base)"/>
+        {hayExt && <Leyenda color="#a78bfa" texto="Plan replanificado (Δ y bloqueos)" punteada/>}
+        <Leyenda color="#0d9488" texto="Real"/>
+        {verFases && <span style={{ fontSize:9, color:'#94a3b8' }}>Líneas finas: plan de cada fase</span>}
+      </div>
+
+      {verFases && (
+        <div style={{ marginTop:8, display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(190px,1fr))', gap:6 }}>
+          {fases.map((f, i) => {
+            const casillas = marcasFase(f);
+            const pReal = realFase(f, porSemana ? 'actividad-semana' : 'actividad');
+            const pPlan = enSemana(seriePlanFase(f, n), hoy);
+            const d = parseFloat((pReal - pPlan).toFixed(1));
+            return (
+              <div key={f.id} style={{ display:'flex', alignItems:'center', gap:6, padding:'4px 8px', background:'#f8fafc', borderRadius:6 }}>
+                <span style={{ width:8, height:8, borderRadius:2, background:['#9f1239','#1d4ed8','#b45309','#7c3aed','#0891b2','#65a30d','#db2777'][i % 7], flexShrink:0 }}/>
+                <span style={{ fontSize:9, color:'#475569', flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }} title={f.label}>{f.label}</span>
+                {porSemana && <span style={{ fontSize:8, color:'#94a3b8' }} title={`${casillas} casillas`}>{factorFase(f).toFixed(3)}</span>}
+                <span style={{ fontSize:9, fontWeight:700, color: difColor(d) }}>{fmt1(d)}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Leyenda({ color, texto, punteada }: { color: string; texto: string; punteada?: boolean }) {
+  return (
+    <span style={{ display:'flex', alignItems:'center', gap:4, fontSize:9, color:'#64748b' }}>
+      <span style={{ width:14, height:0, borderTop:`2px ${punteada ? 'dashed' : 'solid'} ${color}` }}/>
+      {texto}
+    </span>
+  );
 }
 
 // ─── WORK_PLANS ───────────────────────────────────────────────────────────────
