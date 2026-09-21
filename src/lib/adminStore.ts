@@ -260,8 +260,21 @@ export interface PlanActivityConfig {
    * discontinuos (ej. [1,2,3,4,18,19]). Si no está, se deriva del rango startWeek→endWeek.
    */
   weeks?: number[];
+  /** @deprecated usar `resp`. Se mantiene por compatibilidad con los planes existentes. */
   bbva?: boolean;
+  /**
+   * Quién ejecuta: 'timia' (horas nuestras), 'bbva' (espera del banco, no son horas
+   * nuestras) o 'mixto' (lo hace Timia pero no cierra sin VoBo de negocio).
+   */
+  resp?: 'timia' | 'bbva' | 'mixto';
+  /** Fase del SDA con la que se imputa en el Activity Report. */
+  faseSDA?: string;
   etapas?: PlanEtapa[];
+}
+
+/** Responsable efectivo de una actividad, con el campo viejo `bbva` como respaldo. */
+export function respDe(a: Pick<PlanActivityConfig, 'resp' | 'bbva'>): 'timia' | 'bbva' | 'mixto' {
+  return a.resp ?? (a.bbva ? 'bbva' : 'timia');
 }
 
 export interface PlanEntregableConfig {

@@ -9,7 +9,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Eraser, Paintbrush, Info } from 'lucide-react';
-import type { PlanEntregableConfig, PlanActivityConfig } from '../lib/adminStore';
+import { respDe, type PlanEntregableConfig, type PlanActivityConfig } from '../lib/adminStore';
 import { marcasDe, factorFase, marcasFase, seriePlanFase, seriePlanConsolidada, factorGlobal, type AvanceFase } from '../lib/avance';
 import { metaActividad } from '../lib/plantillas';
 
@@ -146,9 +146,13 @@ export default function MatrizCronograma({ entregables, totalWeeks, weekLabels, 
                   {ent.activities.map((act, ai) => {
                     const marcadas = new Set(marcasDe({ weeks: act.weeks, startWeek: act.startWeek, endWeek: act.endWeek }));
                     const meta = metaActividad(act.label);
-                    const esBBVA = act.bbva ?? meta?.resp === 'bbva';
-                    const esMixto = meta?.resp === 'mixto';
-                    const tip = [act.label, meta?.faseSDA && `Fase SDA: ${meta.faseSDA}`, meta?.nota].filter(Boolean).join('\n');
+                    // El responsable y la fase SDA viven en la actividad; el catálogo solo
+                    // sirve de respaldo para planes armados antes de que existieran esos campos.
+                    const resp = act.resp ?? meta?.resp ?? respDe(act);
+                    const esBBVA = resp === 'bbva';
+                    const esMixto = resp === 'mixto';
+                    const sda = act.faseSDA ?? meta?.faseSDA;
+                    const tip = [act.label, sda && `Fase SDA: ${sda}`, meta?.nota].filter(Boolean).join('\n');
                     return (
                       <tr key={ai}>
                         <td style={{ ...celdaLabel, paddingLeft: 22, color: esBBVA ? '#1d4ed8' : '#475569', height: Z.fila }} title={tip}>

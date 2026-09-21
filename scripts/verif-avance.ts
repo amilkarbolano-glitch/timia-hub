@@ -111,3 +111,35 @@ if (!idsUnicos || !arrancaEn6) bf++;
 console.log(`${idsUnicos && arrancaEn6 ? '✓' : '✗'} insertar el mismo bloque dos veces: ids únicos (${dos.map(e => e.id).join(', ')}) y el segundo arranca en S${Math.min(...dos[1].activities.map(a => a.startWeek))}`);
 console.log(bf === 0 ? 'bloques OK' : `bloques: ${bf} fallas`);
 if (bf) process.exit(1);
+
+// ── Editor: resecuenciar tras editar duraciones ────────────────────────────
+import { generarDesdePlantilla as gen2 } from '../src/lib/plantillas';
+
+console.log('\n── Edición de plantillas ──');
+{
+  const cfg = gen2(PLANTILLAS[0], { projectId: 'T' });
+  // resp y faseSDA deben viajar desde el catálogo a las actividades generadas
+  const acts = cfg.entregables.flatMap(e => e.activities);
+  const conResp = acts.filter(a => a.resp).length;
+  const conSda = acts.filter(a => a.faseSDA).length;
+  const bbvaCoherente = acts.every(a => (a.resp === 'bbva') === !!a.bbva);
+  const ok = conResp === acts.length && conSda === acts.length && bbvaCoherente;
+  console.log(`${ok ? '✓' : '✗'} responsable y fase SDA en las ${acts.length} actividades generadas (resp ${conResp}, sda ${conSda}, bbva coherente ${bbvaCoherente})`);
+  if (!ok) process.exit(1);
+
+  // cambiar la duración de una actividad y reencadenar no debe dejar huecos ni solapes
+  const ent = JSON.parse(JSON.stringify(cfg.entregables[0]));
+  ent.activities[0].weeks = [1, 2, 3];
+  ent.activities[0].endWeek = 3;
+  let cursor = 1;
+  for (const a of ent.activities) {
+    const n = a.weeks?.length ?? 1;
+    a.startWeek = cursor; a.endWeek = cursor + n - 1;
+    a.weeks = Array.from({ length: n }, (_, i) => cursor + i);
+    cursor = a.endWeek + 1;
+  }
+  const contiguo = ent.activities.every((a: any, i: number) => i === 0 || a.startWeek === ent.activities[i - 1].endWeek + 1);
+  console.log(`${contiguo ? '✓' : '✗'} reencadenado tras cambiar una duración: sin huecos ni solapes`);
+  if (!contiguo) process.exit(1);
+}
+console.log('edición OK');

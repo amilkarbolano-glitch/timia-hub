@@ -190,6 +190,8 @@ export function insertarBloque(
       startWeek: inicio,
       endWeek: fin,
       weeks: Array.from({ length: fin - inicio + 1 }, (_, i) => inicio + i),
+      resp: a.resp,
+      faseSDA: a.faseSDA,
       bbva: a.resp === 'bbva',
     };
   });
@@ -271,6 +273,8 @@ export function generarDesdePlantilla(plantilla: Plantilla, opts: OpcionesPlanti
         startWeek: inicio,
         endWeek: fin,
         weeks,
+        resp: a.resp,
+        faseSDA: a.faseSDA,
         bbva: a.resp === 'bbva',
       };
     });

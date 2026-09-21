@@ -3,13 +3,14 @@ import {
   GitBranch, Plus, Edit2, Trash2, ChevronRight, Cloud, Cpu, Database, Layout,
   CheckCircle2, X, Save, PlusCircle, GripVertical, BarChart3, FileText, Shield,
   Layers, Settings, Activity, Box, Zap, Globe, Code2, HardDrive, Network,
-  AlertTriangle, ClipboardList, ChevronDown, CalendarDays,
+  AlertTriangle, ClipboardList, ChevronDown, CalendarDays, Copy,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ProjectTemplate, TemplateTask } from '../types';
 import { PLAN_PREVIEWS, countActivities, type PlanTemplatePreview } from '../lib/planTemplates';
-import { PLANTILLAS, BLOQUES, resumenBloque, generarDesdePlantilla } from '../lib/plantillas';
-import { adminStore, type PlantillaPropia } from '../lib/adminStore';
+import { PLANTILLAS, BLOQUES, resumenBloque, generarDesdePlantilla, insertarBloque } from '../lib/plantillas';
+import { adminStore, type PlantillaPropia, type PlanEntregableConfig } from '../lib/adminStore';
+import EditorPlantilla from './EditorPlantilla';
 
 interface ProjectTemplatesProps {
   templates: ProjectTemplate[];
@@ -164,6 +165,7 @@ type TabPlantilla = 'proyecto' | 'entregable' | 'tareas';
 export default function ProjectTemplates({ templates, setTemplates }: ProjectTemplatesProps) {
   const [tab, setTab] = useState<TabPlantilla>('proyecto');
   const [propias, setPropias] = useState<PlantillaPropia[]>(() => adminStore.getPlantillasPropias());
+  const [editando, setEditando] = useState<PlantillaPropia | null>(null);
   const [editingTemplate, setEditingTemplate] = useState<ProjectTemplate | null>(null);
   const [isModalOpen,     setIsModalOpen]     = useState(false);
   const [showPredefined,  setShowPredefined]  = useState(false);
@@ -259,10 +261,36 @@ export default function ProjectTemplates({ templates, setTemplates }: ProjectTem
         <CatalogoCronograma
           tipo={tab}
           propias={propias}
+          onEditar={setEditando}
+          onDuplicar={(nombre, entregables, totalWeeks, descripcion) => {
+            const nueva: PlantillaPropia = {
+              id: `plt-${Date.now().toString(36)}`,
+              nombre: `${nombre} (copia)`, descripcion, tipo: tab,
+              entregables: JSON.parse(JSON.stringify(entregables)),
+              totalWeeks, creadaEn: new Date().toISOString(),
+            };
+            const next = [...propias, nueva];
+            setPropias(next); adminStore.savePlantillasPropias(next);
+            setEditando(nueva);
+          }}
           onDeletePropia={id => {
             if (!confirm('¿Borrar esta plantilla?')) return;
             const next = propias.filter(p => p.id !== id);
             setPropias(next); adminStore.savePlantillasPropias(next);
+          }}
+        />
+      )}
+
+      {editando && (
+        <EditorPlantilla
+          plantilla={editando}
+          onCerrar={() => setEditando(null)}
+          onGuardar={pl => {
+            const next = propias.some(x => x.id === pl.id)
+              ? propias.map(x => x.id === pl.id ? pl : x)
+              : [...propias, pl];
+            setPropias(next); adminStore.savePlantillasPropias(next);
+            setEditando(null);
           }}
         />
       )}
@@ -495,10 +523,12 @@ export default function ProjectTemplates({ templates, setTemplates }: ProjectTem
 // ─── Catálogo de plantillas de cronograma ───────────────────────────────────
 // Solo lectura: se aplican desde Estimaciones, sobre un cronograma concreto.
 
-function CatalogoCronograma({ tipo, propias, onDeletePropia }: {
+function CatalogoCronograma({ tipo, propias, onDeletePropia, onEditar, onDuplicar }: {
   tipo: 'proyecto' | 'entregable';
   propias: PlantillaPropia[];
   onDeletePropia: (id: string) => void;
+  onEditar: (p: PlantillaPropia) => void;
+  onDuplicar: (nombre: string, entregables: PlanEntregableConfig[], totalWeeks: number, descripcion: string) => void;
 }) {
   const mias = propias.filter(p => p.tipo === tipo);
 
@@ -513,6 +543,7 @@ function CatalogoCronograma({ tipo, propias, onDeletePropia }: {
           casillas: cfg.entregables.reduce((s, e) => s + e.activities.reduce((x, a) => x + (a.weeks?.length ?? 0), 0), 0),
           bbva: pl.bloques.reduce((s, b) => s + b.actividades.filter(a => a.resp === 'bbva').length, 0),
           detalle: pl.bloques.map(b => b.label),
+          entregables: cfg.entregables,
         };
       })
     : BLOQUES.map(b => {
@@ -521,6 +552,7 @@ function CatalogoCronograma({ tipo, propias, onDeletePropia }: {
           id: b.id, nombre: b.label, descripcion: `${r.actividades} actividades encadenadas desde la semana que elijas.`,
           fases: 1, actividades: r.actividades, semanas: r.semanas, casillas: r.casillas, bbva: r.bbva,
           detalle: b.actividades.map(a => a.label),
+          entregables: insertarBloque([], b, 1),
         };
       });
 
@@ -529,6 +561,7 @@ function CatalogoCronograma({ tipo, propias, onDeletePropia }: {
       <div className="rounded-xl bg-violet-50 border border-violet-200 px-5 py-3 text-sm text-violet-800">
         Estas plantillas se aplican desde <b>Estimaciones → Plantillas</b>, sobre el cronograma que estés editando.
         Las duraciones salen de la mediana de los cronogramas reales de MIGBD y FICO.
+        Las del catálogo no se editan: duplicá una con <b>⧉</b> y editá la copia.
       </div>
 
       <div>
@@ -539,6 +572,7 @@ function CatalogoCronograma({ tipo, propias, onDeletePropia }: {
               nombre={p.nombre} descripcion={p.descripcion} fases={p.fases}
               actividades={p.actividades} semanas={p.semanas} casillas={p.casillas}
               bbva={p.bbva} detalle={p.detalle}
+              onDuplicar={() => onDuplicar(p.nombre, p.entregables, p.semanas, p.descripcion)}
             />
           ))}
         </div>
@@ -566,6 +600,7 @@ function CatalogoCronograma({ tipo, propias, onDeletePropia }: {
                 bbva={p.entregables.reduce((s, e) => s + e.activities.filter(a => a.bbva).length, 0)}
                 detalle={p.entregables.flatMap(e => e.activities.map(a => a.label))}
                 onDelete={() => onDeletePropia(p.id)}
+                onEditar={() => onEditar(p)}
               />
             ))}
           </div>
@@ -575,20 +610,36 @@ function CatalogoCronograma({ tipo, propias, onDeletePropia }: {
   );
 }
 
-function TarjetaPlantilla({ nombre, descripcion, fases, actividades, semanas, casillas, bbva, detalle, onDelete }: {
+function TarjetaPlantilla({ nombre, descripcion, fases, actividades, semanas, casillas, bbva, detalle, onDelete, onEditar, onDuplicar }: {
   nombre: string; descripcion: string; fases: number; actividades: number;
-  semanas: number; casillas: number; bbva: number; detalle: string[]; onDelete?: () => void;
+  semanas: number; casillas: number; bbva: number; detalle: string[];
+  onDelete?: () => void; onEditar?: () => void; onDuplicar?: () => void;
 }) {
   const [abierto, setAbierto] = useState(false);
   return (
     <div className="bg-white rounded-2xl border border-slate-200 p-5 hover:shadow-md transition-all">
       <div className="flex items-start justify-between gap-2 mb-1">
         <h3 className="text-base font-bold text-slate-900 leading-tight">{nombre}</h3>
-        {onDelete && (
-          <button onClick={onDelete} className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all shrink-0">
-            <Trash2 size={14}/>
-          </button>
-        )}
+        <div className="flex gap-1 shrink-0">
+          {onEditar && (
+            <button onClick={onEditar} title="Editar plantilla"
+              className="p-1.5 text-slate-300 hover:text-primary hover:bg-primary/5 rounded-lg transition-all">
+              <Edit2 size={14}/>
+            </button>
+          )}
+          {onDuplicar && (
+            <button onClick={onDuplicar} title="Duplicar y editar — el catálogo no se modifica"
+              className="p-1.5 text-slate-300 hover:text-primary hover:bg-primary/5 rounded-lg transition-all">
+              <Copy size={14}/>
+            </button>
+          )}
+          {onDelete && (
+            <button onClick={onDelete} title="Borrar plantilla"
+              className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all">
+              <Trash2 size={14}/>
+            </button>
+          )}
+        </div>
       </div>
       <p className="text-sm text-slate-500 mb-4">{descripcion}</p>
       <div className="grid grid-cols-4 gap-2 mb-3">
