@@ -4,7 +4,7 @@ import {
   LayoutList, Clock, CalendarDays, Settings2, CheckSquare, Users, BarChart3, Grid3x3, List, Sparkles,
 } from 'lucide-react';
 import { PROJECTS, useAuth, canAccess } from '../contexts/AuthContext';
-import { adminStore, makePlanKey, CRONO_MAIN_NAME, type PlanEtapa, type PlanActivityConfig, type PlanEntregableConfig, type PlanConfig, type PlantillaPropia } from '../lib/adminStore';
+import { adminStore, makePlanKey, CRONO_MAIN_NAME, puedeVerPlantilla, alcanceDe, type PlanEtapa, type PlanActivityConfig, type PlanEntregableConfig, type PlanConfig, type PlantillaPropia } from '../lib/adminStore';
 import type { View } from './Layout';
 import { FlowStepper } from './SetupProject';
 import { snapToBusinessDay, addBusinessDays } from '../lib/businessDays';
@@ -823,6 +823,8 @@ export default function Estimaciones({ onViewChange, onBack }: EstimacionesProps
       descripcion: `Guardada desde ${currentConfig.projectId}${currentConfig.cronoName ? ' · ' + currentConfig.cronoName : ''}`,
       entregables: JSON.parse(JSON.stringify(ents)),
       totalWeeks: currentConfig.totalWeeks,
+      // Nace privada; se comparte desde Herramientas → Plantillas.
+      alcance: 'privada', ownerId: user?.id, ownerName: user?.name,
       creadaEn: new Date().toISOString(),
     };
     const next = [...propias, nueva];
@@ -1446,7 +1448,11 @@ export default function Estimaciones({ onViewChange, onBack }: EstimacionesProps
 
             {/* Plantillas propias — guardadas desde este mismo módulo */}
             {(() => {
-              const mias = propias.filter(p => p.tipo === tipoPlantilla);
+              // Solo las que este usuario puede abrir (propias, compartidas, catálogo o con acceso aprobado).
+              const solicitudes = adminStore.getSolicitudesPlantilla();
+              const mias = propias.filter(p =>
+                p.tipo === tipoPlantilla &&
+                puedeVerPlantilla(p, user?.id ?? '', (user?.role ?? 'developer') as never, solicitudes));
               if (!mias.length) return null;
               return (
                 <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid #ddd6fe' }}>
@@ -1474,14 +1480,18 @@ export default function Estimaciones({ onViewChange, onBack }: EstimacionesProps
                               setShowPlantillas(false); setVista('matriz');
                             }} style={{ flex: 1, textAlign: 'left', border: 'none', background: 'none', cursor: 'pointer', padding: 0 }}>
                               <div style={{ fontSize: 11, fontWeight: 700, color: '#6d28d9' }}>{pl.nombre}</div>
-                              <div style={{ fontSize: 9, color: '#94a3b8' }}>{pl.entregables.length} fases · {nAct} actividades</div>
+                              <div style={{ fontSize: 9, color: '#94a3b8' }}>
+                                {pl.entregables.length} fases · {nAct} actividades
+                                {pl.ownerName && pl.ownerId !== user?.id && <> · de {pl.ownerName}</>}
+                                {alcanceDe(pl) !== 'privada' && <> · {alcanceDe(pl)}</>}
+                              </div>
                               {pl.descripcion && <div style={{ fontSize: 9, color: '#64748b', marginTop: 3 }}>{pl.descripcion}</div>}
                             </button>
                             <button onClick={() => {
                               if (!confirm(`¿Borrar la plantilla "${pl.nombre}"?`)) return;
                               const next = propias.filter(x => x.id !== pl.id);
                               setPropias(next); adminStore.savePlantillasPropias(next);
-                            }} style={{ border: 'none', background: 'none', cursor: 'pointer', padding: 2, color: '#fca5a5' }}>
+                            }} style={{ border: 'none', background: 'none', cursor: 'pointer', padding: 2, color: '#fca5a5', visibility: (!pl.ownerId || pl.ownerId === user?.id) ? 'visible' : 'hidden' }}>
                               <Trash2 size={12}/>
                             </button>
                           </div>

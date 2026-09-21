@@ -294,8 +294,56 @@ export interface PlantillaPropia {
   tipo: 'proyecto' | 'entregable';
   entregables: PlanEntregableConfig[];
   totalWeeks: number;
+  /**
+   * Quién la ve:
+   *  - 'privada'   (defecto): solo su dueño. Los demás ven que existe (nombre y dueño)
+   *                y pueden pedir acceso.
+   *  - 'compartida': cualquiera la ve y la duplica; solo el dueño la edita.
+   *  - 'catalogo'  : biblioteca curada de Timia, visible siempre.
+   */
+  alcance?: 'privada' | 'compartida' | 'catalogo';
+  ownerId?: string;
+  ownerName?: string;
   creadaPor?: string;
   creadaEn: string;   // ISO
+}
+
+/** Solicitud para ver una plantilla privada de otro PM. */
+export interface SolicitudPlantilla {
+  id: string;
+  plantillaId: string;
+  plantillaNombre: string;
+  ownerId: string;
+  solicitanteId: string;
+  solicitanteNombre: string;
+  motivo?: string;
+  estado: 'pendiente' | 'aprobada' | 'rechazada';
+  creadaEn: string;
+  resueltaEn?: string;
+}
+
+/** Alcance efectivo: las plantillas viejas no lo tienen y se tratan como privadas. */
+export function alcanceDe(p: PlantillaPropia): 'privada' | 'compartida' | 'catalogo' {
+  return p.alcance ?? 'privada';
+}
+
+/** ¿Este usuario puede ver el contenido de la plantilla? */
+export function puedeVerPlantilla(
+  p: PlantillaPropia,
+  userId: string,
+  role: UserRole,
+  solicitudes: SolicitudPlantilla[],
+): boolean {
+  const a = alcanceDe(p);
+  if (a !== 'privada') return true;
+  if (p.ownerId === userId || !p.ownerId) return true;
+  if (role === 'account_manager') return true;   // el gerente ve todos los proyectos
+  return solicitudes.some(s => s.plantillaId === p.id && s.solicitanteId === userId && s.estado === 'aprobada');
+}
+
+/** Solo el dueño (y el gerente de cuenta) editan o borran una plantilla. */
+export function puedeEditarPlantilla(p: PlantillaPropia, userId: string, role: UserRole): boolean {
+  return !p.ownerId || p.ownerId === userId || role === 'account_manager';
 }
 
 export interface PlanConfig {
@@ -495,6 +543,8 @@ export const adminStore = {
   // Se guardan aparte del catálogo de fábrica, que vive en lib/plantillas.ts.
   getPlantillasPropias: (): PlantillaPropia[] => load('plantillas_cronograma', [] as PlantillaPropia[]),
   savePlantillasPropias: (p: PlantillaPropia[]) => save('plantillas_cronograma', p),
+  getSolicitudesPlantilla: (): SolicitudPlantilla[] => load('plantilla_solicitudes', [] as SolicitudPlantilla[]),
+  saveSolicitudesPlantilla: (s: SolicitudPlantilla[]) => save('plantilla_solicitudes', s),
 
   savePlanConfigs: (c: Record<string, PlanConfig>)  => save('plan_configs', c),
   getPlanConfig:   (planKey: string): PlanConfig | null => {

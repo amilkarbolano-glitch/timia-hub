@@ -9,7 +9,11 @@ import { motion, AnimatePresence } from 'motion/react';
 import { ProjectTemplate, TemplateTask } from '../types';
 import { PLAN_PREVIEWS, countActivities, type PlanTemplatePreview } from '../lib/planTemplates';
 import { PLANTILLAS, BLOQUES, resumenBloque, generarDesdePlantilla, insertarBloque } from '../lib/plantillas';
-import { adminStore, type PlantillaPropia, type PlanEntregableConfig } from '../lib/adminStore';
+import {
+  adminStore, alcanceDe, puedeVerPlantilla, puedeEditarPlantilla,
+  type PlantillaPropia, type PlanEntregableConfig, type SolicitudPlantilla,
+} from '../lib/adminStore';
+import { useAuth } from '../contexts/AuthContext';
 import EditorPlantilla from './EditorPlantilla';
 
 interface ProjectTemplatesProps {
@@ -160,12 +164,22 @@ function PlanPreviewAccordion({ preview }: { preview: PlanTemplatePreview }) {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-type TabPlantilla = 'proyecto' | 'entregable' | 'tareas';
+type TabPlantilla = 'proyecto' | 'entregable';
 
 export default function ProjectTemplates({ templates, setTemplates }: ProjectTemplatesProps) {
+  const { user } = useAuth();
+  const userId = user?.id ?? '';
+  const role = (user?.role ?? 'developer') as 'account_manager' | 'pm' | 'tech_lead' | 'developer';
   const [tab, setTab] = useState<TabPlantilla>('proyecto');
   const [propias, setPropias] = useState<PlantillaPropia[]>(() => adminStore.getPlantillasPropias());
+  const [solicitudes, setSolicitudes] = useState<SolicitudPlantilla[]>(() => adminStore.getSolicitudesPlantilla());
   const [editando, setEditando] = useState<PlantillaPropia | null>(null);
+
+  function guardarSolicitudes(next: SolicitudPlantilla[]) {
+    setSolicitudes(next); adminStore.saveSolicitudesPlantilla(next);
+  }
+  /** Solicitudes que le toca resolver a este usuario (es dueño de la plantilla). */
+  const pendientes = solicitudes.filter(s => s.estado === 'pendiente' && s.ownerId === userId);
   const [editingTemplate, setEditingTemplate] = useState<ProjectTemplate | null>(null);
   const [isModalOpen,     setIsModalOpen]     = useState(false);
   const [showPredefined,  setShowPredefined]  = useState(false);
@@ -233,7 +247,6 @@ export default function ProjectTemplates({ templates, setTemplates }: ProjectTem
   const TABS: { id: TabPlantilla; label: string; sub: string }[] = [
     { id: 'proyecto',   label: 'Proyecto',   sub: 'Cronogramas completos: todas las fases con sus actividades y semanas.' },
     { id: 'entregable', label: 'Entregable', sub: 'Fases sueltas, para agregar a un cronograma que ya existe.' },
-    { id: 'tareas',     label: 'Tareas',     sub: 'Tareas predefinidas del tablero para cada tipo de proyecto.' },
   ];
   const activa = TABS.find(x => x.id === tab)!;
 
@@ -257,10 +270,53 @@ export default function ProjectTemplates({ templates, setTemplates }: ProjectTem
         </div>
       </div>
 
-      {tab !== 'tareas' && (
+      {/* Bandeja: solicitudes de acceso a mis plantillas privadas */}
+      {pendientes.length > 0 && (
+        <div className="rounded-xl bg-amber-50 border border-amber-200 px-5 py-4">
+          <p className="text-sm font-bold text-amber-900 mb-2">
+            {pendientes.length} {pendientes.length === 1 ? 'solicitud' : 'solicitudes'} de acceso a tus plantillas
+          </p>
+          <div className="space-y-2">
+            {pendientes.map(s => (
+              <div key={s.id} className="flex items-center gap-3 bg-white rounded-lg px-3 py-2">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-slate-700 truncate">
+                    <b>{s.solicitanteNombre}</b> quiere ver <b>{s.plantillaNombre}</b>
+                  </p>
+                  {s.motivo && <p className="text-xs text-slate-400 truncate">{s.motivo}</p>}
+                </div>
+                <button onClick={() => guardarSolicitudes(solicitudes.map(x => x.id === s.id ? { ...x, estado: 'aprobada' as const, resueltaEn: new Date().toISOString() } : x))}
+                  className="px-3 py-1.5 text-xs font-bold text-white bg-emerald-600 rounded-lg hover:opacity-90">Aprobar</button>
+                <button onClick={() => guardarSolicitudes(solicitudes.map(x => x.id === s.id ? { ...x, estado: 'rechazada' as const, resueltaEn: new Date().toISOString() } : x))}
+                  className="px-3 py-1.5 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-lg">Rechazar</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {(
         <CatalogoCronograma
           tipo={tab}
-          propias={propias}
+          userId={userId}
+          role={role}
+          userName={user?.name ?? 'Alguien'}
+          solicitudes={solicitudes}
+          onSolicitar={(pl, motivo) => {
+            const ya = solicitudes.find(s => s.plantillaId === pl.id && s.solicitanteId === userId && s.estado === 'pendiente');
+            if (ya) { alert('Ya hay una solicitud pendiente para esa plantilla.'); return; }
+            guardarSolicitudes([...solicitudes, {
+              id: `sol-${Date.now().toString(36)}`,
+              plantillaId: pl.id, plantillaNombre: pl.nombre,
+              ownerId: pl.ownerId ?? '', solicitanteId: userId,
+              solicitanteNombre: user?.name ?? 'Alguien', motivo,
+              estado: 'pendiente', creadaEn: new Date().toISOString(),
+            }]);
+          }}
+          onCambiarAlcance={(id, alcance) => {
+            const next = propias.map(x => x.id === id ? { ...x, alcance } : x);
+            setPropias(next); adminStore.savePlantillasPropias(next);
+          }}
           onEditar={setEditando}
           onDuplicar={(nombre, entregables, totalWeeks, descripcion) => {
             const nueva: PlantillaPropia = {
@@ -268,11 +324,13 @@ export default function ProjectTemplates({ templates, setTemplates }: ProjectTem
               nombre: `${nombre} (copia)`, descripcion, tipo: tab,
               entregables: JSON.parse(JSON.stringify(entregables)),
               totalWeeks, creadaEn: new Date().toISOString(),
+              alcance: 'privada', ownerId: userId, ownerName: user?.name,
             };
             const next = [...propias, nueva];
             setPropias(next); adminStore.savePlantillasPropias(next);
             setEditando(nueva);
           }}
+          propias={propias}
           onDeletePropia={id => {
             if (!confirm('¿Borrar esta plantilla?')) return;
             const next = propias.filter(p => p.id !== id);
@@ -295,227 +353,6 @@ export default function ProjectTemplates({ templates, setTemplates }: ProjectTem
         />
       )}
 
-      {tab === 'tareas' && (<>
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm text-slate-500">Se aplican al tablero cuando se crea un proyecto nuevo.</p>
-        </div>
-        <button onClick={handleNewTemplate} className="flex items-center gap-2 px-6 h-12 bg-primary text-white rounded-xl font-bold hover:opacity-90 transition-all shadow-lg shadow-primary/20">
-          <Plus size={20}/> Nueva Plantilla
-        </button>
-      </div>
-
-      {/* Cards grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {templates.map((template) => {
-          const totalPesoCard = template.tasks.reduce((s, t) => s + (t.peso ?? 0), 0);
-          const isPonderado   = template.tasks.some(t => (t.peso ?? 0) > 0);
-          return (
-            <div key={template.id} className="bg-white rounded-2xl border border-slate-200 p-6 hover:shadow-md transition-all group">
-              <div className="flex items-start justify-between mb-4">
-                <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-slate-50 text-slate-600 group-hover:bg-primary group-hover:text-white transition-colors">
-                  {getIcon(template.icon)}
-                </div>
-                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button onClick={() => handleEditTemplate(template)} className="p-2 text-slate-400 hover:text-primary hover:bg-primary/5 rounded-lg transition-all"><Edit2 size={16}/></button>
-                  <button onClick={() => handleDeleteTemplate(template.id)} className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"><Trash2 size={16}/></button>
-                </div>
-              </div>
-              <h3 className="text-lg font-bold text-slate-900 mb-1">{template.name}</h3>
-              <p className="text-sm text-slate-500 mb-4 line-clamp-2">{template.description}</p>
-              {/* Ponderation bar */}
-              {isPonderado && (
-                <div className="mb-4">
-                  <div className="flex justify-between items-center mb-1">
-                    <span className="text-xs text-slate-400">Ponderación total</span>
-                    <span className="text-xs font-bold" style={{ color: Math.abs(totalPesoCard-100)<1 ? '#15803d' : totalPesoCard>100 ? '#dc2626' : '#d97706' }}>{totalPesoCard}%</span>
-                  </div>
-                  <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                    <div className="h-full rounded-full transition-all" style={{ width:`${Math.min(totalPesoCard,100)}%`, background: Math.abs(totalPesoCard-100)<1?'#15803d':totalPesoCard>100?'#dc2626':'#d97706' }}/>
-                  </div>
-                </div>
-              )}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-xs font-bold text-slate-400 uppercase tracking-wider">
-                  <span>Tareas predefinidas</span><span>{template.tasks.length}</span>
-                </div>
-                {template.tasks.slice(0, 3).map((task, idx) => (
-                  <div key={idx} className="flex items-center gap-2 text-sm text-slate-600">
-                    <CheckCircle2 size={14} className="text-emerald-500 shrink-0"/>
-                    <span className="truncate flex-1">{task.title}</span>
-                    {(task.peso ?? 0) > 0 && <span className="text-xs text-slate-400 shrink-0">{task.peso}%</span>}
-                  </div>
-                ))}
-                {template.tasks.length > 3 && <p className="text-xs text-slate-400 font-medium pl-6">+{template.tasks.length-3} tareas más…</p>}
-              </div>
-              {/* Plan de Estimaciones — vista previa del plan que se generará */}
-              {PLAN_PREVIEWS[template.id] && (
-                <PlanPreviewAccordion preview={PLAN_PREVIEWS[template.id]}/>
-              )}
-            </div>
-          );
-        })}
-        {templates.length === 0 && (
-          <div className="col-span-3 flex flex-col items-center justify-center py-20 text-slate-400">
-            <ClipboardList size={40} className="mb-4 opacity-30"/>
-            <p className="text-sm">No hay plantillas. Crea tu primera con el botón de arriba.</p>
-          </div>
-        )}
-      </div>
-
-      {/* Selector de plantillas predefinidas */}
-      <AnimatePresence>
-        {showPredefined && (
-          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[150] flex items-center justify-center p-4">
-            <motion.div initial={{ opacity:0, scale:0.95, y:20 }} animate={{ opacity:1, scale:1, y:0 }} exit={{ opacity:0, scale:0.95, y:20 }}
-              className="bg-white rounded-3xl w-full max-w-xl shadow-2xl overflow-hidden">
-              <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-                <div>
-                  <h3 className="text-lg font-bold text-slate-900">Nueva plantilla</h3>
-                  <p className="text-sm text-slate-500 mt-0.5">Elige un punto de partida — se crea una <strong>copia editable</strong>, los originales no se modifican</p>
-                </div>
-                <button onClick={()=>setShowPredefined(false)} className="p-2 hover:bg-slate-200 rounded-full transition-colors"><X size={18} className="text-slate-500"/></button>
-              </div>
-              <div className="p-6 space-y-3">
-                <div className="flex items-start gap-2 px-3 py-2 bg-blue-50 border border-blue-100 rounded-xl mb-2">
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="2" className="shrink-0 mt-0.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                  <p className="text-xs text-blue-700 leading-relaxed">Al seleccionar un punto de partida, se genera una <strong>copia nueva</strong> que puedes personalizar libremente. Las plantillas base nunca cambian.</p>
-                </div>
-                {PREDEFINED_SETS.map(set => (
-                  <button key={set.label} onClick={()=>handleSelectPredefined(set)}
-                    className="w-full flex items-center gap-4 p-4 rounded-2xl border border-slate-200 hover:border-primary hover:bg-primary/5 transition-all text-left group">
-                    <div className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-500 group-hover:bg-primary group-hover:text-white transition-colors shrink-0">
-                      {getIcon(set.icon)}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-bold text-slate-900 text-sm">{set.label}</p>
-                      <p className="text-xs text-slate-400 mt-0.5">{set.tasks.length === 0 ? 'Sin tareas predefinidas — empezar desde cero' : `${set.tasks.length} tareas · ${set.tasks.reduce((s,t)=>s+(t.peso??0),0)}% ponderado`}</p>
-                    </div>
-                    <ChevronRight size={16} className="text-slate-300 group-hover:text-primary shrink-0"/>
-                  </button>
-                ))}
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* Template Editor Modal */}
-      <AnimatePresence>
-        {isModalOpen && editingTemplate && (
-          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[150] flex items-center justify-center p-4">
-            <motion.div initial={{ opacity:0, scale:0.95, y:20 }} animate={{ opacity:1, scale:1, y:0 }} exit={{ opacity:0, scale:0.95, y:20 }}
-              className="bg-white rounded-3xl w-full max-w-4xl max-h-[90vh] shadow-2xl overflow-hidden flex flex-col">
-              <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-                <h3 className="text-xl font-bold text-slate-900">
-                  {editingTemplate.id.startsWith('temp-') ? 'Nueva Plantilla' : 'Editar Plantilla'}
-                </h3>
-                <button onClick={()=>setIsModalOpen(false)} className="p-2 hover:bg-slate-200 rounded-full transition-colors"><X size={20} className="text-slate-500"/></button>
-              </div>
-
-              <div className="flex-1 overflow-y-auto p-8">
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                  {/* Left — Basic info + Icons */}
-                  <div className="space-y-6">
-                    <div className="space-y-2">
-                      <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Nombre de la Plantilla</label>
-                      <input type="text" value={editingTemplate.name} onChange={(e)=>setEditingTemplate({...editingTemplate,name:e.target.value})}
-                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary/20 outline-none font-medium" placeholder="Ej: Ingesta Avanzada ADA"/>
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Descripción</label>
-                      <textarea value={editingTemplate.description} onChange={(e)=>setEditingTemplate({...editingTemplate,description:e.target.value})}
-                        rows={3} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary/20 outline-none resize-none text-sm" placeholder="Describe el propósito de esta plantilla…"/>
-                    </div>
-                    {/* Icon picker — 20 options */}
-                    <div className="space-y-2">
-                      <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Ícono ({ICON_LIST.length} opciones)</label>
-                      <div className="grid grid-cols-5 gap-1.5">
-                        {ICON_LIST.map(ic => (
-                          <button key={ic.id} onClick={()=>setEditingTemplate({...editingTemplate,icon:ic.id})} title={ic.label}
-                            className={`p-2 rounded-lg flex items-center justify-center transition-all ${editingTemplate.icon===ic.id?'bg-primary text-white shadow-lg shadow-primary/20':'bg-slate-50 text-slate-400 hover:bg-slate-100'}`}>
-                            {getIcon(ic.id, 16)}
-                          </button>
-                        ))}
-                      </div>
-                      <p className="text-xs text-slate-400">Seleccionado: <strong>{ICON_LIST.find(i=>i.id===editingTemplate.icon)?.label ?? editingTemplate.icon}</strong></p>
-                    </div>
-                    {/* Ponderation summary */}
-                    {editingTemplate.tasks.length > 0 && (
-                      <div className="p-4 rounded-xl bg-slate-50 border border-slate-200">
-                        <div className="flex justify-between items-center mb-2">
-                          <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Ponderación total</span>
-                          <span className="text-sm font-bold" style={{ color: pesoColor }}>{totalPeso}%</span>
-                        </div>
-                        <div className="h-2 bg-slate-200 rounded-full overflow-hidden mb-1">
-                          <div className="h-full rounded-full transition-all" style={{ width:`${Math.min(totalPeso,100)}%`, background:pesoColor }}/>
-                        </div>
-                        <p className="text-xs" style={{ color: pesoColor }}>
-                          {Math.abs(totalPeso-100)<1 ? '✓ Ponderación completa (100%)' : totalPeso > 100 ? `⚠ Excede el 100% en ${totalPeso-100}%` : `Faltan ${100-totalPeso}% por ponderar`}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Right — Tasks */}
-                  <div className="lg:col-span-2 space-y-4">
-                    <div className="flex items-center justify-between">
-                      <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Tareas Predefinidas ({editingTemplate.tasks.length})</label>
-                      <button onClick={addTask} className="flex items-center gap-1 text-xs font-bold text-primary hover:underline">
-                        <PlusCircle size={14}/> Añadir tarea
-                      </button>
-                    </div>
-
-                    <div className="space-y-3">
-                      {editingTemplate.tasks.map((task, index) => (
-                        <div key={index} className="bg-slate-50 rounded-2xl p-4 border border-slate-100 flex gap-4">
-                          <div className="pt-2 text-slate-300"><GripVertical size={18}/></div>
-                          <div className="flex-1 space-y-3">
-                            <div className="grid grid-cols-12 gap-2">
-                              <input type="text" value={task.title} onChange={(e)=>updateTask(index,'title',e.target.value)}
-                                className="col-span-7 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold outline-none focus:ring-2 focus:ring-primary/10" placeholder="Título de la tarea"/>
-                              <div className="col-span-2 relative">
-                                <input type="number" value={task.points} min={1} max={99}
-                                  onChange={(e)=>updateTask(index,'points',parseInt(e.target.value)||0)}
-                                  className="w-full px-2 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold outline-none focus:ring-2 focus:ring-primary/10 text-center" placeholder="Pts" title="Story points"/>
-                                <span className="absolute -top-4 left-0 text-xs text-slate-400">Pts</span>
-                              </div>
-                              <div className="col-span-3 relative">
-                                <input type="number" value={task.peso ?? 0} min={0} max={100}
-                                  onChange={(e)=>updateTask(index,'peso',Math.min(100,parseInt(e.target.value)||0))}
-                                  className="w-full px-2 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold outline-none focus:ring-2 focus:ring-primary/10 text-center"
-                                  placeholder="%" title="Peso ponderado (%)"/>
-                                <span className="absolute -top-4 left-0 text-xs text-slate-400">Peso %</span>
-                              </div>
-                            </div>
-                            <textarea value={task.description} onChange={(e)=>updateTask(index,'description',e.target.value)}
-                              rows={2} className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-primary/10 resize-none" placeholder="Descripción detallada de la tarea…"/>
-                          </div>
-                          <button onClick={()=>removeTask(index)} className="p-2 text-slate-300 hover:text-red-500 transition-colors"><Trash2 size={18}/></button>
-                        </div>
-                      ))}
-                      {editingTemplate.tasks.length === 0 && (
-                        <div className="p-12 border-2 border-dashed border-slate-100 rounded-3xl text-center">
-                          <p className="text-slate-400 text-sm italic">Sin tareas. Añade la primera o vuelve al inicio para usar una plantilla base.</p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="p-6 bg-slate-50 border-t border-slate-100 flex justify-end gap-3">
-                <button onClick={()=>setIsModalOpen(false)} className="px-6 py-3 text-sm font-bold text-slate-600 hover:bg-slate-200 rounded-xl transition-colors">Cancelar</button>
-                <button onClick={handleSaveTemplate} disabled={!editingTemplate.name.trim()}
-                  className="flex items-center gap-2 px-8 py-3 text-sm font-bold bg-primary text-white rounded-xl hover:bg-primary/90 transition-all shadow-lg shadow-primary/20 disabled:opacity-50">
-                  <Save size={18}/> Guardar Plantilla
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-      </>)}
     </div>
   );
 }
@@ -523,14 +360,27 @@ export default function ProjectTemplates({ templates, setTemplates }: ProjectTem
 // ─── Catálogo de plantillas de cronograma ───────────────────────────────────
 // Solo lectura: se aplican desde Estimaciones, sobre un cronograma concreto.
 
-function CatalogoCronograma({ tipo, propias, onDeletePropia, onEditar, onDuplicar }: {
+function CatalogoCronograma({
+  tipo, propias, userId, role, solicitudes,
+  onDeletePropia, onEditar, onDuplicar, onSolicitar, onCambiarAlcance,
+}: {
   tipo: 'proyecto' | 'entregable';
   propias: PlantillaPropia[];
+  userId: string;
+  role: 'account_manager' | 'pm' | 'tech_lead' | 'developer';
+  userName: string;
+  solicitudes: SolicitudPlantilla[];
   onDeletePropia: (id: string) => void;
   onEditar: (p: PlantillaPropia) => void;
   onDuplicar: (nombre: string, entregables: PlanEntregableConfig[], totalWeeks: number, descripcion: string) => void;
+  onSolicitar: (p: PlantillaPropia, motivo: string) => void;
+  onCambiarAlcance: (id: string, alcance: 'privada' | 'compartida' | 'catalogo') => void;
 }) {
-  const mias = propias.filter(p => p.tipo === tipo);
+  const delTipo = propias.filter(p => p.tipo === tipo);
+  // Lo que puedo abrir: mías, compartidas, del catálogo, o privadas con acceso aprobado.
+  const mias = delTipo.filter(p => puedeVerPlantilla(p, userId, role, solicitudes));
+  // Lo que existe pero no puedo abrir: se ve el nombre y el dueño, nada más.
+  const bloqueadas = delTipo.filter(p => !puedeVerPlantilla(p, userId, role, solicitudes));
 
   const base = tipo === 'proyecto'
     ? PLANTILLAS.map(pl => {
@@ -580,7 +430,7 @@ function CatalogoCronograma({ tipo, propias, onDeletePropia, onEditar, onDuplica
 
       <div>
         <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">
-          Mis plantillas {mias.length > 0 && <span className="text-slate-300">· {mias.length}</span>}
+          Del equipo {mias.length > 0 && <span className="text-slate-300">· {mias.length}</span>}
         </h2>
         {mias.length === 0 ? (
           <p className="text-sm text-slate-400 italic">
@@ -599,21 +449,81 @@ function CatalogoCronograma({ tipo, propias, onDeletePropia, onEditar, onDuplica
                 casillas={p.entregables.reduce((s, e) => s + e.activities.reduce((x, a) => x + (a.weeks?.length ?? 0), 0), 0)}
                 bbva={p.entregables.reduce((s, e) => s + e.activities.filter(a => a.bbva).length, 0)}
                 detalle={p.entregables.flatMap(e => e.activities.map(a => a.label))}
-                onDelete={() => onDeletePropia(p.id)}
-                onEditar={() => onEditar(p)}
+                onDelete={puedeEditarPlantilla(p, userId, role) ? () => onDeletePropia(p.id) : undefined}
+                onEditar={puedeEditarPlantilla(p, userId, role) ? () => onEditar(p) : undefined}
+                onDuplicar={!puedeEditarPlantilla(p, userId, role)
+                  ? () => onDuplicar(p.nombre, p.entregables, p.totalWeeks, p.descripcion ?? '')
+                  : undefined}
+                alcance={alcanceDe(p)}
+                duenio={p.ownerId === userId ? 'vos' : p.ownerName}
+                onAlcance={puedeEditarPlantilla(p, userId, role) ? a => onCambiarAlcance(p.id, a) : undefined}
               />
             ))}
           </div>
         )}
       </div>
+
+      {bloqueadas.length > 0 && (
+        <div>
+          <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">
+            Privadas de otros <span className="text-slate-300">· {bloqueadas.length}</span>
+          </h2>
+          <p className="text-xs text-slate-400 mb-3">
+            Existen pero no podés abrirlas. Pedí acceso y le llega al dueño para que lo apruebe.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {bloqueadas.map(p => {
+              const sol = solicitudes.find(s => s.plantillaId === p.id && s.solicitanteId === userId);
+              return (
+                <div key={p.id} className="bg-slate-50 rounded-2xl border border-dashed border-slate-300 p-5">
+                  <div className="flex items-start gap-2 mb-1">
+                    <Shield size={15} className="text-slate-400 mt-0.5 shrink-0"/>
+                    <h3 className="text-base font-bold text-slate-600 leading-tight">{p.nombre}</h3>
+                  </div>
+                  <p className="text-xs text-slate-400 mb-4">
+                    {p.entregables.length} {p.entregables.length === 1 ? 'fase' : 'fases'} · de {p.ownerName ?? 'otro PM'}
+                  </p>
+                  {sol?.estado === 'pendiente' ? (
+                    <span className="text-xs font-bold text-amber-600">Solicitud enviada</span>
+                  ) : sol?.estado === 'rechazada' ? (
+                    <span className="text-xs font-bold text-slate-400">Acceso denegado</span>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        const motivo = prompt(`¿Para qué la necesitás? (le llega a ${p.ownerName ?? 'el dueño'})`, '');
+                        if (motivo === null) return;
+                        onSolicitar(p, motivo);
+                      }}
+                      className="text-xs font-bold text-primary hover:underline">
+                      Pedir acceso
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function TarjetaPlantilla({ nombre, descripcion, fases, actividades, semanas, casillas, bbva, detalle, onDelete, onEditar, onDuplicar }: {
+const ALCANCE_META = {
+  privada:    { label: 'Privada',    clase: 'text-slate-500 bg-slate-100' },
+  compartida: { label: 'Compartida', clase: 'text-emerald-700 bg-emerald-50' },
+  catalogo:   { label: 'Catálogo',   clase: 'text-violet-700 bg-violet-50' },
+} as const;
+
+function TarjetaPlantilla({
+  nombre, descripcion, fases, actividades, semanas, casillas, bbva, detalle,
+  onDelete, onEditar, onDuplicar, alcance, duenio, onAlcance,
+}: {
   nombre: string; descripcion: string; fases: number; actividades: number;
   semanas: number; casillas: number; bbva: number; detalle: string[];
   onDelete?: () => void; onEditar?: () => void; onDuplicar?: () => void;
+  alcance?: 'privada' | 'compartida' | 'catalogo';
+  duenio?: string;
+  onAlcance?: (a: 'privada' | 'compartida' | 'catalogo') => void;
 }) {
   const [abierto, setAbierto] = useState(false);
   return (
@@ -641,6 +551,26 @@ function TarjetaPlantilla({ nombre, descripcion, fases, actividades, semanas, ca
           )}
         </div>
       </div>
+      {(alcance || duenio) && (
+        <div className="flex items-center gap-2 mb-2">
+          {alcance && (
+            onAlcance ? (
+              <select value={alcance} onChange={e => onAlcance(e.target.value as 'privada' | 'compartida' | 'catalogo')}
+                title="Quién puede ver esta plantilla"
+                className={`text-[10px] font-bold rounded-full px-2 py-0.5 cursor-pointer border-0 outline-none ${ALCANCE_META[alcance].clase}`}>
+                <option value="privada">Privada</option>
+                <option value="compartida">Compartida</option>
+                <option value="catalogo">Catálogo</option>
+              </select>
+            ) : (
+              <span className={`text-[10px] font-bold rounded-full px-2 py-0.5 ${ALCANCE_META[alcance].clase}`}>
+                {ALCANCE_META[alcance].label}
+              </span>
+            )
+          )}
+          {duenio && <span className="text-[10px] text-slate-400">de {duenio}</span>}
+        </div>
+      )}
       <p className="text-sm text-slate-500 mb-4">{descripcion}</p>
       <div className="grid grid-cols-4 gap-2 mb-3">
         {[[fases, fases === 1 ? 'fase' : 'fases'], [actividades, 'activid.'], [semanas, 'semanas'], [casillas, 'casillas']].map(([v, l]) => (

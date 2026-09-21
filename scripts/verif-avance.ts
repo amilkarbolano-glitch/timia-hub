@@ -143,3 +143,36 @@ console.log('\n── Edición de plantillas ──');
   if (!contiguo) process.exit(1);
 }
 console.log('edición OK');
+
+// ── Visibilidad de plantillas: alcance y solicitudes ───────────────────────
+import { puedeVerPlantilla, puedeEditarPlantilla, alcanceDe, type PlantillaPropia, type SolicitudPlantilla } from '../src/lib/adminStore';
+
+console.log('\n── Visibilidad de plantillas ──');
+{
+  const base = { tipo: 'proyecto' as const, entregables: [], totalWeeks: 1, creadaEn: '' };
+  const privJuan: PlantillaPropia = { ...base, id: 'p1', nombre: 'Privada de Juan', alcance: 'privada', ownerId: 'juan' };
+  const compartida: PlantillaPropia = { ...base, id: 'p2', nombre: 'Compartida', alcance: 'compartida', ownerId: 'juan' };
+  const vieja: PlantillaPropia = { ...base, id: 'p3', nombre: 'Sin alcance (legado)' };
+  const aprobada: SolicitudPlantilla[] = [{
+    id: 's1', plantillaId: 'p1', plantillaNombre: 'Privada de Juan', ownerId: 'juan',
+    solicitanteId: 'amilkar', solicitanteNombre: 'Amilkar', estado: 'aprobada', creadaEn: '',
+  }];
+  const casos: [string, boolean, boolean][] = [
+    ['Amilkar NO ve la privada de Juan', puedeVerPlantilla(privJuan, 'amilkar', 'pm', []), false],
+    ['Amilkar SÍ ve la privada con acceso aprobado', puedeVerPlantilla(privJuan, 'amilkar', 'pm', aprobada), true],
+    ['Juan ve su propia privada', puedeVerPlantilla(privJuan, 'juan', 'pm', []), true],
+    ['El gerente de cuenta ve todo', puedeVerPlantilla(privJuan, 'rodolfo', 'account_manager', []), true],
+    ['Cualquiera ve la compartida', puedeVerPlantilla(compartida, 'amilkar', 'pm', []), true],
+    ['Una plantilla sin alcance es privada', alcanceDe(vieja) === 'privada', true],
+    ['Pero una sin dueño la ve cualquiera (legado)', puedeVerPlantilla(vieja, 'amilkar', 'pm', []), true],
+    ['Amilkar NO edita la de Juan', puedeEditarPlantilla(compartida, 'amilkar', 'pm'), false],
+    ['Juan sí edita la suya', puedeEditarPlantilla(compartida, 'juan', 'pm'), true],
+  ];
+  let vf = 0;
+  for (const [nombre, got, esp] of casos) {
+    if (got !== esp) vf++;
+    console.log(`${got === esp ? '✓' : '✗'} ${nombre}`);
+  }
+  console.log(vf === 0 ? 'visibilidad OK' : `visibilidad: ${vf} fallas`);
+  if (vf) process.exit(1);
+}
