@@ -255,6 +255,11 @@ export interface PlanActivityConfig {
   label: string;
   startWeek: number;
   endWeek: number;
+  /**
+   * Semanas marcadas (1-indexed), como las casillas del Excel del PM. Permite tramos
+   * discontinuos (ej. [1,2,3,4,18,19]). Si no está, se deriva del rango startWeek→endWeek.
+   */
+  weeks?: number[];
   bbva?: boolean;
   etapas?: PlanEtapa[];
 }
@@ -274,6 +279,14 @@ export interface PlanConfig {
   weekLabels?: string[];
   startDate?: string;   // ISO date — anchor for week label computation
   entregables: PlanEntregableConfig[];
+  /**
+   * Cómo se pondera el avance de este cronograma:
+   *  - 'actividad' (por defecto): cada actividad pesa igual.
+   *  - 'actividad-semana': cada semana marcada pesa igual, como el Excel del PM
+   *    (factor estático por fase = 100 / casillas de la fase).
+   * Se elige por cronograma para no cambiarle los números a los planes ya existentes.
+   */
+  pesoModo?: 'actividad' | 'actividad-semana';
   generatedAt: string;  // ISO
 }
 
