@@ -84,8 +84,11 @@ for (const pl of PLANTILLAS) {
     cfg.totalWeeks,
   );
   const cierra = Math.abs((ser.acumulado[cfg.totalWeeks - 1] ?? 0) - 100) < 0.05;
-  const ok = malas.length === 0 && cierra && cfg.totalWeeks > 0;
+  // Una plantilla de proyecto tiene 2+ fases: si tiene una sola es una fase y va en BLOQUES.
+  const variasFases = pl.bloques.length >= 2;
+  const ok = malas.length === 0 && cierra && cfg.totalWeeks > 0 && variasFases;
   if (!ok) pf++;
+  if (!variasFases) console.log(`   "${pl.nombre}" tiene una sola fase: debería estar en BLOQUES, no en PLANTILLAS`);
   console.log(`${ok ? '✓' : '✗'} ${pl.nombre}: ${cfg.entregables.length} fases · ${acts.length} act · ${casillas} casillas · ${cfg.totalWeeks} semanas · cierra en ${(ser.acumulado[cfg.totalWeeks - 1] ?? 0).toFixed(1)}%`);
   if (malas.length) console.log(`   actividades mal secuenciadas: ${malas.map(m => m.label).join(', ')}`);
 }
@@ -97,6 +100,11 @@ import { BLOQUES, insertarBloque, resumenBloque } from '../src/lib/plantillas';
 
 console.log('\n── Plantillas de entregable ──');
 let bf = 0;
+// Y ninguna fase debe aparecer también como plantilla de proyecto.
+const dobles = BLOQUES.filter(b => PLANTILLAS.some(pl => pl.bloques.length === 1 && pl.bloques[0].id === b.id));
+if (dobles.length) { console.log(`✗ aparecen en las dos pestañas: ${dobles.map(d => d.label).join(', ')}`); process.exit(1); }
+console.log('✓ ninguna fase se repite como plantilla de proyecto');
+
 for (const b of BLOQUES) {
   const r = resumenBloque(b);
   const ok = r.actividades > 0 && r.casillas >= r.actividades && r.semanas > 0;

@@ -141,6 +141,12 @@ const AJUSTE: BloquePlantilla = {
 
 // ─── Plantillas ──────────────────────────────────────────────────────────────
 
+/**
+ * Plantilla de PROYECTO: un cronograma con varias fases.
+ * Regla: siempre 2 o más bloques. Una plantilla de un solo bloque no es un
+ * proyecto, es una fase, y su lugar es BLOQUES (pestaña Entregable). Si no,
+ * la misma cosa aparece en las dos pestañas y no se entiende cuál usar.
+ */
 export interface Plantilla {
   id: string;
   nombre: string;
@@ -219,18 +225,6 @@ export const PLANTILLAS: Plantilla[] = [
     nombre: 'Ingesta DataX',
     descripcion: 'Solo traer el dato: gobierno y transmisión, sin construir procesamientos.',
     bloques: [GOBIERNO, TRANSMISION],
-  },
-  {
-    id: 'ajuste',
-    nombre: 'Ajuste de procesamiento existente',
-    descripcion: 'Cambios sobre algo que ya está productivo, con su ciclo de pruebas y certificación.',
-    bloques: [AJUSTE],
-  },
-  {
-    id: 'historia',
-    nombre: 'Generación de historia',
-    descripcion: 'Solo la carga histórica: Migration Tool, mallas temporales y validación.',
-    bloques: [{ ...HISTORIA, inicio: 1 }],
   },
 ];
 
