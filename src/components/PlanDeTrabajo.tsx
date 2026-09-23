@@ -15,6 +15,10 @@ import {
   type ActivityAssignees, type AdminUser, type AdminProject, type PlanConfig, type PlanIssue, type PlanImpact, type BitacoraEntry,
   issueImpacts, changeExtensionDays, makePlanKey, splitPlanKey, planKeyOf, CRONO_MAIN_NAME,
 } from '../lib/adminStore';
+import {
+  type PesoModo, PESO_MODO_DEFAULT, seriePlanConsolidada, marcasDe,
+  enSemana, realPlan, type AvanceFase,
+} from '../lib/avance';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -23,6 +27,8 @@ interface PlanSubtask { name: string; pct: number; optional?: boolean; }
 interface PlanActivity {
   name: string; pct: number; pctExp: number;
   startWeek: number; endWeek: number;
+  /** Semanas marcadas (casillas del Excel). Si falta, es el rango startWeek→endWeek. */
+  weeks?: number[];
   bbva?: boolean; subtasks?: PlanSubtask[]; etapas?: PlanEtapa[];
 }
 interface PlanEntregable { id: string; name: string; pctReal: number; pctExp: number; activities: PlanActivity[]; }
@@ -34,6 +40,9 @@ interface WorkPlan {
   cronoName?: string;
   respBBVA: string; respTimia: string; pasos: string[]; alertas: string[]; bloqueantes: string[];
   entregables: PlanEntregable[]; startDate?: string; weekLabels?: string[];
+  totalWeeks?: number;
+  /** Ponderación del avance: por actividad (defecto) o por actividad-semana (Excel del PM). */
+  pesoModo?: PesoModo;
 }
 /** Etiqueta corta de un cronograma: "FICO" o "FICO · Input" */
 function planLabel(p: Pick<WorkPlan, 'projectId' | 'cronoName' | 'cronoId'>): string {
@@ -983,20 +992,53 @@ function PlanDetail({ plan, getActivityPct, setActivityPct, onActivityClick, onG
   // todayWeekIdx disponible en todo PlanDetail para cálculos de esperado
   const todayWeekIdx = computeCurrentWeekIdx(plan.startDate, holidays);
 
-  const overallReal = parseFloat((plan.entregables.map(e => e.activities.length
-    ? e.activities.reduce((s,a,i) => s + getActivityPct(e.id,i,a), 0) / e.activities.length
-    : e.pctReal).reduce((s,v)=>s+v,0) / plan.entregables.length).toFixed(1));
+  // ── Ponderación ──────────────────────────────────────────────────────────
+  // 'actividad'       → cada actividad pesa igual (comportamiento histórico).
+  // 'actividad-semana'→ cada semana marcada pesa igual, con factor estático por fase,
+  //                     replicando el cálculo de las hojas "Plan de trabajo" del PM.
+  const pesoModo: PesoModo = plan.pesoModo ?? PESO_MODO_DEFAULT;
+  const porSemana = pesoModo === 'actividad-semana';
+  /** Fases en el formato de lib/avance, con el % real vigente de cada actividad. */
+  const fasesAvance: AvanceFase[] = plan.entregables.map(e => ({
+    id: e.id, label: e.name,
+    activities: e.activities.map((a, i) => ({
+      weeks: a.weeks, startWeek: a.startWeek, endWeek: a.endWeek, pct: getActivityPct(e.id, i, a),
+    })),
+  }));
+  /** Igual que fasesAvance pero con el fin efectivo (extensión por cambios y bloqueos). */
+  const fasesAvanceExt: AvanceFase[] = plan.entregables.map(e => ({
+    id: e.id, label: e.name,
+    activities: e.activities.map((a, i) => {
+      const eff = extensionFor(changes, plan.planKey, e.id, i, a.endWeek, issues, holidays).effEndWeek;
+      // Al extenderse, las semanas nuevas se añaden al final del tramo marcado.
+      const base = marcasDe({ weeks: a.weeks, startWeek: a.startWeek, endWeek: a.endWeek });
+      const extra: number[] = [];
+      for (let w = a.endWeek + 1; w <= eff; w++) extra.push(w);
+      return { weeks: [...base, ...extra], startWeek: a.startWeek, endWeek: eff, pct: getActivityPct(e.id, i, a) };
+    }),
+  }));
+  const planWeeks = plan.totalWeeks ?? Math.max(1, ...plan.entregables.flatMap(e => e.activities.map(a => a.endWeek)));
 
-  // overallExp dinámico: promedio de pctExp calculado por semana para cada actividad
-  const overallExp = parseFloat((plan.entregables.map(e => {
-    if (!e.activities.length) return e.pctExp;
-    return e.activities.reduce((s, a, i) => s + computeActExpPct(a.startWeek, extensionFor(changes, plan.planKey, e.id, i, a.endWeek, issues, holidays).effEndWeek, todayWeekIdx), 0) / e.activities.length;
-  }).reduce((s,v)=>s+v,0) / plan.entregables.length).toFixed(1));
+  const overallReal = porSemana
+    ? parseFloat(realPlan(fasesAvance, pesoModo).toFixed(1))
+    : parseFloat((plan.entregables.map(e => e.activities.length
+        ? e.activities.reduce((s,a,i) => s + getActivityPct(e.id,i,a), 0) / e.activities.length
+        : e.pctReal).reduce((s,v)=>s+v,0) / plan.entregables.length).toFixed(1));
+
+  // overallExp dinámico: acumulado planificado a hoy (por semana) o promedio binario (por actividad)
+  const overallExp = porSemana
+    ? parseFloat(enSemana(seriePlanConsolidada(fasesAvanceExt, Math.max(planWeeks, todayWeekIdx)), todayWeekIdx).toFixed(1))
+    : parseFloat((plan.entregables.map(e => {
+        if (!e.activities.length) return e.pctExp;
+        return e.activities.reduce((s, a, i) => s + computeActExpPct(a.startWeek, extensionFor(changes, plan.planKey, e.id, i, a.endWeek, issues, holidays).effEndWeek, todayWeekIdx), 0) / e.activities.length;
+      }).reduce((s,v)=>s+v,0) / plan.entregables.length).toFixed(1));
   // Esperado sobre la línea base (sin extensión por cambios)
-  const overallExpBase = parseFloat((plan.entregables.map(e => {
-    if (!e.activities.length) return e.pctExp;
-    return e.activities.reduce((s, a) => s + computeActExpPct(a.startWeek, a.endWeek, todayWeekIdx), 0) / e.activities.length;
-  }).reduce((s,v)=>s+v,0) / plan.entregables.length).toFixed(1));
+  const overallExpBase = porSemana
+    ? parseFloat(enSemana(seriePlanConsolidada(fasesAvance, Math.max(planWeeks, todayWeekIdx)), todayWeekIdx).toFixed(1))
+    : parseFloat((plan.entregables.map(e => {
+        if (!e.activities.length) return e.pctExp;
+        return e.activities.reduce((s, a) => s + computeActExpPct(a.startWeek, a.endWeek, todayWeekIdx), 0) / e.activities.length;
+      }).reduce((s,v)=>s+v,0) / plan.entregables.length).toFixed(1));
   const planHasExt = plan.entregables.some(e => e.activities.some((a, i) => extensionFor(changes, plan.planKey, e.id, i, a.endWeek, issues, holidays).days > 0));
 
   const overallDif  = parseFloat((overallReal-overallExp).toFixed(1));
@@ -1246,6 +1288,8 @@ function planConfigToWorkPlan(cfg: PlanConfig): WorkPlan {
     cronoName: cfg.cronoId ? (cfg.cronoName ?? cfg.cronoId) : undefined,
     startDate: cfg.startDate,
     weekLabels: cfg.weekLabels,
+    totalWeeks: cfg.totalWeeks,
+    pesoModo: cfg.pesoModo ?? PESO_MODO_DEFAULT,
     respBBVA:  'Por definir',
     respTimia: 'Por definir',
     pasos:      ['Plan generado desde Estimaciones — ajusta los % de avance'],
@@ -1262,12 +1306,14 @@ function planConfigToWorkPlan(cfg: PlanConfig): WorkPlan {
         pctExp:    0,
         startWeek: act.startWeek,
         endWeek:   act.endWeek,
+        weeks:     act.weeks,
         bbva:      act.bbva,
         etapas:    act.etapas,
       })),
     })),
   };
 }
+
 
 // ─── WORK_PLANS ───────────────────────────────────────────────────────────────
 // Nota: actividades marcadas "BBVA" son tareas que TIMIA INICIA

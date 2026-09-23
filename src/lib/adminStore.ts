@@ -255,14 +255,95 @@ export interface PlanActivityConfig {
   label: string;
   startWeek: number;
   endWeek: number;
+  /**
+   * Semanas marcadas (1-indexed), como las casillas del Excel del PM. Permite tramos
+   * discontinuos (ej. [1,2,3,4,18,19]). Si no está, se deriva del rango startWeek→endWeek.
+   */
+  weeks?: number[];
+  /** @deprecated usar `resp`. Se mantiene por compatibilidad con los planes existentes. */
   bbva?: boolean;
+  /**
+   * Quién ejecuta: 'timia' (horas nuestras), 'bbva' (espera del banco, no son horas
+   * nuestras) o 'mixto' (lo hace Timia pero no cierra sin VoBo de negocio).
+   */
+  resp?: 'timia' | 'bbva' | 'mixto';
+  /** Fase del SDA con la que se imputa en el Activity Report. */
+  faseSDA?: string;
   etapas?: PlanEtapa[];
+}
+
+/** Responsable efectivo de una actividad, con el campo viejo `bbva` como respaldo. */
+export function respDe(a: Pick<PlanActivityConfig, 'resp' | 'bbva'>): 'timia' | 'bbva' | 'mixto' {
+  return a.resp ?? (a.bbva ? 'bbva' : 'timia');
 }
 
 export interface PlanEntregableConfig {
   id: string;
   label: string;
   activities: PlanActivityConfig[];
+}
+
+/**
+ * Plantilla de cronograma creada por el usuario desde Estimaciones.
+ * `tipo: 'proyecto'` guarda todas las fases; `tipo: 'entregable'`, una sola.
+ */
+export interface PlantillaPropia {
+  id: string;
+  nombre: string;
+  descripcion?: string;
+  tipo: 'proyecto' | 'entregable';
+  entregables: PlanEntregableConfig[];
+  totalWeeks: number;
+  /**
+   * Quién la ve:
+   *  - 'privada'   (defecto): solo su dueño. Los demás ven que existe (nombre y dueño)
+   *                y pueden pedir acceso.
+   *  - 'compartida': cualquiera la ve y la duplica; solo el dueño la edita.
+   *  - 'catalogo'  : biblioteca curada de Timia, visible siempre.
+   */
+  alcance?: 'privada' | 'compartida' | 'catalogo';
+  ownerId?: string;
+  ownerName?: string;
+  creadaPor?: string;
+  creadaEn: string;   // ISO
+}
+
+/** Solicitud para ver una plantilla privada de otro PM. */
+export interface SolicitudPlantilla {
+  id: string;
+  plantillaId: string;
+  plantillaNombre: string;
+  ownerId: string;
+  solicitanteId: string;
+  solicitanteNombre: string;
+  motivo?: string;
+  estado: 'pendiente' | 'aprobada' | 'rechazada';
+  creadaEn: string;
+  resueltaEn?: string;
+}
+
+/** Alcance efectivo: las plantillas viejas no lo tienen y se tratan como privadas. */
+export function alcanceDe(p: PlantillaPropia): 'privada' | 'compartida' | 'catalogo' {
+  return p.alcance ?? 'privada';
+}
+
+/** ¿Este usuario puede ver el contenido de la plantilla? */
+export function puedeVerPlantilla(
+  p: PlantillaPropia,
+  userId: string,
+  role: UserRole,
+  solicitudes: SolicitudPlantilla[],
+): boolean {
+  const a = alcanceDe(p);
+  if (a !== 'privada') return true;
+  if (p.ownerId === userId || !p.ownerId) return true;
+  if (role === 'account_manager') return true;   // el gerente ve todos los proyectos
+  return solicitudes.some(s => s.plantillaId === p.id && s.solicitanteId === userId && s.estado === 'aprobada');
+}
+
+/** Solo el dueño (y el gerente de cuenta) editan o borran una plantilla. */
+export function puedeEditarPlantilla(p: PlantillaPropia, userId: string, role: UserRole): boolean {
+  return !p.ownerId || p.ownerId === userId || role === 'account_manager';
 }
 
 export interface PlanConfig {
@@ -274,6 +355,14 @@ export interface PlanConfig {
   weekLabels?: string[];
   startDate?: string;   // ISO date — anchor for week label computation
   entregables: PlanEntregableConfig[];
+  /**
+   * Cómo se pondera el avance de este cronograma:
+   *  - 'actividad' (por defecto): cada actividad pesa igual.
+   *  - 'actividad-semana': cada semana marcada pesa igual, como el Excel del PM
+   *    (factor estático por fase = 100 / casillas de la fase).
+   * Se elige por cronograma para no cambiarle los números a los planes ya existentes.
+   */
+  pesoModo?: 'actividad' | 'actividad-semana';
   generatedAt: string;  // ISO
 }
 
@@ -449,6 +538,14 @@ export const adminStore = {
 
   // Configuración de planes generados desde Estimaciones (keyed by planKey)
   getPlanConfigs:  (): Record<string, PlanConfig>   => load('plan_configs', {}),
+
+  // ── Plantillas propias de cronograma (proyecto y entregable) ──────────────
+  // Se guardan aparte del catálogo de fábrica, que vive en lib/plantillas.ts.
+  getPlantillasPropias: (): PlantillaPropia[] => load('plantillas_cronograma', [] as PlantillaPropia[]),
+  savePlantillasPropias: (p: PlantillaPropia[]) => save('plantillas_cronograma', p),
+  getSolicitudesPlantilla: (): SolicitudPlantilla[] => load('plantilla_solicitudes', [] as SolicitudPlantilla[]),
+  saveSolicitudesPlantilla: (s: SolicitudPlantilla[]) => save('plantilla_solicitudes', s),
+
   savePlanConfigs: (c: Record<string, PlanConfig>)  => save('plan_configs', c),
   getPlanConfig:   (planKey: string): PlanConfig | null => {
     const all = load<Record<string, PlanConfig>>('plan_configs', {});

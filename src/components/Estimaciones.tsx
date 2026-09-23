@@ -1,13 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import {
   ChevronDown, ChevronRight, Plus, Trash2, Save, ArrowRight, ArrowLeft,
-  LayoutList, Clock, CalendarDays, Settings2, CheckSquare, Users,
+  LayoutList, Clock, CalendarDays, Settings2, CheckSquare, Users, BarChart3, Grid3x3, List, Sparkles,
 } from 'lucide-react';
 import { PROJECTS, useAuth, canAccess } from '../contexts/AuthContext';
-import { adminStore, makePlanKey, CRONO_MAIN_NAME, type PlanEtapa, type PlanActivityConfig, type PlanEntregableConfig, type PlanConfig } from '../lib/adminStore';
+import { adminStore, makePlanKey, CRONO_MAIN_NAME, puedeVerPlantilla, alcanceDe, type PlanEtapa, type PlanActivityConfig, type PlanEntregableConfig, type PlanConfig, type PlantillaPropia } from '../lib/adminStore';
 import type { View } from './Layout';
 import { FlowStepper } from './SetupProject';
 import { snapToBusinessDay, addBusinessDays } from '../lib/businessDays';
+import { marcasDe, factorFase, marcasFase, type PesoModo, PESO_MODO_DEFAULT } from '../lib/avance';
+import MatrizCronograma from './MatrizCronograma';
+import PreviewPlantilla, { type PreviewProps } from './PreviewPlantilla';
+import { PLANTILLAS, BLOQUES, generarDesdePlantilla, insertarBloque, resumenBloque } from '../lib/plantillas';
 
 // ─── Week label computation (días hábiles reales) ─────────────────────────────
 // Cada semana = 5 días hábiles. S1 empieza en startDate (snapped a día hábil),
@@ -390,10 +394,13 @@ function EtapaRow({
 // ─── ActivityCard ─────────────────────────────────────────────────────────────
 
 function ActivityCard({
-  act, actIdx, totalWeeks,
+  act, actIdx, totalWeeks, porSemana, weekLabels,
   onChange, onDelete,
 }: {
   act: PlanActivityConfig; actIdx: number; totalWeeks: number;
+  /** true si el cronograma pondera por actividad-semana: se habilita la rejilla de casillas. */
+  porSemana?: boolean;
+  weekLabels?: string[];
   onChange: (a: PlanActivityConfig) => void;
   onDelete: () => void;
 }) {
@@ -429,6 +436,24 @@ function ActivityCard({
 
   const weeks = Array.from({ length: totalWeeks }, (_, i) => i + 1);
 
+  // ── Casillas por semana (método del Excel del PM) ──
+  const marcas = marcasDe({ weeks: act.weeks, startWeek: act.startWeek, endWeek: act.endWeek });
+  const marcasSet = new Set(marcas);
+  const discontinua = marcas.length > 0 && marcas.length !== (marcas[marcas.length - 1] - marcas[0] + 1);
+
+  /** Marca/desmarca una semana y reajusta el rango start/end para que el Gantt siga cuadrando. */
+  function toggleSemana(w: number) {
+    const next = new Set(marcas);
+    if (next.has(w)) next.delete(w); else next.add(w);
+    const arr = [...next].sort((a, b) => a - b);
+    if (!arr.length) { onChange({ ...act, weeks: undefined }); return; }
+    onChange({ ...act, weeks: arr, startWeek: arr[0], endWeek: arr[arr.length - 1] });
+  }
+  /** Vuelve al rango continuo: borra las casillas y deja start→end. */
+  function limpiarMarcas() {
+    onChange({ ...act, weeks: undefined });
+  }
+
   return (
     <div style={{ borderRadius: 8, border: '1px solid #e2e8f0', overflow: 'hidden', marginBottom: 6 }}>
       {/* Activity header row */}
@@ -455,6 +480,13 @@ function ActivityCard({
             {weeks.filter(w => w >= act.startWeek).map(w => <option key={w} value={w}>S{w}</option>)}
           </select>
         </div>
+        {/* Casillas — nº de semanas marcadas; avisa si el tramo es discontinuo */}
+        {porSemana && (
+          <span title={discontinua ? `Tramo discontinuo: ${marcas.map(w => `S${w}`).join(', ')}` : `${marcas.length} semana(s) marcada(s)`}
+            style={{ fontSize: 9, padding: '2px 7px', borderRadius: 10, background: discontinua ? '#faf5ff' : '#f1f5f9', color: discontinua ? '#7c3aed' : '#64748b', fontWeight: 600, flexShrink: 0 }}>
+            {marcas.length} ⬚{discontinua ? ' ⤳' : ''}
+          </span>
+        )}
         {/* BBVA toggle */}
         <label style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 9, color: '#1d4ed8', cursor: 'pointer', flexShrink: 0 }} onClick={e => e.stopPropagation()}>
           <input type="checkbox" checked={act.bbva ?? false}
@@ -475,9 +507,43 @@ function ActivityCard({
         </button>
       </div>
 
-      {/* Expanded: etapas editor */}
+      {/* Expanded: casillas por semana + etapas editor */}
       {open && (
         <div style={{ padding: '10px 14px 12px', borderTop: '1px solid #f1f5f9', background: '#fafcff' }}>
+          {porSemana && (
+            <div style={{ marginBottom: 12, paddingBottom: 10, borderBottom: '1px solid #f1f5f9' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                <p style={{ margin: 0, fontSize: 10, fontWeight: 600, color: '#64748b', display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <CalendarDays size={11}/> Semanas de trabajo
+                  <span style={{ fontSize: 9, color: '#94a3b8', fontWeight: 400 }}>
+                    — marcá cada semana activa; se admiten tramos discontinuos
+                  </span>
+                </p>
+                {act.weeks?.length && (
+                  <button onClick={limpiarMarcas}
+                    style={{ fontSize: 9, border: '1px solid #e2e8f0', borderRadius: 5, padding: '2px 7px', background: '#fff', color: '#64748b', cursor: 'pointer' }}>
+                    Volver al rango continuo
+                  </button>
+                )}
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
+                {weeks.map(w => {
+                  const on = marcasSet.has(w);
+                  return (
+                    <button key={w} onClick={() => toggleSemana(w)}
+                      title={weekLabels?.[w - 1] ? `S${w} · ${weekLabels[w - 1]}` : `S${w}`}
+                      style={{
+                        width: 34, height: 26, fontSize: 9, fontWeight: on ? 700 : 500, cursor: 'pointer',
+                        border: `1px solid ${on ? '#0d9488' : '#e2e8f0'}`, borderRadius: 4,
+                        background: on ? '#99d9ce' : '#fff', color: on ? '#0f766e' : '#94a3b8',
+                      }}>
+                      S{w}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
             <p style={{ margin: 0, fontSize: 10, fontWeight: 600, color: '#64748b', display: 'flex', alignItems: 'center', gap: 5 }}>
               <LayoutList size={11}/> Etapas de avance
@@ -521,12 +587,14 @@ function ActivityCard({
 // ─── EntregablePanel ──────────────────────────────────────────────────────────
 
 function EntregablePanel({
-  ent, entIdx, totalWeeks,
-  onChange, onDelete,
+  ent, entIdx, totalWeeks, porSemana, weekLabels,
+  onChange, onDelete, onSaveTemplate,
 }: {
   ent: PlanEntregableConfig; entIdx: number; totalWeeks: number;
+  porSemana?: boolean; weekLabels?: string[];
   onChange: (e: PlanEntregableConfig) => void;
   onDelete: () => void;
+  onSaveTemplate?: () => void;
 }) {
   const [open, setOpen] = useState(entIdx === 0);
 
@@ -547,6 +615,9 @@ function EntregablePanel({
 
   const totalActivities = ent.activities.length;
   const withEtapas      = ent.activities.filter(a => (a.etapas?.length ?? 0) > 0).length;
+  // Factor estático de la fase: 100 / casillas (igual que el Excel del PM)
+  const casillas = marcasFase({ id: ent.id, label: ent.label, activities: ent.activities });
+  const factor   = factorFase({ id: ent.id, label: ent.label, activities: ent.activities });
 
   return (
     <div style={{ marginBottom: 14, borderRadius: 10, border: '1.5px solid #e2e8f0', overflow: 'hidden' }}>
@@ -567,12 +638,25 @@ function EntregablePanel({
           <span style={{ fontSize: 9, padding: '2px 7px', borderRadius: 10, background: '#f1f5f9', color: '#64748b' }}>
             {totalActivities} actividades
           </span>
+          {porSemana && casillas > 0 && (
+            <span title={`Factor estático = 100 / ${casillas} casillas = ${factor.toFixed(3)}`}
+              style={{ fontSize: 9, padding: '2px 7px', borderRadius: 10, background: '#f0fdfa', color: '#0f766e', fontWeight: 600 }}>
+              {casillas} ⬚ · factor {factor.toFixed(3)}
+            </span>
+          )}
           {withEtapas > 0 && (
             <span style={{ fontSize: 9, padding: '2px 7px', borderRadius: 10, background: '#f0fdf4', color: '#15803d' }}>
               {withEtapas} con etapas
             </span>
           )}
         </div>
+        {onSaveTemplate && (
+          <button onClick={e => { e.stopPropagation(); onSaveTemplate(); }}
+            title="Guardar este entregable como plantilla reutilizable"
+            style={{ border: 'none', background: 'none', cursor: 'pointer', padding: 4, color: '#a78bfa', display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+            <Sparkles size={13}/>
+          </button>
+        )}
         <button onClick={e => { e.stopPropagation(); onDelete(); }}
           style={{ border: 'none', background: 'none', cursor: 'pointer', padding: 4, color: '#fca5a5', display: 'flex', alignItems: 'center', flexShrink: 0 }}>
           <Trash2 size={13}/>
@@ -583,7 +667,7 @@ function EntregablePanel({
         <div style={{ padding: '12px 14px', background: '#fafcff' }}>
           {ent.activities.map((act, i) => (
             <ActivityCard
-              key={i} act={act} actIdx={i} totalWeeks={totalWeeks}
+              key={i} act={act} actIdx={i} totalWeeks={totalWeeks} porSemana={porSemana} weekLabels={weekLabels}
               onChange={a => updateActivity(i, a)}
               onDelete={() => deleteActivity(i)}
             />
@@ -717,6 +801,44 @@ export default function Estimaciones({ onViewChange, onBack }: EstimacionesProps
     setConfigs(next);
     adminStore.savePlanConfigs(next);
     setSelectedCronoId('');
+  }
+
+  // Vista de edición: matriz (todo el cronograma junto) o lista (detalle por actividad)
+  const [vista, setVista] = useState<'matriz' | 'lista'>('matriz');
+  const [showPlantillas, setShowPlantillas] = useState(false);
+  /** 'proyecto' reemplaza todo el cronograma; 'entregable' agrega una fase al final. */
+  const [tipoPlantilla, setTipoPlantilla] = useState<'proyecto' | 'entregable'>('proyecto');
+  const [propias, setPropias] = useState<PlantillaPropia[]>(() => adminStore.getPlantillasPropias());
+  /** Plantilla en vista previa, antes de aplicarla al cronograma. */
+  const [preview, setPreview] = useState<Omit<PreviewProps, 'onCerrar' | 'totalWeeksActual' | 'weekLabels' | 'fasesActuales'> | null>(null);
+
+  /** Aplica el resultado de una vista previa al cronograma actual. */
+  function aplicarPreview(entregables: PlanEntregableConfig[], totalWeeks: number) {
+    const labels = computeWeekLabels(currentConfig.startDate ?? startDate, totalWeeks, holidayDates);
+    updateConfig({ entregables, totalWeeks, weekLabels: labels, pesoModo: 'actividad-semana' });
+    setPreview(null); setShowPlantillas(false); setVista('matriz');
+  }
+
+  /** Guarda el cronograma actual (o una de sus fases) como plantilla reutilizable. */
+  function guardarComoPlantilla(tipo: 'proyecto' | 'entregable', entIdx?: number) {
+    const ents = tipo === 'entregable' && entIdx !== undefined
+      ? [currentConfig.entregables[entIdx]]
+      : currentConfig.entregables;
+    if (!ents.length || !ents[0]) { alert('No hay nada que guardar.'); return; }
+    const sugerido = tipo === 'entregable' ? ents[0].label : (currentConfig.cronoName ?? currentConfig.projectId);
+    const nombre = prompt(`Nombre de la plantilla de ${tipo}:`, sugerido);
+    if (!nombre) return;
+    const nueva: PlantillaPropia = {
+      id: uid('plt'), nombre, tipo,
+      descripcion: `Guardada desde ${currentConfig.projectId}${currentConfig.cronoName ? ' · ' + currentConfig.cronoName : ''}`,
+      entregables: JSON.parse(JSON.stringify(ents)),
+      totalWeeks: currentConfig.totalWeeks,
+      // Nace privada; se comparte desde Herramientas → Plantillas.
+      alcance: 'privada', ownerId: user?.id, ownerName: user?.name,
+      creadaEn: new Date().toISOString(),
+    };
+    const next = [...propias, nueva];
+    setPropias(next); adminStore.savePlantillasPropias(next);
   }
 
   function updateConfig(patch: Partial<PlanConfig>) {
@@ -960,6 +1082,34 @@ export default function Estimaciones({ onViewChange, onBack }: EstimacionesProps
               />
             </div>
 
+            {/* Modo de ponderación — 'actividad-semana' replica el cálculo del Excel del PM */}
+            {(() => {
+              const modo: PesoModo = currentConfig.pesoModo ?? PESO_MODO_DEFAULT;
+              const porSemana = modo === 'actividad-semana';
+              const fases = currentConfig.entregables.map(e => ({ id: e.id, label: e.label, activities: e.activities }));
+              const casillas = fases.reduce((s, f) => s + marcasFase(f), 0);
+              return (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', background: porSemana ? '#f0fdfa' : '#f8fafc', border: `1px solid ${porSemana ? '#99f6e4' : '#e2e8f0'}`, borderRadius: 8 }}>
+                  <BarChart3 size={12} color={porSemana ? '#0d9488' : '#64748b'}/>
+                  <label style={{ fontSize: 10, color: '#64748b' }}>Ponderación:</label>
+                  <select
+                    value={modo}
+                    onChange={e => updateConfig({ pesoModo: e.target.value as PesoModo })}
+                    style={{ fontSize: 10, fontWeight: 600, border: '1px solid #e2e8f0', borderRadius: 5, padding: '2px 5px', background: '#fff', cursor: 'pointer', color: porSemana ? '#0f766e' : '#475569' }}
+                  >
+                    <option value="actividad">Por actividad</option>
+                    <option value="actividad-semana">Por actividad-semana (Excel)</option>
+                  </select>
+                  {porSemana && casillas > 0 && (
+                    <span title={`Factor global = 100 / ${casillas} casillas`}
+                      style={{ fontSize: 9, color: '#0f766e', fontWeight: 600 }}>
+                      {casillas} ⬚ · {(100 / casillas).toFixed(4)}
+                    </span>
+                  )}
+                </div>
+              );
+            })()}
+
             <button onClick={saveConfig} style={{
               display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px',
               fontSize: 12, background: saved ? '#f0fdf4' : dirty ? '#fff' : '#f8fafc',
@@ -1194,33 +1344,231 @@ export default function Estimaciones({ onViewChange, onBack }: EstimacionesProps
           ))}
         </div>
 
-        {/* Tip */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, marginBottom: 14 }}>
-          <span style={{ fontSize: 11 }}>💡</span>
-          <p style={{ margin: 0, fontSize: 11, color: '#92400e' }}>
-            <strong>Tip:</strong> expande una actividad para definir sus etapas de avance. Los pesos deben sumar 100% — esto controla la propagación del % en el Plan de Trabajo.
+        {/* Vista: matriz (todo junto, como el Excel) o lista (detalle por actividad) */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', border: '1px solid #e2e8f0', borderRadius: 8, overflow: 'hidden' }}>
+            {([['matriz', 'Matriz', <Grid3x3 size={12} key="g"/>], ['lista', 'Detalle', <List size={12} key="l"/>]] as const).map(([v, lbl, ic]) => (
+              <button key={v} onClick={() => setVista(v as 'matriz' | 'lista')}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', fontSize: 11, cursor: 'pointer',
+                  border: 'none', fontWeight: vista === v ? 700 : 500,
+                  background: vista === v ? '#0d9488' : '#fff', color: vista === v ? '#fff' : '#64748b',
+                }}>
+                {ic} {lbl}
+              </button>
+            ))}
+          </div>
+          <button onClick={() => setShowPlantillas(v => !v)}
+            style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', fontSize: 11, cursor: 'pointer', border: '1px solid #c4b5fd', borderRadius: 8, background: showPlantillas ? '#ede9fe' : '#faf5ff', color: '#6d28d9', fontWeight: 600 }}>
+            <Sparkles size={12}/> Plantillas
+          </button>
+          <button onClick={() => guardarComoPlantilla('proyecto')}
+            title="Guarda todas las fases de este cronograma como una plantilla reutilizable"
+            style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', fontSize: 11, cursor: 'pointer', border: '1px solid #e2e8f0', borderRadius: 8, background: '#fff', color: '#64748b', fontWeight: 600 }}>
+            <Save size={12}/> Guardar como plantilla
+          </button>
+          <p style={{ margin: 0, fontSize: 10, color: '#94a3b8' }}>
+            {vista === 'matriz'
+              ? 'Pintá las semanas de cada actividad arrastrando, como en el Excel.'
+              : 'Editá nombres, etapas de avance y el detalle de cada actividad.'}
           </p>
         </div>
 
-        {/* Entregables */}
-        {currentConfig.entregables.map((ent, i) => (
-          <EntregablePanel
-            key={ent.id} ent={ent} entIdx={i} totalWeeks={currentConfig.totalWeeks}
-            onChange={e => updateEntregable(i, e)}
-            onDelete={() => deleteEntregable(i)}
-          />
-        ))}
+        {/* Plantillas — reemplazan las fases y actividades del cronograma actual */}
+        {showPlantillas && (
+          <div style={{ marginBottom: 14, padding: '12px 14px', background: '#faf5ff', border: '1px solid #ddd6fe', borderRadius: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, flexWrap: 'wrap' }}>
+              <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: '#6d28d9' }}>Plantillas</p>
+              <div style={{ display: 'flex', border: '1px solid #ddd6fe', borderRadius: 7, overflow: 'hidden' }}>
+                {([['proyecto', 'Proyecto completo'], ['entregable', 'Un entregable']] as const).map(([v, lbl]) => (
+                  <button key={v} onClick={() => setTipoPlantilla(v)}
+                    style={{
+                      padding: '4px 11px', fontSize: 10, cursor: 'pointer', border: 'none',
+                      fontWeight: tipoPlantilla === v ? 700 : 500,
+                      background: tipoPlantilla === v ? '#6d28d9' : '#fff', color: tipoPlantilla === v ? '#fff' : '#7c3aed',
+                    }}>
+                    {lbl}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <p style={{ margin: '0 0 10px', fontSize: 10, color: '#7c3aed' }}>
+              {tipoPlantilla === 'proyecto'
+                ? <>Arman el cronograma completo. <b>Reemplazan</b> lo que haya en <b>{currentConfig.cronoName ?? CRONO_MAIN_NAME}</b>.</>
+                : <>Una fase suelta, con sus actividades y semanas. Se <b>agrega</b> al final del cronograma actual; podés meter la misma más de una vez.</>}
+              {' '}Las duraciones son la mediana de los cronogramas reales de MIGBD y FICO; después ajustás en la matriz.
+            </p>
 
-        {/* Add entregable */}
-        <button onClick={addEntregable} style={{
-          display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px',
-          width: '100%', marginTop: 4, borderRadius: 10, cursor: 'pointer',
-          background: '#f8fafc', border: '1.5px dashed #d1d5db',
-          fontSize: 12, color: '#64748b', justifyContent: 'center',
-          fontWeight: 500,
-        }}>
-          <Plus size={14}/> Agregar entregable
-        </button>
+            {tipoPlantilla === 'entregable' && (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(250px,1fr))', gap: 8, marginBottom: 12 }}>
+                {BLOQUES.map(b => {
+                  const r = resumenBloque(b);
+                  return (
+                    <button key={b.id}
+                      onClick={() => setPreview({
+                        titulo: b.label,
+                        descripcion: `${r.actividades} actividades encadenadas · ${r.casillas} casillas`,
+                        modo: 'agrega',
+                        construir: sem => insertarBloque(currentConfig.entregables, b, sem),
+                        onAplicar: aplicarPreview,
+                      })}
+                      style={{ textAlign: 'left', padding: '9px 11px', border: '1px solid #ddd6fe', borderRadius: 8, background: '#fff', cursor: 'pointer' }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: '#6d28d9', marginBottom: 2 }}>{b.label}</div>
+                      <div style={{ fontSize: 9, color: '#94a3b8' }}>
+                        {r.actividades} actividades · {r.casillas} casillas · {r.semanas} semanas
+                        {r.bbva > 0 && <> · <span style={{ color: '#1d4ed8' }}>{r.bbva} de BBVA</span></>}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {tipoPlantilla === 'proyecto' && (<>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(230px,1fr))', gap: 8 }}>
+              {PLANTILLAS.map(pl => {
+                const nAct = pl.bloques.reduce((s, b) => s + b.actividades.length, 0);
+                return (
+                  <button key={pl.id}
+                    onClick={() => setPreview({
+                      titulo: pl.nombre, descripcion: pl.descripcion, modo: 'reemplaza',
+                      construir: () => generarDesdePlantilla(pl, {
+                        projectId: currentConfig.projectId,
+                        cronoId: currentConfig.cronoId,
+                        cronoName: currentConfig.cronoName,
+                        startDate: currentConfig.startDate ?? startDate,
+                      }).entregables,
+                      onAplicar: aplicarPreview,
+                    })}
+                    style={{ textAlign: 'left', padding: '9px 11px', border: '1px solid #ddd6fe', borderRadius: 8, background: '#fff', cursor: 'pointer' }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: '#6d28d9', marginBottom: 2 }}>{pl.nombre}</div>
+                    <div style={{ fontSize: 9, color: '#94a3b8', marginBottom: 4 }}>{pl.bloques.length} fases · {nAct} actividades</div>
+                    <div style={{ fontSize: 9, color: '#64748b', lineHeight: 1.35 }}>{pl.descripcion}</div>
+                  </button>
+                );
+              })}
+            </div>
+            </>)}
+
+            {/* Plantillas propias — guardadas desde este mismo módulo */}
+            {(() => {
+              // Solo las que este usuario puede abrir (propias, compartidas, catálogo o con acceso aprobado).
+              const solicitudes = adminStore.getSolicitudesPlantilla();
+              const mias = propias.filter(p =>
+                p.tipo === tipoPlantilla &&
+                puedeVerPlantilla(p, user?.id ?? '', (user?.role ?? 'developer') as never, solicitudes));
+              if (!mias.length) return null;
+              return (
+                <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid #ddd6fe' }}>
+                  <p style={{ margin: '0 0 6px', fontSize: 10, fontWeight: 700, color: '#6d28d9' }}>Mis plantillas</p>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(230px,1fr))', gap: 8 }}>
+                    {mias.map(pl => {
+                      const nAct = pl.entregables.reduce((s, e) => s + e.activities.length, 0);
+                      return (
+                        <div key={pl.id} style={{ padding: '9px 11px', border: '1px solid #ddd6fe', borderRadius: 8, background: '#fff' }}>
+                          <div style={{ display: 'flex', alignItems: 'start', gap: 6 }}>
+                            <button onClick={() => setPreview({
+                              titulo: pl.nombre, descripcion: pl.descripcion,
+                              modo: pl.tipo === 'proyecto' ? 'reemplaza' : 'agrega',
+                              construir: sem => {
+                                const copia: PlanEntregableConfig[] = JSON.parse(JSON.stringify(pl.entregables));
+                                if (pl.tipo === 'proyecto') return copia;
+                                // Al agregar, se corre la fase para que arranque en la semana elegida.
+                                const ini = Math.min(...copia[0].activities.map(a => a.startWeek), 1);
+                                const delta = sem - ini;
+                                const movida = {
+                                  ...copia[0],
+                                  activities: copia[0].activities.map(a => ({
+                                    ...a,
+                                    startWeek: a.startWeek + delta,
+                                    endWeek: a.endWeek + delta,
+                                    weeks: (a.weeks ?? []).map(w => w + delta),
+                                  })),
+                                };
+                                const usados = new Set(currentConfig.entregables.map(e => e.id));
+                                let id = movida.id, n = 2;
+                                while (usados.has(id)) id = `${movida.id}-${n++}`;
+                                return [...currentConfig.entregables, { ...movida, id }];
+                              },
+                              onAplicar: aplicarPreview,
+                            })} style={{ flex: 1, textAlign: 'left', border: 'none', background: 'none', cursor: 'pointer', padding: 0 }}>
+                              <div style={{ fontSize: 11, fontWeight: 700, color: '#6d28d9' }}>{pl.nombre}</div>
+                              <div style={{ fontSize: 9, color: '#94a3b8' }}>
+                                {pl.entregables.length} fases · {nAct} actividades
+                                {pl.ownerName && pl.ownerId !== user?.id && <> · de {pl.ownerName}</>}
+                                {alcanceDe(pl) !== 'privada' && <> · {alcanceDe(pl)}</>}
+                              </div>
+                              {pl.descripcion && <div style={{ fontSize: 9, color: '#64748b', marginTop: 3 }}>{pl.descripcion}</div>}
+                            </button>
+                            <button onClick={() => {
+                              if (!confirm(`¿Borrar la plantilla "${pl.nombre}"?`)) return;
+                              const next = propias.filter(x => x.id !== pl.id);
+                              setPropias(next); adminStore.savePlantillasPropias(next);
+                            }} style={{ border: 'none', background: 'none', cursor: 'pointer', padding: 2, color: '#fca5a5', visibility: (!pl.ownerId || pl.ownerId === user?.id) ? 'visible' : 'hidden' }}>
+                              <Trash2 size={12}/>
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        )}
+
+        {preview && (
+          <PreviewPlantilla
+            {...preview}
+            totalWeeksActual={currentConfig.totalWeeks}
+            weekLabels={currentConfig.weekLabels}
+            fasesActuales={currentConfig.entregables.length}
+            onCerrar={() => setPreview(null)}
+          />
+        )}
+
+        {vista === 'matriz' ? (
+          <MatrizCronograma
+            entregables={currentConfig.entregables}
+            totalWeeks={currentConfig.totalWeeks}
+            weekLabels={currentConfig.weekLabels}
+            onChange={ents => updateConfig({ entregables: ents })}
+          />
+        ) : (
+          <>
+            {/* Tip */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, marginBottom: 14 }}>
+              <span style={{ fontSize: 11 }}>💡</span>
+              <p style={{ margin: 0, fontSize: 11, color: '#92400e' }}>
+                <strong>Tip:</strong> expande una actividad para definir sus etapas de avance. Los pesos deben sumar 100% — esto controla la propagación del % en el Plan de Trabajo.
+              </p>
+            </div>
+
+            {/* Entregables */}
+            {currentConfig.entregables.map((ent, i) => (
+              <EntregablePanel
+                key={ent.id} ent={ent} entIdx={i} totalWeeks={currentConfig.totalWeeks}
+                porSemana={(currentConfig.pesoModo ?? PESO_MODO_DEFAULT) === 'actividad-semana'}
+                weekLabels={currentConfig.weekLabels}
+                onChange={e => updateEntregable(i, e)}
+                onDelete={() => deleteEntregable(i)}
+                onSaveTemplate={() => guardarComoPlantilla('entregable', i)}
+              />
+            ))}
+
+            {/* Add entregable */}
+            <button onClick={addEntregable} style={{
+              display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px',
+              width: '100%', marginTop: 4, borderRadius: 10, cursor: 'pointer',
+              background: '#f8fafc', border: '1.5px dashed #d1d5db',
+              fontSize: 12, color: '#64748b', justifyContent: 'center',
+              fontWeight: 500,
+            }}>
+              <Plus size={14}/> Agregar entregable
+            </button>
+          </>
+        )}
 
         {/* Bottom CTA */}
         <div style={{ marginTop: 24, padding: '16px 20px', background: 'linear-gradient(135deg,#0f172a,#1e293b)', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>

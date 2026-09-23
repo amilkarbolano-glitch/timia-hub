@@ -53,6 +53,14 @@ Cómo funciona: el botón de Google entrega un ID token → `POST /api/auth/goog
 cookie de sesión **httpOnly** (JWT firmado, 8 h). Todas las rutas `/api/state*` exigen sesión; las colecciones de
 configuración (usuarios, proyectos, roles, ANS, festivos) solo las escribe el rol **pm**. Rate limit en `/api/auth/*`.
 
+## Arranque en limpio (sin datos precargados)
+`public/db.json` solo trae configuración (ANS, festivos, etapas de inventario): **no** hay personas ni proyectos.
+1. En la API: `BOOTSTRAP_ADMIN_EMAIL=<tu correo @timia.ai>`.
+2. Entrar con Google: ese correo se crea automáticamente como **gerente de cuenta** (solo ocurre si la base no tiene usuarios).
+3. Desde la app: crear proyectos, dar de alta al equipo en **Administración › Usuarios** y aprobar los que soliciten acceso.
+4. Para recuperar el piloto o mover datos entre ambientes: **Administración › Datos** (exportar / importar respaldo `.json`).
+   El piloto MIGBD está en `seed/db.piloto-migbd.json`.
+
 ## Variables
 | Var | Dónde | Descripción |
 |---|---|---|

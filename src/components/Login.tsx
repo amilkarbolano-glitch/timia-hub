@@ -219,6 +219,12 @@ export default function Login() {
                     Cuentas disponibles
                   </div>
                   {apiMode && apiAccounts === null && <div className="px-3 py-3 text-xs text-slate-400">Cargando cuentas…</div>}
+                  {!apiMode && accounts.length === 0 && (
+                    <div className="px-3 py-3 text-xs" style={{ color:'#92400e', background:'#fffbeb' }}>
+                      No hay cuentas en este navegador. Esta es la vista de demostración: el inicio de sesión real con Google
+                      requiere el servidor (API) en marcha.
+                    </div>
+                  )}
                   {apiMode && apiAccountsError && <div className="px-3 py-3 text-xs" style={{ color:'#b91c1c', background:'#fef2f2' }}>{apiAccountsError}</div>}
                   {accounts.map((acc) => (
                     <button
