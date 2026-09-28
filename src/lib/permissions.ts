@@ -196,6 +196,43 @@ export function effectiveRole(user: { id: string; role: string } | null | undefi
   return base;
 }
 
+/**
+ * Rol con el que la persona se presenta: el más alto que tiene entre sus proyectos.
+ * No es el rol base ni el permiso administrativo — `platform_admin` sirve para
+ * administrar la herramienta, no describe a qué se dedica alguien, así que se
+ * excluye salvo que no tenga ningún proyecto.
+ *
+ * "Más alto" se mide por cantidad de permisos en la matriz vigente, no con una
+ * tabla fija: así los roles creados desde la app se ordenan solos según lo que
+ * pueden hacer, sin tener que registrarlos en ningún lado.
+ */
+export function rolPrincipal(user: { id: string; role: string; projectIds?: string[] } | null | undefined): string {
+  if (!user) return 'developer';
+  const base = (LEGACY_ROLE[user.role] ?? user.role) as string;
+  // El gerente de cuenta lo es sobre toda la cuenta, no por proyecto.
+  if (base === 'account_manager') return base;
+
+  const matriz = currentMatrix();
+  const peso = (r: string) => matriz[r]?.length ?? 0;
+
+  const candidatos = (user.projectIds ?? [])
+    .map(p => effectiveRole(user, p) as string)
+    .filter(r => r && r !== 'platform_admin');
+  if (base !== 'platform_admin') candidatos.push(base);
+
+  // Sin proyectos no hay rol operativo que mostrar: se usa el base, aunque sea
+  // el administrativo, para no inventarle un rol que no tiene.
+  if (!candidatos.length) return base;
+  return candidatos.reduce((a, b) => (peso(b) > peso(a) ? b : a));
+}
+
+/** ¿Tiene permisos de administración de la herramienta? (para marcarlo aparte) */
+export function esAdminPlataforma(user: { id: string; role: string } | null | undefined): boolean {
+  if (!user) return false;
+  const r = (LEGACY_ROLE[user.role] ?? user.role) as string;
+  return (currentMatrix()[r] ?? []).includes('team.manage');
+}
+
 /** Permiso de un usuario dentro de un proyecto (usa el rol efectivo en ese proyecto). */
 export function canInProject(user: { id: string; role: string; projectIds?: string[] } | null | undefined, permission: string, projectId: string): boolean {
   if (!user) return false;
