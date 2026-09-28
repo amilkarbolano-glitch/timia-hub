@@ -1,5 +1,6 @@
 import { persist } from '../lib/persist';
 import { DENSIDADES, densidadActual, aplicarDensidad, type Densidad } from '../lib/densidad';
+import { allRoleMeta } from '../lib/permissions';
 import React, { useState, useRef, useEffect } from 'react';
 import { useAuth, canAccess, UserRole } from '../contexts/AuthContext';
 import UserProfile from './UserProfile';
@@ -239,10 +240,10 @@ export default function Layout({ children, currentView, onViewChange, userRole }
                     {user?.name?.split(' ')[0] ?? 'Usuario'}
                   </p>
                   <p className="text-xs leading-tight" style={{ color: user?.avatarColor ?? '#dc2626', fontSize: '10px' }}>
-                    {user?.role === 'pm' ? 'Project Manager'
-                      : user?.role === 'tech_lead' ? 'Líder Técnico'
-                      : user?.role === 'account_manager' ? 'Gerente de cuenta'
-                      : 'Desarrollador'}
+                    {/* Del catálogo vivo: cubre platform_admin y los roles creados
+                        desde la app. La cadena anterior solo contemplaba tres roles y
+                        el resto caía en "Desarrollador", que era falso. */}
+                    {allRoleMeta()[user?.role ?? '']?.name ?? 'Sin rol'}
                   </p>
                 </div>
               </button>
