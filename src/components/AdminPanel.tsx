@@ -33,9 +33,18 @@ function Badge({ children, color }: { children: React.ReactNode; color: string }
 }
 
 function SaveBanner({ onSave, dirty }: { onSave: () => void; dirty: boolean }) {
+  // Avisa si se recarga o cierra con cambios pendientes. No cubre el cambio de
+  // pestaña dentro de la app, por eso lo que se borra o se da de alta ya se
+  // guarda solo; el banner queda para las ediciones en lote.
+  React.useEffect(() => {
+    if (!dirty) return;
+    const h = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', h);
+    return () => window.removeEventListener('beforeunload', h);
+  }, [dirty]);
   if (!dirty) return null;
   return (
-    <div style={{ position: 'sticky', bottom: 0, background: '#1e293b', color: '#fff', padding: '10px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderRadius: '0 0 12px 12px', marginTop: 16 }}>
+    <div style={{ position: 'sticky', bottom: 12, zIndex: 40, background: '#1e293b', color: '#fff', padding: '10px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderRadius: 12, marginTop: 16, boxShadow: '0 8px 24px rgba(0,0,0,.18)' }}>
       <span style={{ fontSize: 12 }}>Tienes cambios sin guardar</span>
       <button onClick={onSave} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 18px', background: '#dc2626', color: '#fff', border: 'none', borderRadius: 7, cursor: 'pointer', fontSize: 12, fontWeight: 500 }}>
         <Save size={13}/> Guardar cambios
@@ -483,6 +492,7 @@ function TabProyectos({ onViewChange, allowedProjectIds }: { onViewChange?: (vie
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function TabEquipo() {
+  const { user: yo } = useAuth();
   const [users, setUsers] = useState<AdminUser[]>(() => adminStore.getUsers());
   const [editing, setEditing] = useState<AdminUser | null>(null);
   const [dirty, setDirty] = useState(false);
@@ -493,19 +503,35 @@ function TabEquipo() {
     ...Object.fromEntries(Object.entries(allRoleMeta()).map(([k, m]) => [k, m.color])),
   } as Record<UserRole, string>;
 
+  /** Alta y edición se guardan al confirmar. Antes solo cambiaban la pantalla y
+   *  dejaban un banner al pie: si se salía de la pestaña, el cambio se perdía. */
   function upsert(u: AdminUser) {
     const exists = users.find(x => x.id === u.id);
-    setUsers(exists ? users.map(x => x.id === u.id ? u : x) : [...users, u]);
-    setDirty(true);
+    const next = exists ? users.map(x => x.id === u.id ? u : x) : [...users, u];
+    setUsers(next);
+    adminStore.saveUsers(next);
+    setDirty(false);
     setEditing(null);
     setShowNew(false);
   }
 
   function del(id: string) {
-    if (confirm('¿Eliminar usuario del sistema?')) {
-      setUsers(users.filter(u => u.id !== id));
-      setDirty(true);
-    }
+    const u = users.find(x => x.id === id);
+    if (!u) return;
+    // Borrarse a uno mismo deja la instalación sin quien administre.
+    if (u.id === yo?.id) { alert('No podés eliminar tu propia cuenta.'); return; }
+    const conProyectos = u.projectIds.length;
+    const aviso = [
+      `¿Eliminar a ${u.name || u.email} del sistema?`,
+      conProyectos ? `Está asignado a ${conProyectos} proyecto(s).` : '',
+      'Podrá volver a pedir acceso con Google y quedará como solicitud pendiente.',
+      'Si solo querés que deje de entrar y conservar su historial, desactivalo en vez de borrarlo.',
+    ].filter(Boolean).join('\n\n');
+    if (!confirm(aviso)) return;
+    const next = users.filter(x => x.id !== id);
+    setUsers(next);
+    adminStore.saveUsers(next);   // se persiste de una: localStorage + API
+    setDirty(false);
   }
 
   function save() { adminStore.saveUsers(users); setDirty(false); }
