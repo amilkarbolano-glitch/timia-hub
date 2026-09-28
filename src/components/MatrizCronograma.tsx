@@ -40,7 +40,27 @@ export default function MatrizCronograma({
   entregables, totalWeeks, weekLabels, onChange,
   readOnly, titulo, maxAlto, zoomInicial,
 }: Props) {
+  // La densidad se elige sola según el ancho disponible: en una pantalla grande
+  // la matriz usaba 1156px de 1685 y dejaba celdas de 34px sin necesidad.
+  // Si el usuario toca el selector, su elección manda hasta que recargue.
+  const caja = useRef<HTMLDivElement>(null);
   const [zoom, setZoom] = useState<Zoom>(zoomInicial ?? 'normal');
+  const [manual, setManual] = useState(!!zoomInicial);
+
+  useEffect(() => {
+    if (manual) return;
+    const calc = () => {
+      const disp = caja.current?.clientWidth ?? 0;
+      if (!disp || !totalWeeks) return;
+      // el mayor que entre completo; si ninguno entra, el más compacto
+      const cabe = (z: Zoom) => ZOOM[z].label + ZOOM[z].cell * totalWeeks + 24 <= disp;
+      setZoom(cabe('amplio') ? 'amplio' : cabe('normal') ? 'normal' : 'compacto');
+    };
+    calc();
+    const ro = new ResizeObserver(calc);
+    if (caja.current) ro.observe(caja.current);
+    return () => ro.disconnect();
+  }, [manual, totalWeeks]);
   const Z = ZOOM[zoom];
   const CELL_W = Z.cell, LABEL_W = Z.label;
   const weeks = Array.from({ length: totalWeeks }, (_, i) => i + 1);
@@ -104,7 +124,7 @@ export default function MatrizCronograma({
   };
 
   return (
-    <div style={{ border: '1px solid #e2e8f0', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
+    <div ref={caja} style={{ border: '1px solid #e2e8f0', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderBottom: '1px solid #f1f5f9', flexWrap: 'wrap' }}>
         <Paintbrush size={13} color="#0d9488"/>
         <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: '#334155' }}>{titulo ?? 'Matriz del cronograma'}</p>
@@ -119,7 +139,7 @@ export default function MatrizCronograma({
           </span>
           <div style={{ display: 'flex', border: '1px solid #e2e8f0', borderRadius: 6, overflow: 'hidden' }}>
             {(Object.keys(ZOOM) as Zoom[]).map(z => (
-              <button key={z} onClick={() => setZoom(z)} title={`Tamaño ${z}`}
+              <button key={z} onClick={() => { setManual(true); setZoom(z); }} title={`Tamaño ${z}`}
                 style={{
                   padding: '3px 9px', fontSize: 9.5, cursor: 'pointer', border: 'none', textTransform: 'capitalize',
                   fontWeight: zoom === z ? 700 : 500,

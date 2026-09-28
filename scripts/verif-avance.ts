@@ -244,3 +244,40 @@ console.log('\n── Rango de semanas ──');
   console.log(rf === 0 ? 'rango de semanas OK' : `rango: ${rf} fallas`);
   if (rf) process.exit(1);
 }
+
+// ── Densidad de la matriz: elegir el tamaño según el ancho disponible ───────
+console.log('\n── Densidad de la matriz ──');
+{
+  const ZOOM = {
+    compacto: { cell: 24, label: 260 },
+    normal:   { cell: 34, label: 340 },
+    amplio:   { cell: 46, label: 420 },
+  } as const;
+  type Z = keyof typeof ZOOM;
+  const elegir = (disp: number, semanas: number): Z => {
+    const cabe = (z: Z) => ZOOM[z].label + ZOOM[z].cell * semanas + 24 <= disp;
+    return cabe('amplio') ? 'amplio' : cabe('normal') ? 'normal' : 'compacto';
+  };
+  let df = 0;
+  const c = (got: string, esp: string, s: string) => { if (got !== esp) df++; console.log(`${got === esp ? '✓' : '✗'} ${s} → ${got}`); };
+
+  // El caso reportado: 1685px de contenedor, 24 semanas. Antes quedaba en normal
+  // y sobraban 528px.
+  c(elegir(1685, 24), 'amplio',   '1685px con 24 semanas (monitor 1920)');
+  c(elegir(1180, 24), 'normal',   '1180px con 24 semanas (portátil 1366)');
+  c(elegir(900, 24),  'compacto', '900px con 24 semanas (pantalla chica)');
+  // 40 semanas en normal pedirían 1724px y solo hay 1685: baja a compacto para
+  // que el plan entre entero en vez de obligar a scrollear.
+  c(elegir(1685, 40), 'compacto', '1685px con 40 semanas (plan largo)');
+  c(elegir(1685, 8),  'amplio',   '1685px con 8 semanas (plan corto)');
+
+  // Nunca debe elegir un tamaño que desborde
+  const sinDesborde = [[1685,24],[1180,24],[900,24],[1685,40],[2400,52]].every(([d, s]) => {
+    const z = elegir(d, s);
+    return z === 'compacto' || ZOOM[z].label + ZOOM[z].cell * s + 24 <= d;
+  });
+  if (!sinDesborde) df++;
+  console.log(`${sinDesborde ? '✓' : '✗'} el tamaño elegido nunca desborda el contenedor`);
+  console.log(df === 0 ? 'densidad OK' : `densidad: ${df} fallas`);
+  if (df) process.exit(1);
+}
