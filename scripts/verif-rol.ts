@@ -69,3 +69,21 @@ console.log('\n── Roles personalizados ──');
   console.log(cf === 0 ? 'roles personalizados OK' : `${cf} fallas`);
   if (cf) process.exit(1);
 }
+
+// ── Etiqueta de rol en el header ───────────────────────────────────────────
+// Una cadena de ifs con tres roles hacía que platform_admin y los roles
+// personalizados se mostraran como "Desarrollador".
+console.log('\n── Etiqueta del badge de rol ──');
+{
+  const etiqueta = (rol: string) => allRoleMeta()[rol]?.name ?? 'Sin rol';
+  let ef = 0;
+  const c = (got: string, esp: string, s: string) => { if (got !== esp) ef++; console.log(`${got === esp ? '✓' : '✗'} ${s} → "${got}"`); };
+  c(etiqueta('platform_admin'), 'Administrador de la plataforma', 'platform_admin');
+  c(etiqueta('tech_lead'), 'Líder / Referente técnico', 'tech_lead');
+  c(etiqueta('account_manager'), 'Gerente de cuenta', 'account_manager');
+  c(etiqueta('developer'), 'Desarrollador', 'developer');
+  c(etiqueta('auditor'), 'Auditor', 'un rol personalizado');
+  c(etiqueta('no_existe'), 'Sin rol', 'un rol inexistente no dice "Desarrollador"');
+  console.log(ef === 0 ? 'etiquetas OK' : `etiquetas: ${ef} fallas`);
+  if (ef) process.exit(1);
+}
