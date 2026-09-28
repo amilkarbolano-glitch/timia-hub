@@ -4,7 +4,6 @@ import ProtectedRoute from './components/ProtectedRoute';
 import Layout, { View } from './components/Layout';
 import KanbanBoard from './components/KanbanBoard';
 import ProjectStandards from './components/ProjectStandards';
-import Analytics from './components/Analytics';
 import AuditLog from './components/AuditLog';
 import SetupProject from './components/SetupProject';
 // SetupTeam removed — team management via Admin panel
@@ -216,8 +215,10 @@ function AppInner() {
         return canAccess(role, 'projects.view_all') || role === 'pm' ? <ProyectosPage /> : <AccessDenied onBack={goHome}/>;
 
       case 'analytics':
-        // PM tiene su propio dashboard ejecutivo
-        return role === 'pm' || role === 'account_manager' ? <PMDashboard onViewChange={navigate} /> : <Analytics />;
+        // Un solo dashboard, con datos reales. El acceso lo controla el permiso
+        // analytics.view en el menú; el contenido se filtra por los proyectos
+        // del usuario dentro del propio componente.
+        return <PMDashboard onViewChange={navigate} />;
 
       case 'plan-trabajo':
         return canAccess(role, 'view_plan_trabajo')
