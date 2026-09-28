@@ -1,6 +1,6 @@
 import { persist } from '../lib/persist';
 import { DENSIDADES, densidadActual, aplicarDensidad, type Densidad } from '../lib/densidad';
-import { allRoleMeta } from '../lib/permissions';
+import { allRoleMeta, rolPrincipal, esAdminPlataforma } from '../lib/permissions';
 import React, { useState, useRef, useEffect } from 'react';
 import { useAuth, canAccess, UserRole } from '../contexts/AuthContext';
 import UserProfile from './UserProfile';
@@ -240,10 +240,14 @@ export default function Layout({ children, currentView, onViewChange, userRole }
                     {user?.name?.split(' ')[0] ?? 'Usuario'}
                   </p>
                   <p className="text-xs leading-tight" style={{ color: user?.avatarColor ?? '#dc2626', fontSize: '10px' }}>
-                    {/* Del catálogo vivo: cubre platform_admin y los roles creados
-                        desde la app. La cadena anterior solo contemplaba tres roles y
-                        el resto caía en "Desarrollador", que era falso. */}
-                    {allRoleMeta()[user?.role ?? '']?.name ?? 'Sin rol'}
+                    {/* El rol con el que la persona trabaja: el más alto que tiene entre
+                        sus proyectos. El permiso administrativo no va acá — se marca con
+                        el escudo de al lado. */}
+                    {allRoleMeta()[rolPrincipal(user)]?.name ?? 'Sin rol'}
+                    {esAdminPlataforma(user) && (
+                      <Shield size={9} style={{ display: 'inline', marginLeft: 3, verticalAlign: 'baseline' }}
+                        aria-label="Administra la plataforma"/>
+                    )}
                   </p>
                 </div>
               </button>
