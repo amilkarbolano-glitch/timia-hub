@@ -62,8 +62,8 @@ console.log('\n── Roles personalizados ──');
   c(m.pm?.length > 5, 'el rol de fábrica conserva los suyos');
 
   c(!!allRoleMeta().auditor, 'aparece en el catálogo de roles asignables');
-  c(normalizeRole('auditor') === 'auditor', 'un usuario puede tenerlo asignado');
-  c(normalizeRole('borrado') === 'developer', 'si el rol no existe, el usuario cae a developer');
+  c(String(normalizeRole('auditor')) === 'auditor', 'un usuario puede tenerlo asignado');
+  c(String(normalizeRole('borrado')) === 'developer', 'si el rol no existe, el usuario cae a developer');
   c(!idRolValido('pm') && idRolValido('qa'), 'validación de id nuevo');
 
   console.log(cf === 0 ? 'roles personalizados OK' : `${cf} fallas`);
