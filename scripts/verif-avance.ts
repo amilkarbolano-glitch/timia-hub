@@ -281,3 +281,30 @@ console.log('\n── Densidad de la matriz ──');
   console.log(df === 0 ? 'densidad OK' : `densidad: ${df} fallas`);
   if (df) process.exit(1);
 }
+
+// ── Columna de nombres: usa el sobrante en vez de recortar ─────────────────
+console.log('\n── Ancho de la columna de nombres ──');
+{
+  const Z = { compacto: { cell: 24, label: 260 }, normal: { cell: 34, label: 340 }, amplio: { cell: 46, label: 420 } } as const;
+  const anchoLabel = (dispon: number, cell: number, base: number, semanas: number) =>
+    Math.min(760, Math.max(base, dispon - cell * semanas - 24));
+  let lf = 0;
+  const c = (got: number, esp: number, s: string) => { if (got !== esp) lf++; console.log(`${got === esp ? '✓' : '✗'} ${s} → ${got}px`); };
+
+  // El caso de la captura: 1685px, 12 semanas en amplio. Antes la columna se
+  // quedaba en 420 y sobraban ~700px en blanco.
+  // Habría 1109px libres, pero se corta en 760: con eso ya no se recorta ningún
+  // nombre y una columna más ancha se leería peor que el espacio en blanco.
+  c(anchoLabel(1685, Z.amplio.cell, Z.amplio.label, 12), 760, '1685px con 12 semanas (amplio)');
+  // Con muchas semanas no hay sobrante: se respeta el mínimo de la densidad
+  c(anchoLabel(1180, Z.normal.cell, Z.normal.label, 24), 340, '1180px con 24 semanas (sin sobrante)');
+  // Y nunca se pasa del tope, para que no quede una sábana ilegible
+  c(anchoLabel(2560, Z.amplio.cell, Z.amplio.label, 8), 760, '2560px con 8 semanas (tope)');
+
+  const nuncaMenor = [[1685,12,'amplio'],[1180,24,'normal'],[900,24,'compacto']].every(([d, s, z]) =>
+    anchoLabel(d as number, Z[z as keyof typeof Z].cell, Z[z as keyof typeof Z].label, s as number) >= Z[z as keyof typeof Z].label);
+  if (!nuncaMenor) lf++;
+  console.log(`${nuncaMenor ? '✓' : '✗'} nunca queda más angosta que el mínimo de su densidad`);
+  console.log(lf === 0 ? 'columna de nombres OK' : `columna: ${lf} fallas`);
+  if (lf) process.exit(1);
+}
