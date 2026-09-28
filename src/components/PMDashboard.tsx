@@ -135,7 +135,9 @@ export default function PMDashboard({ onViewChange }: PMDashboardProps) {
   const people = users.filter(u => u.role !== 'account_manager' && u.projectIds.some(p => rows.some(r => r.p.id === p)));
   const bloq = rows.reduce((s, r) => s + r.openBloq, 0), alerts = rows.reduce((s, r) => s + r.openAlert, 0);
   const byPm = new Map<string, ProjectRow[]>(); rows.forEach(r => { const k = r.pm?.name ?? r.p.area; byPm.set(k, [...(byPm.get(k) ?? []), r]); });
-  const isAccount = user?.role === 'account_manager';
+  // Quien ve todos los proyectos tiene vista de cuenta; el resto ve los suyos.
+  // Por permiso y no por rol: con roles nuevos la comparación por nombre se rompe.
+  const isAccount = canAccess(user?.role ?? 'developer', 'projects.view_all');
 
   return (
     <div id="pm-dashboard-root" style={{ padding: '28px 36px', maxWidth: 1600, margin: '0 auto' }}>
