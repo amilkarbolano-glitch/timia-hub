@@ -1,4 +1,5 @@
 import { persist } from '../lib/persist';
+import { DENSIDADES, densidadActual, aplicarDensidad, type Densidad } from '../lib/densidad';
 import React, { useState, useRef, useEffect } from 'react';
 import { useAuth, canAccess, UserRole } from '../contexts/AuthContext';
 import UserProfile from './UserProfile';
@@ -258,6 +259,8 @@ export default function Layout({ children, currentView, onViewChange, userRole }
                     <Settings size={14} /> Ver perfil
                   </button>
                   <div style={{height:1,background:'#f1f5f9',margin:'2px 0'}}/>
+                  <SelectorDensidad/>
+                  <div style={{height:1,background:'#f1f5f9',margin:'2px 0'}}/>
                   <button
                     onClick={() => { setShowUserMenu(false); logout(); }}
                     className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors"
@@ -307,6 +310,31 @@ export function BuildBadge() {
   const b = typeof window !== 'undefined' ? window.TIMIA_BUILD : undefined;
   if (!b || b.branch === 'main') return null;
   return <span title={`Build de pruebas · ${b.sha} · ${b.at}`} style={{ fontSize:10, fontWeight:700, color:'#7c3aed', background:'#f5f3ff', border:'0.5px solid #ddd6fe', borderRadius:10, padding:'3px 8px', whiteSpace:'nowrap' }}>pruebas · {b.branch}</span>;
+}
+
+/** Tamaño de la interfaz. Se guarda por navegador, no por cuenta: depende del
+ *  monitor en el que estés, no de quién sos. */
+function SelectorDensidad() {
+  const [d, setD] = React.useState<Densidad>(() => densidadActual());
+  return (
+    <div className="px-4 py-2.5">
+      <p className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-1.5">Tamaño de la interfaz</p>
+      <div className="flex border border-slate-200 rounded-lg overflow-hidden">
+        {DENSIDADES.map(x => (
+          <button
+            key={x.id}
+            title={x.nota}
+            onClick={() => { setD(x.id); aplicarDensidad(x.id); }}
+            className={`flex-1 py-1.5 text-[11px] font-semibold transition-colors ${
+              d === x.id ? 'bg-primary text-white' : 'bg-white text-slate-500 hover:bg-slate-50'
+            }`}
+          >
+            {x.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 export function PersistBadge() {
