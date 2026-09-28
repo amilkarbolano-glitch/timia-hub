@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   ChevronDown, ChevronRight, Plus, Trash2, Save, ArrowRight, ArrowLeft,
-  LayoutList, Clock, CalendarDays, Settings2, CheckSquare, Users, BarChart3, Grid3x3, List, Sparkles,
+  LayoutList, Clock, CalendarDays, Settings2, CheckSquare, Users, BarChart3, Grid3x3, List, Sparkles, GripVertical, ChevronUp,
 } from 'lucide-react';
 import { PROJECTS, useAuth, canAccess } from '../contexts/AuthContext';
 import { adminStore, makePlanKey, CRONO_MAIN_NAME, puedeVerPlantilla, alcanceDe, type PlanEtapa, type PlanActivityConfig, type PlanEntregableConfig, type PlanConfig, type PlantillaPropia } from '../lib/adminStore';
@@ -391,6 +391,15 @@ function EtapaRow({
   );
 }
 
+/** Fija el tramo de una actividad: ordena los extremos y reescribe las casillas.
+ *  Usar los selects de rango convierte el tramo en continuo (pierde los huecos que se
+ *  hayan pintado a mano en la matriz), que es justo lo que se está pidiendo al usarlos. */
+function conRango(act: PlanActivityConfig, desde: number, hasta: number): PlanActivityConfig {
+  const ini = Math.max(1, Math.min(desde, hasta));
+  const fin = Math.max(desde, hasta);
+  return { ...act, startWeek: ini, endWeek: fin, weeks: Array.from({ length: fin - ini + 1 }, (_, i) => ini + i) };
+}
+
 // ─── ActivityCard ─────────────────────────────────────────────────────────────
 
 function ActivityCard({
@@ -467,15 +476,20 @@ function ActivityCard({
           placeholder="Nombre de la actividad"
           style={{ flex: 1, padding: '3px 6px', fontSize: 11, border: '1px solid #e2e8f0', borderRadius: 5, outline: 'none' }}
         />
-        {/* Week range */}
+        {/* Rango de semanas. Los dos selects reescriben el tramo completo: si se elige
+            un inicio posterior al fin (o al revés), el otro extremo se ajusta en el mismo
+            cambio. Antes solo se guardaba el extremo tocado y el rango quedaba invertido
+            (inicio 5, fin 1), que la matriz normalizaba pintando S1–S5. */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
           <CalendarDays size={11} color="#94a3b8"/>
-          <select value={act.startWeek} onChange={e => onChange({ ...act, startWeek: +e.target.value })}
+          <select value={act.startWeek} title="Semana de inicio"
+            onChange={e => onChange(conRango(act, +e.target.value, Math.max(act.endWeek, +e.target.value)))}
             style={{ fontSize: 10, border: '1px solid #e2e8f0', borderRadius: 4, padding: '2px 4px', background: '#fff', cursor: 'pointer' }}>
             {weeks.map(w => <option key={w} value={w}>S{w}</option>)}
           </select>
           <span style={{ fontSize: 10, color: '#94a3b8' }}>→</span>
-          <select value={act.endWeek} onChange={e => onChange({ ...act, endWeek: +e.target.value })}
+          <select value={Math.max(act.startWeek, act.endWeek)} title="Semana de fin"
+            onChange={e => onChange(conRango(act, Math.min(act.startWeek, +e.target.value), +e.target.value))}
             style={{ fontSize: 10, border: '1px solid #e2e8f0', borderRadius: 4, padding: '2px 4px', background: '#fff', cursor: 'pointer' }}>
             {weeks.filter(w => w >= act.startWeek).map(w => <option key={w} value={w}>S{w}</option>)}
           </select>
@@ -588,13 +602,19 @@ function ActivityCard({
 
 function EntregablePanel({
   ent, entIdx, totalWeeks, porSemana, weekLabels,
-  onChange, onDelete, onSaveTemplate,
+  onChange, onDelete, onSaveTemplate, total, onMove, arrastrando, encima, dragProps,
 }: {
   ent: PlanEntregableConfig; entIdx: number; totalWeeks: number;
   porSemana?: boolean; weekLabels?: string[];
   onChange: (e: PlanEntregableConfig) => void;
   onDelete: () => void;
   onSaveTemplate?: () => void;
+  /** Reordenar: arrastrar el asa, o las flechas para quien prefiera el teclado/clic. */
+  total?: number;
+  onMove?: (to: number) => void;
+  arrastrando?: boolean;
+  encima?: boolean;
+  dragProps?: Record<string, unknown>;
 }) {
   const [open, setOpen] = useState(entIdx === 0);
 
@@ -620,12 +640,25 @@ function EntregablePanel({
   const factor   = factorFase({ id: ent.id, label: ent.label, activities: ent.activities });
 
   return (
-    <div style={{ marginBottom: 14, borderRadius: 10, border: '1.5px solid #e2e8f0', overflow: 'hidden' }}>
+    <div style={{
+      marginBottom: 14, borderRadius: 10, overflow: 'hidden',
+      border: `1.5px solid ${encima ? '#0d9488' : '#e2e8f0'}`,
+      opacity: arrastrando ? 0.45 : 1,
+      boxShadow: encima ? '0 0 0 3px rgba(13,148,136,.12)' : 'none',
+      transition: 'opacity .12s, border-color .12s',
+    }} {...(dragProps ?? {})}>
       {/* Header */}
       <div
         style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', background: '#fff', cursor: 'pointer', borderBottom: open ? '1px solid #f1f5f9' : 'none' }}
         onClick={() => setOpen(v => !v)}
       >
+        {onMove && (
+          <span title="Arrastrá para mover esta fase de lugar"
+            style={{ cursor: 'grab', color: '#cbd5e1', display: 'flex', flexShrink: 0 }}
+            onClick={e => e.stopPropagation()}>
+            <GripVertical size={14}/>
+          </span>
+        )}
         {open ? <ChevronDown size={14} color="#9f1239"/> : <ChevronRight size={14} color="#9f1239"/>}
         <input
           value={ent.label}
@@ -650,6 +683,18 @@ function EntregablePanel({
             </span>
           )}
         </div>
+        {onMove && (
+          <span style={{ display: 'flex', flexDirection: 'column', flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+            <button onClick={() => onMove(entIdx - 1)} disabled={entIdx === 0} title="Subir"
+              style={{ border: 'none', background: 'none', cursor: entIdx === 0 ? 'default' : 'pointer', padding: 0, color: entIdx === 0 ? '#e2e8f0' : '#94a3b8', lineHeight: 0 }}>
+              <ChevronUp size={13}/>
+            </button>
+            <button onClick={() => onMove(entIdx + 1)} disabled={entIdx === (total ?? 1) - 1} title="Bajar"
+              style={{ border: 'none', background: 'none', cursor: entIdx === (total ?? 1) - 1 ? 'default' : 'pointer', padding: 0, color: entIdx === (total ?? 1) - 1 ? '#e2e8f0' : '#94a3b8', lineHeight: 0 }}>
+              <ChevronDown size={13}/>
+            </button>
+          </span>
+        )}
         {onSaveTemplate && (
           <button onClick={e => { e.stopPropagation(); onSaveTemplate(); }}
             title="Guardar este entregable como plantilla reutilizable"
@@ -806,6 +851,9 @@ export default function Estimaciones({ onViewChange, onBack }: EstimacionesProps
   // Vista de edición: matriz (todo el cronograma junto) o lista (detalle por actividad)
   const [vista, setVista] = useState<'matriz' | 'lista'>('matriz');
   const [showPlantillas, setShowPlantillas] = useState(false);
+  /** Índice del entregable que se está arrastrando, y sobre cuál está parado. */
+  const [dragEnt, setDragEnt] = useState<number | null>(null);
+  const [overEnt, setOverEnt] = useState<number | null>(null);
   /** 'proyecto' reemplaza todo el cronograma; 'entregable' agrega una fase al final. */
   const [tipoPlantilla, setTipoPlantilla] = useState<'proyecto' | 'entregable'>('proyecto');
   const [propias, setPropias] = useState<PlantillaPropia[]>(() => adminStore.getPlantillasPropias());
@@ -892,6 +940,16 @@ export default function Estimaciones({ onViewChange, onBack }: EstimacionesProps
 
   function updateEntregable(i: number, ent: typeof currentConfig.entregables[number]) {
     const next = [...currentConfig.entregables]; next[i] = ent;
+    updateConfig({ entregables: next });
+  }
+
+  /** Mueve un entregable de posición. El orden es el de la matriz, el Gantt y el PDF;
+   *  no afecta los cálculos, que se ponderan por casillas. */
+  function moveEntregable(from: number, to: number) {
+    if (to < 0 || to >= currentConfig.entregables.length || from === to) return;
+    const next = [...currentConfig.entregables];
+    const [item] = next.splice(from, 1);
+    next.splice(to, 0, item);
     updateConfig({ entregables: next });
   }
 
@@ -1554,6 +1612,22 @@ export default function Estimaciones({ onViewChange, onBack }: EstimacionesProps
                 onChange={e => updateEntregable(i, e)}
                 onDelete={() => deleteEntregable(i)}
                 onSaveTemplate={() => guardarComoPlantilla('entregable', i)}
+                total={currentConfig.entregables.length}
+                onMove={to => moveEntregable(i, to)}
+                arrastrando={dragEnt === i}
+                encima={overEnt === i && dragEnt !== null && dragEnt !== i}
+                dragProps={{
+                  draggable: true,
+                  onDragStart: (e: React.DragEvent) => { setDragEnt(i); e.dataTransfer.effectAllowed = 'move'; },
+                  onDragEnd: () => { setDragEnt(null); setOverEnt(null); },
+                  onDragOver: (e: React.DragEvent) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setOverEnt(i); },
+                  onDragLeave: () => setOverEnt(o => (o === i ? null : o)),
+                  onDrop: (e: React.DragEvent) => {
+                    e.preventDefault();
+                    if (dragEnt !== null && dragEnt !== i) moveEntregable(dragEnt, i);
+                    setDragEnt(null); setOverEnt(null);
+                  },
+                }}
               />
             ))}
 
