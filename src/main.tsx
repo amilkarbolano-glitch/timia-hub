@@ -2,7 +2,11 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
 import { seedFromRemote } from './lib/adminStore.ts';
+import { aplicarDensidad, densidadActual } from './lib/densidad.ts';
 import './index.css';
+
+// El tamaño elegido se aplica antes del primer render para que no haya salto visual.
+aplicarDensidad(densidadActual());
 
 const root = createRoot(document.getElementById('root')!);
 
