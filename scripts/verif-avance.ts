@@ -214,3 +214,33 @@ console.log('\n── Vista previa de plantillas ──');
   console.log(pf === 0 ? 'vista previa OK' : `vista previa: ${pf} fallas`);
   if (pf) process.exit(1);
 }
+
+// ── Rango de semanas: el bug de los selects encadenados ────────────────────
+// Elegir inicio S5 con fin S1 guardaba el rango invertido y la matriz lo
+// normalizaba pintando S1–S5. Ahora los selects fijan el tramo completo.
+console.log('\n── Rango de semanas ──');
+{
+  const conRango = (act: any, desde: number, hasta: number) => {
+    const ini = Math.max(1, Math.min(desde, hasta));
+    const fin = Math.max(desde, hasta);
+    return { ...act, startWeek: ini, endWeek: fin, weeks: Array.from({ length: fin - ini + 1 }, (_, i) => ini + i) };
+  };
+  let rf = 0;
+  const chk = (c: boolean, s: string) => { if (!c) rf++; console.log(`${c ? '✓' : '✗'} ${s}`); };
+
+  // El caso reportado: actividad nueva (S1→S2) y se elige inicio S5.
+  let a: any = { label: 'x', startWeek: 1, endWeek: 2 };
+  a = conRango(a, 5, Math.max(a.endWeek, 5));
+  chk(a.startWeek === 5 && a.endWeek === 5, 'elegir inicio S5 deja el tramo en S5–S5');
+  chk(_marcasDe(a).join(',') === '5', `la matriz pinta solo S5 (pinta: ${_marcasDe(a).join(',')})`);
+
+  // Extender el fin a S8
+  a = conRango(a, Math.min(a.startWeek, 8), 8);
+  chk(_marcasDe(a).join(',') === '5,6,7,8', 'extender el fin a S8 pinta S5–S8');
+
+  // Elegir un fin anterior al inicio ordena los extremos
+  a = conRango(a, Math.min(a.startWeek, 3), 3);
+  chk(a.startWeek === 3 && a.endWeek === 3, 'elegir fin S3 con inicio S5 deja S3–S3');
+  console.log(rf === 0 ? 'rango de semanas OK' : `rango: ${rf} fallas`);
+  if (rf) process.exit(1);
+}
