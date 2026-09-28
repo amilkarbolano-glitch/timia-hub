@@ -16,7 +16,25 @@ import { signInWithGoogleFirebase, signOutFirebase } from '../lib/firebaseAuth';
 export type UserRole = 'platform_admin' | 'account_manager' | 'pm' | 'tech_lead' | 'developer';
 /** Roles antiguos → nuevos (datos guardados en navegadores/DB viejos) */
 export const LEGACY_ROLE_MAP: Record<string, UserRole> = { project_lead: 'tech_lead', tech_ref: 'tech_lead' };
-export function normalizeRole(r: string | undefined | null): UserRole { const x = LEGACY_ROLE_MAP[r ?? ''] ?? r; return (['platform_admin','account_manager','pm','tech_lead','developer'] as string[]).includes(x as string) ? x as UserRole : 'developer'; }
+export const BUILTIN_ROLES = ['platform_admin','account_manager','pm','tech_lead','developer'] as const;
+
+/** Ids de los roles creados desde la app. Se lee directo del storage para no
+ *  importar lib/permissions desde aquí (permissions ya importa UserRole de este archivo). */
+function customRoleIds(): string[] {
+  try {
+    const raw = localStorage.getItem('timia_custom_roles');
+    const list = raw ? JSON.parse(raw) : [];
+    return Array.isArray(list) ? list.filter((r: any) => r?.id).map((r: any) => String(r.id)) : [];
+  } catch { return []; }
+}
+
+/** Rol válido. Acepta los de fábrica y los personalizados que existan.
+ *  Un rol desconocido (p. ej. uno que se borró) cae a developer, el de menos permisos. */
+export function normalizeRole(r: string | undefined | null): UserRole {
+  const x = String(LEGACY_ROLE_MAP[r ?? ''] ?? r ?? '');
+  if ((BUILTIN_ROLES as readonly string[]).includes(x)) return x as UserRole;
+  return customRoleIds().includes(x) ? (x as UserRole) : 'developer';
+}
 
 export interface AuthUser {
   id: string;

@@ -9,15 +9,15 @@ import {
 } from '../lib/adminStore';
 import { PROJECTS, useAuth, canAccess } from '../contexts/AuthContext';
 import { persistSet } from '../lib/persist';
+import { allRoleMeta } from '../lib/permissions';
 
 // ─── Paleta colores ────────────────────────────────────────────────────────────
 const COLORS = ['#dc2626','#7c3aed','#2563eb','#0891b2','#059669','#d97706','#be185d','#0369a1','#0f766e','#4f46e5','#b45309','#7e22ce'];
-const ROLES: { value: UserRole; label: string }[] = [
-  { value: 'account_manager', label: 'Gerente de cuenta' },
-  { value: 'pm',              label: 'Project Manager' },
-  { value: 'tech_lead',       label: 'Líder / Referente técnico' },
-  { value: 'developer',       label: 'Desarrollador' },
-];
+/** Roles asignables: los de fábrica más los creados en Herramientas › Roles y permisos.
+ *  Se resuelve en cada render para que un rol nuevo aparezca sin recargar la app. */
+function rolesAsignables(): { value: UserRole; label: string }[] {
+  return Object.entries(allRoleMeta()).map(([value, m]) => ({ value: value as UserRole, label: m.name }));
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function initials(name: string) {
@@ -94,11 +94,11 @@ function UserRow({ u, proj, projRoles, onSetProjRole, onToggle, ROLE_COLOR }: Us
           title="Rol en este proyecto"
           style={{ fontSize:10, padding:'3px 6px', borderRadius:6, border:`1px solid ${rc}40`,
             background:rc+'15', color:rc, fontWeight:600, outline:'none', cursor:'pointer', flexShrink:0 }}>
-          {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+          {rolesAsignables().map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
         </select>
       ) : (
         <span style={{ fontSize:10, padding:'2px 7px', borderRadius:6, background:ROLE_COLOR[u.role]+'15', color:ROLE_COLOR[u.role], fontWeight:500, flexShrink:0 }}>
-          {ROLES.find(r=>r.value===u.role)?.label}
+          {rolesAsignables().find(r=>r.value===u.role)?.label}
         </span>
       )}
       {/* Checkbox asignación */}
@@ -261,10 +261,12 @@ function TabProyectos({ onViewChange, allowedProjectIds }: { onViewChange?: (vie
   const PRIO_COLOR: Record<Priority, string> = { Baja: '#64748b', Media: '#2563eb', Alta: '#d97706', Crítica: '#dc2626' };
   const ROLE_COLOR: Record<UserRole, string> = {
     platform_admin: '#0f172a', account_manager: '#dc2626', pm: '#7c3aed', tech_lead: '#0d9488', developer: '#d97706',
-  };
+    ...Object.fromEntries(Object.entries(allRoleMeta()).map(([k, m]) => [k, m.color])),
+  } as Record<UserRole, string>;
   const ROLE_LABEL: Record<UserRole, string> = {
     platform_admin: 'ADM', account_manager: 'GC', pm: 'PM', tech_lead: 'TL', developer: 'DEV',
-  };
+    ...Object.fromEntries(Object.keys(allRoleMeta()).map(k => [k, (allRoleMeta()[k].name.match(/\b\w/g) ?? []).join('').slice(0, 3).toUpperCase()])),
+  } as Record<UserRole, string>;
 
   function updateProject(proj: AdminProject) {
     setProjects(ps => ps.map(p => p.id === proj.id ? proj : p));
@@ -368,7 +370,7 @@ function TabProyectos({ onViewChange, allowedProjectIds }: { onViewChange?: (vie
                           <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', background: '#fff', border: `0.5px solid ${u.avatarColor}40`, borderRadius: 20, boxShadow: '0 1px 3px rgba(0,0,0,.04)' }}>
                             <div style={{ width: 22, height: 22, borderRadius: '50%', background: u.avatarColor + '25', color: u.avatarColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 700 }}>{u.initials}</div>
                             <span style={{ fontSize: 11, fontWeight: 500, color: '#111' }}>{u.name}</span>
-                            <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 4, background: ROLE_COLOR[pRole] + '20', color: ROLE_COLOR[pRole], fontWeight: 600 }}>{ROLES.find(r => r.value === pRole)?.label}</span>
+                            <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 4, background: ROLE_COLOR[pRole] + '20', color: ROLE_COLOR[pRole], fontWeight: 600 }}>{rolesAsignables().find(r => r.value === pRole)?.label}</span>
                             <button onClick={() => toggleUserOnProject(u.id, p.id)}
                               style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#cbd5e1', padding: 1, lineHeight: 1 }} title="Quitar del proyecto">
                               <X size={11}/>
@@ -488,7 +490,8 @@ function TabEquipo() {
 
   const ROLE_COLOR: Record<UserRole, string> = {
     platform_admin: '#0f172a', account_manager: '#dc2626', pm: '#7c3aed', tech_lead: '#0d9488', developer: '#d97706',
-  };
+    ...Object.fromEntries(Object.entries(allRoleMeta()).map(([k, m]) => [k, m.color])),
+  } as Record<UserRole, string>;
 
   function upsert(u: AdminUser) {
     const exists = users.find(x => x.id === u.id);
@@ -539,7 +542,7 @@ function TabEquipo() {
               <label style={{ fontSize: 11, color: '#64748b', display: 'block', marginBottom: 4 }}>Rol</label>
               <select value={u.role} onChange={e => setU(v => ({ ...v, role: e.target.value as UserRole }))}
                 style={{ width: '100%', padding: '8px 10px', fontSize: 12, border: '0.5px solid #e2e8f0', borderRadius: 7, background: '#fff' }}>
-                {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                {rolesAsignables().map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
               </select>
             </div>
             <div>
@@ -593,7 +596,7 @@ function TabEquipo() {
               <div style={{ width: 32, height: 32, borderRadius: '50%', background: u.avatarColor + '20', color: u.avatarColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 600 }}>{u.initials}</div>
               <span style={{ fontSize: 12, fontWeight: 500, color: '#111' }}>{u.name}</span>
               <span style={{ fontSize: 11, color: '#64748b' }}>{u.email}</span>
-              <Badge color={rc}>{ROLES.find(r => r.value === u.role)?.label ?? u.role}</Badge>
+              <Badge color={rc}>{rolesAsignables().find(r => r.value === u.role)?.label ?? u.role}</Badge>
               <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                 {u.projectIds.slice(0, 4).map(pid => {
                   const proj = PROJECTS.find(p => p.id === pid);
@@ -888,7 +891,7 @@ function TabSolicitudes() {
                 <div style={{ fontSize: 11, color: '#64748b' }}>{r.email} · vía {r.provider} · solicitó {fmt(r.requestedAt)}{(r.attempts ?? 1) > 1 ? ` · ${r.attempts} intentos (último ${fmt(r.lastAttemptAt)})` : ''}</div>
               </div>
               <select value={cfg.role} onChange={e => setD(r, { role: e.target.value as UserRole })} style={{ padding: '6px 8px', fontSize: 11, border: '0.5px solid #e2e8f0', borderRadius: 7, background: '#fff' }}>
-                {ROLES.map(x => <option key={x.value} value={x.value}>{x.label}</option>)}
+                {rolesAsignables().map(x => <option key={x.value} value={x.value}>{x.label}</option>)}
               </select>
               <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                 {projects.map(p => { const on = cfg.projectIds.includes(p.id); return (
@@ -924,7 +927,7 @@ function TabSolicitudes() {
 // restaurar el piloto. La escritura pasa por los permisos del servidor.
 
 const BACKUP_KEYS = [
-  'timia_admin_projects', 'timia_admin_users', 'timia_project_roles', 'timia_role_permissions',
+  'timia_admin_projects', 'timia_admin_users', 'timia_project_roles', 'timia_role_permissions', 'timia_custom_roles',
   'timia_ans_config', 'timia_bbva_ans_config', 'timia_holidays',
   'timia_plan_configs', 'timia_plan_startdates', 'timia_plan_pcts', 'timia_etapa_states',
   'timia_activity_done_dates', 'timia_activity_assignees', 'timia_activity_jiras', 'timia_plan_historial',

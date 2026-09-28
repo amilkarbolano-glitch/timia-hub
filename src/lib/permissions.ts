@@ -121,10 +121,49 @@ export const INITIAL_ROLES: Role[] = (Object.keys(ROLE_META) as UserRole[]).map(
 }));
 
 const KEY = 'timia_role_permissions';
+const CUSTOM_KEY = 'timia_custom_roles';
+
+/** Rol creado desde la app: combina permisos que ya existen, no inventa ninguno. */
+export interface CustomRole { id: string; name: string; description?: string; color?: string; permissions: string[] }
+
+/** Id válido para un rol nuevo: no pisa uno de fábrica y es alfanumérico. */
+export function idRolValido(id: string, base: Record<string, unknown> = ROLE_META): boolean {
+  const x = id.trim();
+  return !!x && !(x in base) && /^[a-z0-9_-]+$/i.test(x);
+}
+
+/** Roles personalizados guardados, descartando los inválidos. */
+export function customRoles(): CustomRole[] {
+  try {
+    const raw = localStorage.getItem(CUSTOM_KEY);
+    const list = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(list)) return [];
+    return list.filter((r: any) => r && typeof r === 'object' && idRolValido(String(r.id ?? '')))
+      .map((r: any) => ({
+        id: String(r.id), name: String(r.name || r.id), description: r.description ? String(r.description) : undefined,
+        color: r.color ? String(r.color) : '#475569',
+        permissions: Array.isArray(r.permissions) ? r.permissions.filter((p: string) => ALL_PERMISSIONS.includes(p)) : [],
+      }));
+  } catch { return []; }
+}
+
+export function saveCustomRoles(list: CustomRole[]): void {
+  persistSet(CUSTOM_KEY, list);
+}
+
+/** Metadatos de todos los roles: los de fábrica más los personalizados. */
+export function allRoleMeta(): Record<string, { name: string; description: string; color: string }> {
+  const out: Record<string, { name: string; description: string; color: string }> = { ...ROLE_META };
+  for (const r of customRoles()) {
+    out[r.id] = { name: r.name, description: r.description ?? 'Rol personalizado', color: r.color ?? '#475569' };
+  }
+  return out;
+}
 
 /** Matriz vigente: defaults + ajustes guardados por el PM (el PM siempre tiene todo). */
-export function currentMatrix(): Record<UserRole, string[]> {
-  const out = { ...DEFAULT_ROLE_PERMISSIONS };
+export function currentMatrix(): Record<string, string[]> {
+  const out: Record<string, string[]> = { ...DEFAULT_ROLE_PERMISSIONS };
+  for (const r of customRoles()) out[r.id] = r.permissions;
   try {
     const raw = localStorage.getItem(KEY);
     const stored = raw ? JSON.parse(raw) : null;
@@ -178,6 +217,6 @@ export function hasPermission(role: string | undefined, permission: string): boo
 }
 
 /** Guarda la matriz (solo PM; el servidor también lo verifica). */
-export function saveMatrix(matrix: Record<UserRole, string[]>): void {
+export function saveMatrix(matrix: Record<string, string[]>): void {
   persistSet(KEY, matrix);   // localStorage + API (el servidor la aplica en la siguiente petición)
 }
