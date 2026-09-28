@@ -55,8 +55,11 @@ export default function Layout({ children, currentView, onViewChange, userRole }
   return (
     <div className="flex flex-col min-h-screen bg-slate-50">
       {/* Header */}
-      <header data-print-hide className="sticky top-0 z-50 flex items-center justify-between h-16 px-6 bg-white border-b border-slate-200">
-        <div className="flex items-center gap-8">
+      {/* El header es la única fuente de scroll horizontal de la app: nav + lado derecho
+          sumaban ~1594px y no se encogían. Ahora todo escala por breakpoint y los
+          bloques pueden encogerse (min-w-0), así entra desde 1280px sin scroll. */}
+      <header data-print-hide className="sticky top-0 z-50 flex items-center justify-between h-16 px-3 xl:px-6 bg-white border-b border-slate-200">
+        <div className="flex items-center gap-3 xl:gap-8 min-w-0">
             <div 
               className="flex items-center gap-3 cursor-pointer" 
               onClick={() => onViewChange('setup-project')}
@@ -65,7 +68,13 @@ export default function Layout({ children, currentView, onViewChange, userRole }
               <TimiaWordmark variant="dark" height={22} />
             </div>
             
-            <nav className="hidden md:flex items-center gap-5">
+            <nav
+              className="hidden md:flex items-center gap-3 lg:gap-4 xl:gap-5 min-w-0 overflow-x-auto xl:overflow-visible"
+              // Debajo de 1280 los 9 ítems no entran. Antes empujaban y hacían que
+              // TODA la página tuviera scroll horizontal; ahora el desborde queda
+              // dentro del propio nav, que se desplaza sin barra visible.
+              style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' } as React.CSSProperties}
+            >
 
               {/* 1. Vista principal por rol */}
               {userRole !== 'pm' && (
@@ -192,8 +201,8 @@ export default function Layout({ children, currentView, onViewChange, userRole }
             </nav>
         </div>
 
-        <div className="flex items-center flex-1 justify-end gap-4">
-          <div className="relative hidden lg:block w-64">
+        <div className="flex items-center flex-1 justify-end gap-2 xl:gap-4 min-w-0">
+          <div className="relative hidden xl:block w-44 2xl:w-64 flex-shrink">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
             <input 
               type="text" 
@@ -202,18 +211,18 @@ export default function Layout({ children, currentView, onViewChange, userRole }
             />
           </div>
           
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 xl:gap-2 flex-shrink-0">
             <BuildBadge/>
             <PendingRequestsBadge onClick={() => onViewChange('admin')}/>
             <PersistBadge/>
             <button
               onClick={() => { setShowUserMenu(false); setShowProfile(true); }}
-              className="flex items-center justify-center w-10 h-10 rounded-lg bg-slate-100 text-slate-600 hover:bg-primary/10 hover:text-primary transition-all"
+              className="flex items-center justify-center w-9 h-9 xl:w-10 xl:h-10 rounded-lg bg-slate-100 text-slate-600 hover:bg-primary/10 hover:text-primary transition-all flex-shrink-0"
               title="Perfil y configuración"
             >
               <Settings size={20} />
             </button>
-            <div className="relative ml-2">
+            <div className="relative xl:ml-2 flex-shrink-0">
               <button
                 onClick={() => setShowUserMenu(v => !v)}
                 className="flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-slate-100 transition-all"
@@ -224,7 +233,7 @@ export default function Layout({ children, currentView, onViewChange, userRole }
                 >
                   {user?.initials ?? '?'}
                 </div>
-                <div className="hidden sm:block text-left">
+                <div className="hidden lg:block text-left">
                   <p className="text-xs font-medium text-slate-700 leading-tight">
                     {user?.name?.split(' ')[0] ?? 'Usuario'}
                   </p>
@@ -318,7 +327,8 @@ export function PersistBadge() {
     )}
     <span title={api ? `Conectado a ${persist.apiBase || location.origin}/api (MongoDB · sesión segura)` : 'Sin API: datos en este navegador (db.json + localStorage)'}
       style={{ display:'inline-flex', alignItems:'center', gap:5, fontSize:10, color, fontWeight:600, padding:'3px 8px', borderRadius:10, background:`${color}14`, border:`0.5px solid ${color}40`, whiteSpace:'nowrap' }}>
-      <span style={{ width:6, height:6, borderRadius:'50%', background:color }}/>{label}
+      <span style={{ width:6, height:6, borderRadius:'50%', background:color }}/>
+      <span className="hidden xl:inline">{label}</span>
     </span>
     </>
   );
