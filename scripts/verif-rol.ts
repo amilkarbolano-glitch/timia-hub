@@ -87,3 +87,34 @@ console.log('\n── Etiqueta del badge de rol ──');
   console.log(ef === 0 ? 'etiquetas OK' : `etiquetas: ${ef} fallas`);
   if (ef) process.exit(1);
 }
+
+// ── Rol que muestra el badge: el más alto entre los proyectos ──────────────
+console.log('\n── Rol principal del badge ──');
+{
+  const { rolPrincipal, esAdminPlataforma } = await import('../src/lib/permissions');
+  (globalThis as any).localStorage.setItem('timia_project_roles', JSON.stringify({
+    'u-amilkar:MIGBD': 'tech_lead',   // administra la plataforma, pero acá es líder técnico
+    'u-ana:FICO': 'tech_lead',
+    'u-ana:MIGBD': 'developer',
+  }));
+  let bf = 0;
+  const c = (got: string, esp: string, s: string) => { if (got !== esp) bf++; console.log(`${got === esp ? '✓' : '✗'} ${s} → ${got}`); };
+
+  c(rolPrincipal({ id: 'u-amilkar', role: 'platform_admin', projectIds: ['MIGBD'] }), 'tech_lead',
+    'admin de plataforma con MIGBD como líder técnico');
+  c(rolPrincipal({ id: 'u-ana', role: 'developer', projectIds: ['FICO', 'MIGBD'] }), 'tech_lead',
+    'líder técnico en uno y developer en otro → gana el más alto');
+  c(rolPrincipal({ id: 'u-luis', role: 'developer', projectIds: ['MIGBD'] }), 'developer',
+    'developer sin ningún liderazgo');
+  c(rolPrincipal({ id: 'u-rodo', role: 'account_manager', projectIds: [] }), 'account_manager',
+    'el gerente de cuenta lo es sobre toda la cuenta');
+  c(rolPrincipal({ id: 'u-nuevo', role: 'platform_admin', projectIds: [] }), 'platform_admin',
+    'sin proyectos se muestra el rol base, no se inventa uno');
+
+  const adm = esAdminPlataforma({ id: 'u-amilkar', role: 'platform_admin' });
+  const noAdm = esAdminPlataforma({ id: 'u-luis', role: 'developer' });
+  if (!adm || noAdm) bf++;
+  console.log(`${adm && !noAdm ? '✓' : '✗'} el escudo aparece solo para quien administra`);
+  console.log(bf === 0 ? 'rol principal OK' : `rol principal: ${bf} fallas`);
+  if (bf) process.exit(1);
+}
