@@ -46,13 +46,16 @@ export default function MatrizCronograma({
   const caja = useRef<HTMLDivElement>(null);
   const [zoom, setZoom] = useState<Zoom>(zoomInicial ?? 'normal');
   const [manual, setManual] = useState(!!zoomInicial);
+  /** Ancho real del contenedor, para repartir el sobrante a la columna de nombres. */
+  const [dispon, setDispon] = useState(0);
 
   useEffect(() => {
-    if (manual) return;
     const calc = () => {
       const disp = caja.current?.clientWidth ?? 0;
+      setDispon(disp);
       if (!disp || !totalWeeks) return;
       // el mayor que entre completo; si ninguno entra, el más compacto
+      if (manual) return;
       const cabe = (z: Zoom) => ZOOM[z].label + ZOOM[z].cell * totalWeeks + 24 <= disp;
       setZoom(cabe('amplio') ? 'amplio' : cabe('normal') ? 'normal' : 'compacto');
     };
@@ -62,7 +65,10 @@ export default function MatrizCronograma({
     return () => ro.disconnect();
   }, [manual, totalWeeks]);
   const Z = ZOOM[zoom];
-  const CELL_W = Z.cell, LABEL_W = Z.label;
+  const CELL_W = Z.cell;
+  // La columna de nombres crece con el espacio libre en vez de recortar con "…"
+  // teniendo media pantalla vacía. Se acota para que no se vuelva una sábana.
+  const LABEL_W = Math.min(760, Math.max(Z.label, dispon - CELL_W * totalWeeks - 24));
   const weeks = Array.from({ length: totalWeeks }, (_, i) => i + 1);
   // Al arrastrar, todas las celdas tocadas toman el valor opuesto al de la primera.
   const drag = useRef<{ ei: number; ai: number; pintar: boolean } | null>(null);
