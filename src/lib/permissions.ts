@@ -48,7 +48,17 @@ export const PERMISSIONS: PermissionDef[] = [
 ];
 export const ALL_PERMISSIONS = PERMISSIONS.map(p => p.id);
 
+/** Permisos de administración de la herramienta (no dan rango dentro de un proyecto). */
+export const ADMIN_PERMISSIONS = [
+  'projects.view_all', 'projects.create', 'projects.manage',
+  'team.manage', 'roles.manage', 'config.manage', 'audit.view',
+];
+
 export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, string[]> = {
+  // Administrador de la plataforma: gestiona usuarios, accesos, permisos y configuración.
+  // NO da permisos operativos: dentro de cada proyecto vale su rol de `timia_project_roles`
+  // (ver effectiveRole). Sin override asignado, opera como developer.
+  platform_admin: ADMIN_PERMISSIONS,
   // Gerente de cuenta: todo, sobre todos los proyectos del cliente
   account_manager: ALL_PERMISSIONS,
   // PM: todo sobre sus proyectos
@@ -97,6 +107,7 @@ export const LEGACY_ALIASES: Record<string, string> = {
 const LEGACY_ROLE: Record<string, UserRole> = { admin: 'account_manager', leader: 'pm', member: 'developer', guest: 'developer', project_lead: 'tech_lead', tech_ref: 'tech_lead' };
 
 export const ROLE_META: Record<UserRole, { name: string; description: string; color: string }> = {
+  platform_admin:  { name: 'Administrador de la plataforma', description: 'Gestiona usuarios, accesos, permisos y configuración. Dentro de cada proyecto vale el rol que tenga asignado allí.', color: '#0f172a' },
   account_manager: { name: 'Gerente de cuenta',         description: 'Visión global del cliente: todos los proyectos de todos los PM, números, equipo y permisos.', color: '#dc2626' },
   pm:              { name: 'Project Manager',           description: 'Gestiona sus proyectos: estimaciones, plan, equipo, aprobaciones y configuración.', color: '#7c3aed' },
   tech_lead:       { name: 'Líder / Referente técnico', description: 'Apoya al PM: plan, estimaciones, inventario, alertas, tablero y TR del equipo.', color: '#0d9488' },
@@ -110,10 +121,49 @@ export const INITIAL_ROLES: Role[] = (Object.keys(ROLE_META) as UserRole[]).map(
 }));
 
 const KEY = 'timia_role_permissions';
+const CUSTOM_KEY = 'timia_custom_roles';
+
+/** Rol creado desde la app: combina permisos que ya existen, no inventa ninguno. */
+export interface CustomRole { id: string; name: string; description?: string; color?: string; permissions: string[] }
+
+/** Id válido para un rol nuevo: no pisa uno de fábrica y es alfanumérico. */
+export function idRolValido(id: string, base: Record<string, unknown> = ROLE_META): boolean {
+  const x = id.trim();
+  return !!x && !(x in base) && /^[a-z0-9_-]+$/i.test(x);
+}
+
+/** Roles personalizados guardados, descartando los inválidos. */
+export function customRoles(): CustomRole[] {
+  try {
+    const raw = localStorage.getItem(CUSTOM_KEY);
+    const list = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(list)) return [];
+    return list.filter((r: any) => r && typeof r === 'object' && idRolValido(String(r.id ?? '')))
+      .map((r: any) => ({
+        id: String(r.id), name: String(r.name || r.id), description: r.description ? String(r.description) : undefined,
+        color: r.color ? String(r.color) : '#475569',
+        permissions: Array.isArray(r.permissions) ? r.permissions.filter((p: string) => ALL_PERMISSIONS.includes(p)) : [],
+      }));
+  } catch { return []; }
+}
+
+export function saveCustomRoles(list: CustomRole[]): void {
+  persistSet(CUSTOM_KEY, list);
+}
+
+/** Metadatos de todos los roles: los de fábrica más los personalizados. */
+export function allRoleMeta(): Record<string, { name: string; description: string; color: string }> {
+  const out: Record<string, { name: string; description: string; color: string }> = { ...ROLE_META };
+  for (const r of customRoles()) {
+    out[r.id] = { name: r.name, description: r.description ?? 'Rol personalizado', color: r.color ?? '#475569' };
+  }
+  return out;
+}
 
 /** Matriz vigente: defaults + ajustes guardados por el PM (el PM siempre tiene todo). */
-export function currentMatrix(): Record<UserRole, string[]> {
-  const out = { ...DEFAULT_ROLE_PERMISSIONS };
+export function currentMatrix(): Record<string, string[]> {
+  const out: Record<string, string[]> = { ...DEFAULT_ROLE_PERMISSIONS };
+  for (const r of customRoles()) out[r.id] = r.permissions;
   try {
     const raw = localStorage.getItem(KEY);
     const stored = raw ? JSON.parse(raw) : null;
@@ -131,6 +181,8 @@ export function currentMatrix(): Record<UserRole, string[]> {
 export function effectiveRole(user: { id: string; role: string } | null | undefined, projectId?: string): UserRole | undefined {
   if (!user) return undefined;
   const base = (LEGACY_ROLE[user.role] ?? user.role) as UserRole;
+  // El gerente de cuenta manda en todos los proyectos por definición: no se le aplican
+  // overrides (si no, podría bloquearse a sí mismo bajándose el rol en un proyecto).
   if (!projectId || base === 'account_manager') return base;
   try {
     const raw = localStorage.getItem('timia_project_roles');
@@ -138,12 +190,19 @@ export function effectiveRole(user: { id: string; role: string } | null | undefi
     const o = map?.[`${user.id}:${projectId}`];
     if (typeof o === 'string') return (LEGACY_ROLE[o] ?? o) as UserRole;
   } catch {}
+  // El administrador de la plataforma no tiene rango operativo: sin override explícito
+  // entra a un proyecto como developer, no como administrador.
+  if (base === 'platform_admin') return 'developer';
   return base;
 }
 
 /** Permiso de un usuario dentro de un proyecto (usa el rol efectivo en ese proyecto). */
 export function canInProject(user: { id: string; role: string; projectIds?: string[] } | null | undefined, permission: string, projectId: string): boolean {
   if (!user) return false;
+  const base = (LEGACY_ROLE[user.role] ?? user.role) as UserRole;
+  // El administrador de la plataforma administra cualquier proyecto (crear, configurar,
+  // equipo), aunque no pertenezca a él. Lo operativo sigue la regla de abajo.
+  if (base === 'platform_admin' && ADMIN_PERMISSIONS.includes(permission)) return true;
   const role = effectiveRole(user, projectId);
   if (!hasPermission(role, permission)) return false;
   // sin projects.view_all, además debe estar asignado al proyecto
@@ -158,6 +217,6 @@ export function hasPermission(role: string | undefined, permission: string): boo
 }
 
 /** Guarda la matriz (solo PM; el servidor también lo verifica). */
-export function saveMatrix(matrix: Record<UserRole, string[]>): void {
+export function saveMatrix(matrix: Record<string, string[]>): void {
   persistSet(KEY, matrix);   // localStorage + API (el servidor la aplica en la siguiente petición)
 }

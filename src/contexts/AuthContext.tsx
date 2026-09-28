@@ -8,10 +8,33 @@ import { signInWithGoogleFirebase, signOutFirebase } from '../lib/firebaseAuth';
 // tech_lead: Juan Pablo/Diego/David → multi-proyecto de su área, marca etapas
 // developer: Sergio/Fabrizio/Ana → ejecuta sus tareas asignadas
 // Roles (4 niveles): account_manager (gerente de cuenta) · pm · tech_lead (líder/referente técnico) · developer
-export type UserRole = 'account_manager' | 'pm' | 'tech_lead' | 'developer';
+/**
+ * `platform_admin` administra la herramienta (usuarios, accesos, permisos, configuración)
+ * sin rango operativo: dentro de cada proyecto vale el rol que se le asigne allí.
+ * `account_manager` es lo contrario — rol de negocio, ve y puede todo en todos lados.
+ */
+export type UserRole = 'platform_admin' | 'account_manager' | 'pm' | 'tech_lead' | 'developer';
 /** Roles antiguos → nuevos (datos guardados en navegadores/DB viejos) */
 export const LEGACY_ROLE_MAP: Record<string, UserRole> = { project_lead: 'tech_lead', tech_ref: 'tech_lead' };
-export function normalizeRole(r: string | undefined | null): UserRole { const x = LEGACY_ROLE_MAP[r ?? ''] ?? r; return (['account_manager','pm','tech_lead','developer'] as string[]).includes(x as string) ? x as UserRole : 'developer'; }
+export const BUILTIN_ROLES = ['platform_admin','account_manager','pm','tech_lead','developer'] as const;
+
+/** Ids de los roles creados desde la app. Se lee directo del storage para no
+ *  importar lib/permissions desde aquí (permissions ya importa UserRole de este archivo). */
+function customRoleIds(): string[] {
+  try {
+    const raw = localStorage.getItem('timia_custom_roles');
+    const list = raw ? JSON.parse(raw) : [];
+    return Array.isArray(list) ? list.filter((r: any) => r?.id).map((r: any) => String(r.id)) : [];
+  } catch { return []; }
+}
+
+/** Rol válido. Acepta los de fábrica y los personalizados que existan.
+ *  Un rol desconocido (p. ej. uno que se borró) cae a developer, el de menos permisos. */
+export function normalizeRole(r: string | undefined | null): UserRole {
+  const x = String(LEGACY_ROLE_MAP[r ?? ''] ?? r ?? '');
+  if ((BUILTIN_ROLES as readonly string[]).includes(x)) return x as UserRole;
+  return customRoleIds().includes(x) ? (x as UserRole) : 'developer';
+}
 
 export interface AuthUser {
   id: string;
@@ -27,6 +50,10 @@ export interface AuthUser {
 // ─── Permisos por rol ─────────────────────────────────────────────────────────
 
 export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
+  // Solo administración; lo operativo sale del rol que tenga en cada proyecto.
+  platform_admin: [
+    'view_all_projects', 'view_audit', 's_audit', 'u_roles', 'create_projects', 'view_admin',
+  ],
   account_manager: [
     'view_all_projects', 'view_analytics', 'view_bank_status', 'view_audit', 'view_team_overview', 'view_standards',
     's_audit', 'u_roles', 'create_projects', 'view_estimaciones', 'edit_estimaciones', 'view_admin',
@@ -74,6 +101,7 @@ export const effectiveRole = _effectiveRole;
 
 // Vista inicial según rol
 export const ROLE_LANDING: Record<UserRole, string> = {
+  platform_admin: 'admin',
   account_manager: 'analytics',
   pm:           'analytics',
   tech_lead:    'plan-trabajo',
@@ -81,6 +109,7 @@ export const ROLE_LANDING: Record<UserRole, string> = {
 };
 
 export const ROLE_LABEL: Record<UserRole, string> = {
+  platform_admin: 'Administrador de la plataforma',
   account_manager: 'Gerente de cuenta',
   pm:           'Project Manager',
   tech_lead:    'Líder / Referente técnico',
