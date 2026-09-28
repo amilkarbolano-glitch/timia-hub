@@ -260,10 +260,10 @@ function TabProyectos({ onViewChange, allowedProjectIds }: { onViewChange?: (vie
   const PRIORIDADES: Priority[] = ['Baja', 'Media', 'Alta', 'Crítica'];
   const PRIO_COLOR: Record<Priority, string> = { Baja: '#64748b', Media: '#2563eb', Alta: '#d97706', Crítica: '#dc2626' };
   const ROLE_COLOR: Record<UserRole, string> = {
-    account_manager: '#dc2626', pm: '#7c3aed', tech_lead: '#0d9488', developer: '#d97706',
+    platform_admin: '#0f172a', account_manager: '#dc2626', pm: '#7c3aed', tech_lead: '#0d9488', developer: '#d97706',
   };
   const ROLE_LABEL: Record<UserRole, string> = {
-    account_manager: 'GC', pm: 'PM', tech_lead: 'TL', developer: 'DEV',
+    platform_admin: 'ADM', account_manager: 'GC', pm: 'PM', tech_lead: 'TL', developer: 'DEV',
   };
 
   function updateProject(proj: AdminProject) {
@@ -487,7 +487,7 @@ function TabEquipo() {
   const [showNew, setShowNew] = useState(false);
 
   const ROLE_COLOR: Record<UserRole, string> = {
-    account_manager: '#dc2626', pm: '#7c3aed', tech_lead: '#0d9488', developer: '#d97706',
+    platform_admin: '#0f172a', account_manager: '#dc2626', pm: '#7c3aed', tech_lead: '#0d9488', developer: '#d97706',
   };
 
   function upsert(u: AdminUser) {
