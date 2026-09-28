@@ -7,7 +7,7 @@ export { loadStateFromApi } from './persist';
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
 export type Priority = 'Baja' | 'Media' | 'Alta' | 'Crítica';
-export type UserRole  = 'account_manager' | 'pm' | 'tech_lead' | 'developer';
+export type UserRole  = 'platform_admin' | 'account_manager' | 'pm' | 'tech_lead' | 'developer';
 
 // ─── Imputaciones Jira ────────────────────────────────────────────────────────
 

@@ -37,3 +37,7 @@
     .grid-wide-6 { grid-template-columns: repeat(6, 1fr) !important; }
   }
 }
+
+/* El nav del header se desplaza sin barra visible en pantallas < 1280px,
+   donde los ítems no entran. Evita que la página entera scrollee de lado. */
+header nav::-webkit-scrollbar { display: none; }
