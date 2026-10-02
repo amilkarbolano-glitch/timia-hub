@@ -13,7 +13,8 @@ import ProjectTemplates from './components/ProjectTemplates';
 import PMDashboard, { ProyectosPage } from './components/PMDashboard';
 import AdminPanel from './components/AdminPanel';
 import CircuitosBBVA from './components/CircuitosBBVA';
-import Bitacora, { TabLinks, TabInventario } from './components/Bitacora';
+import Bitacora, { TabLinks } from './components/Bitacora';
+import Inventario from './components/Inventario';
 import ImputacionesJira from './components/ImputacionesJira';
 import ActivityReport from './components/ActivityReport';
 import Estimaciones from './components/Estimaciones';
@@ -204,10 +205,10 @@ function AppInner() {
               </div>
               <div>
                 <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#111', letterSpacing: '-.3px' }}>Inventario</h2>
-                <p style={{ margin: 0, fontSize: 12, color: '#94a3b8', marginTop: 1 }}>Tablas, objetos, jobs y modelos — estado de entrega por etapa de procesamiento</p>
+                <p style={{ margin: 0, fontSize: 12, color: '#94a3b8', marginTop: 1 }}>Objetos, DataX y transmisión — atributos, enlaces y estado de entrega por etapa</p>
               </div>
             </div>
-            <TabInventario user={user}/>
+            <Inventario user={user}/>
           </div>
         );
 

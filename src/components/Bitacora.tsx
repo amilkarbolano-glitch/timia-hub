@@ -615,20 +615,20 @@ function LinkCard({ l, onDelete }: { l: any; onDelete:(id:string)=>void }) {
 
 // ─── Tab: Inventario ──────────────────────────────────────────────────────────
 
-const CELL_BG: Record<string, string> = {
+export const CELL_BG: Record<string, string> = {
   'Sí':  '#dcfce7',
   'N/A': '#f1f5f9',
   '':    '#fff',
 };
-const CELL_COLOR: Record<string, string> = {
+export const CELL_COLOR: Record<string, string> = {
   'Sí':  '#15803d',
   'N/A': '#94a3b8',
   '':    '#111',
 };
-const STAGE_CYCLE: Record<string, string> = { '': 'Sí', 'Sí': 'N/A', 'N/A': '' };
-const PCT_CYCLE: string[] = ['', '25', '50', '75', '100'];
+export const STAGE_CYCLE: Record<string, string> = { '': 'Sí', 'Sí': 'N/A', 'N/A': '' };
+export const PCT_CYCLE: string[] = ['', '25', '50', '75', '100'];
 
-function InlineEdit({ value, placeholder, mono, onSave }: { value: string; placeholder?: string; mono?: boolean; onSave: (v:string)=>void; }) {
+export function InlineEdit({ value, placeholder, mono, onSave }: { value: string; placeholder?: string; mono?: boolean; onSave: (v:string)=>void; }) {
   const [editing, setEditing] = useState(false);
   const [val, setVal]         = useState(value);
   const inputRef              = React.useRef<HTMLInputElement>(null);
@@ -665,7 +665,7 @@ function InlineEdit({ value, placeholder, mono, onSave }: { value: string; place
   );
 }
 
-function LinkCell({ value, onSave }: { value: string; onSave: (v:string)=>void; }) {
+export function LinkCell({ value, onSave }: { value: string; onSave: (v:string)=>void; }) {
   const [editing, setEditing] = useState(false);
   const [val, setVal]         = useState(value);
   const inputRef              = React.useRef<HTMLInputElement>(null);
@@ -708,335 +708,12 @@ function LinkCell({ value, onSave }: { value: string; onSave: (v:string)=>void; 
   );
 }
 
-export function TabInventario({ user }: { user: any }) {
-  const [rows,    setRows]    = useState<InvRow[]>(loadInvRows);
-  const [stages,  setStages]  = useState<InvStage[]>(loadInvStages);
-  const [filterProj, setFP]   = useState('');
-  const [search,  setSearch]  = useState('');
-  const [addStage, setAddSt]  = useState(false);
-  const [newStLbl, setNewStL] = useState('');
-  const [newStType, setNewStT]= useState<'check'|'percent'>('check');
-  const [delMode,  setDelMode]= useState(false);
-
-  // Projects accessible to this user
-  const accessibleIds: string[] = canAccess(user?.role ?? 'developer', 'projects.view_all') ? PROJECTS.map((p: any) => p.id) : (user?.projectIds ?? []);
-  const accessibleProjects = PROJECTS.filter((p: any) => accessibleIds.includes(p.id));
-
-  function save(next: InvRow[]) { setRows(next); saveInvRows(next); }
-
-  function addRow() {
-    const defaultProj = filterProj || (accessibleProjects[0]?.id ?? PROJECTS[0]?.id ?? '');
-    const row: InvRow = {
-      id: 'r'+Date.now(),
-      projectId: defaultProj,
-      objeto: '', descripcion: '', documentacion: '',
-      versionModelo: '', versionObjeto: '', diccionario: '',
-      stages: {},
-    };
-    save([...rows, row]);
-  }
-
-  function delRow(id: string) {
-    if (confirm('¿Eliminar esta fila?')) save(rows.filter(r => r.id !== id));
-  }
-
-  function updateCell(id: string, col: keyof Omit<InvRow,'id'|'projectId'|'stages'>, val: string) {
-    save(rows.map(r => r.id === id ? { ...r, [col]: val } : r));
-  }
-
-  function cycleStage(rowId: string, stageId: string) {
-    const row   = rows.find(r => r.id === rowId);
-    const stage = stages.find(s => s.id === stageId);
-    if (!row) return;
-    const cur = row.stages[stageId] ?? '';
-    let next: string;
-    if (stage?.type === 'percent') {
-      const idx = PCT_CYCLE.indexOf(cur);
-      next = PCT_CYCLE[(idx + 1) % PCT_CYCLE.length];
-    } else {
-      next = STAGE_CYCLE[cur] ?? 'Sí';
-    }
-    save(rows.map(r => r.id === rowId ? { ...r, stages: { ...r.stages, [stageId]: next } } : r));
-  }
-
-  function setStageVal(rowId: string, stageId: string, val: string) {
-    save(rows.map(r => r.id === rowId ? { ...r, stages: { ...r.stages, [stageId]: val } } : r));
-  }
-
-  function addStageCol() {
-    if (!newStLbl.trim()) return;
-    const next: InvStage[] = [...stages, { id: 'st-'+Date.now(), label: newStLbl.trim(), type: newStType }];
-    setStages(next); saveInvStages(next);
-    setNewStL(''); setNewStT('check'); setAddSt(false);
-  }
-
-  function delStageCol(id: string) {
-    if (!confirm('¿Eliminar esta columna de todas las filas?')) return;
-    const next = stages.filter(s => s.id !== id);
-    setStages(next); saveInvStages(next);
-  }
-
-  const visible = rows.filter(r =>
-    accessibleIds.includes(r.projectId) &&
-    (!filterProj || r.projectId === filterProj) &&
-    (!search || (r.objeto + r.descripcion).toLowerCase().includes(search.toLowerCase()))
-  );
-
-  const TH: React.CSSProperties = {
-    padding: '0 6px', fontSize: 9, color: '#94a3b8', fontWeight: 600,
-    textTransform: 'uppercase', letterSpacing: '.04em', whiteSpace: 'nowrap',
-    background: '#f8fafc', position: 'sticky' as const, top: 0, zIndex: 2,
-    borderBottom: '0.5px solid #e2e8f0',
-  };
-  const TD: React.CSSProperties = {
-    padding: '2px 4px', borderBottom: '0.5px solid #f1f5f9', verticalAlign: 'middle',
-  };
-
-  return (
-    <div>
-      {/* Top bar */}
-      <div style={{ display:'flex', gap:8, alignItems:'center', marginBottom:12, flexWrap:'wrap' }}>
-        <div style={{ position:'relative', flex:'1 1 180px', maxWidth:240 }}>
-          <Search size={12} style={{ position:'absolute', left:9, top:'50%', transform:'translateY(-50%)', color:'#94a3b8', pointerEvents:'none' }}/>
-          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar objeto, descripción…" style={{...inp(), paddingLeft:28}}/>
-        </div>
-        <select value={filterProj} onChange={e=>setFP(e.target.value)} style={{ ...inp(), width:'auto' }}>
-          <option value="">Todos los proyectos</option>
-          {accessibleProjects.map((p: any)=><option key={p.id} value={p.id}>{p.name}</option>)}
-        </select>
-        <span style={{ fontSize:11, color:'#94a3b8' }}>{visible.length} fila{visible.length!==1?'s':''}</span>
-        <div style={{ marginLeft:'auto', display:'flex', gap:6 }}>
-          {/* Gestionar columnas: solo líderes/referentes/PM */}
-          {canAccess(user?.role, 'write_bitacora') && (
-            <button onClick={()=>setDelMode(v=>!v)}
-              style={{ padding:'6px 11px', fontSize:11, border:`0.5px solid ${delMode?'#dc2626':'#e2e8f0'}`,
-                borderRadius:7, background: delMode?'#fef2f2':'#fff', color: delMode?'#dc2626':'#64748b', cursor:'pointer' }}>
-              {delMode ? 'Listo' : 'Gestionar columnas'}
-            </button>
-          )}
-          {/* Agregar objeto: developers también pueden */}
-          {(canAccess(user?.role, 'write_bitacora') || canAccess(user?.role, 'add_inv_row')) && (
-            <button onClick={addRow} style={{ display:'flex', alignItems:'center', gap:5, padding:'6px 12px', fontSize:12, background:'#dc2626', color:'#fff', border:'none', borderRadius:7, cursor:'pointer', fontWeight:500 }}>
-              <Plus size={13}/> Agregar objeto
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Spreadsheet table */}
-      <div style={{ overflowX:'auto', border:'0.5px solid #e2e8f0', borderRadius:12, background:'#fff' }}>
-        <table style={{ borderCollapse:'collapse', minWidth:'100%', tableLayout:'auto' }}>
-          <thead>
-            <tr style={{ height: 32 }}>
-              {/* Fixed left */}
-              <th style={{ ...TH, width:28, minWidth:28, position:'sticky', left:0, zIndex:3, textAlign:'center' }}>#</th>
-              <th style={{ ...TH, width:160, minWidth:140, position:'sticky', left:28, zIndex:3, paddingLeft:8 }}>Objeto</th>
-              <th style={{ ...TH, width:200, minWidth:160 }}>Descripción</th>
-              <th style={{ ...TH, width:60, minWidth:56 }}>Doc.</th>
-              <th style={{ ...TH, width:72, minWidth:60 }}>V. Modelo</th>
-              <th style={{ ...TH, width:72, minWidth:60 }}>V. Objeto</th>
-              <th style={{ ...TH, width:56, minWidth:50 }}>Dic.</th>
-              {/* Stage columns — rotated headers */}
-              {stages.map(s => (
-                <th key={s.id} style={{ ...TH, width:52, minWidth:48, padding:'4px 2px' }}>
-                  <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:2 }}>
-                    <span style={{ writingMode:'vertical-rl', textOrientation:'mixed',
-                      transform:'rotate(180deg)', display:'block', maxHeight:88,
-                      overflow:'hidden', whiteSpace:'nowrap', fontSize:8.5, lineHeight:1.2 }}>
-                      {s.label}
-                    </span>
-                    {delMode && (
-                      <button onClick={()=>delStageCol(s.id)}
-                        style={{ border:'none', background:'#fee2e2', color:'#dc2626', borderRadius:3, cursor:'pointer', padding:'1px 3px', fontSize:9, marginTop:2 }}>
-                        ✕
-                      </button>
-                    )}
-                  </div>
-                </th>
-              ))}
-              {/* Add stage column — solo líderes/referentes/PM */}
-              <th style={{ ...TH, width:36, minWidth:32 }}>
-                {canAccess(user?.role, 'write_bitacora') && (
-                  <button onClick={()=>setAddSt(true)}
-                    style={{ border:'none', background:'none', cursor:'pointer', color:'#94a3b8', fontSize:16, lineHeight:1, padding:'0 4px' }}
-                    title="Agregar columna">＋</button>
-                )}
-              </th>
-              <th style={{ ...TH, width:28 }}/>
-            </tr>
-          </thead>
-          <tbody>
-            {visible.length === 0 ? (
-              <tr>
-                <td colSpan={stages.length + 9} style={{ padding:'40px 0', textAlign:'center' }}>
-                  <Package size={22} color="#cbd5e1" style={{ margin:'0 auto 8px', display:'block' }}/>
-                  <span style={{ fontSize:12, color:'#94a3b8' }}>No hay objetos. Haz clic en <strong>Agregar objeto</strong> para empezar.</span>
-                </td>
-              </tr>
-            ) : visible.map((row, idx) => {
-              const proj = PROJECTS.find(p => p.id === row.projectId);
-              return (
-                <tr key={row.id} style={{ background: idx % 2 === 0 ? '#fff' : '#fafafe' }}>
-                  {/* # */}
-                  <td style={{ ...TD, width:28, textAlign:'center', fontSize:10, color:'#94a3b8',
-                    position:'sticky', left:0, background: idx%2===0?'#fff':'#fafafe', zIndex:1 }}>
-                    <span style={{ display:'block', fontWeight:500, color: proj?.color ?? '#94a3b8', fontSize:9 }}>
-                      {row.projectId || idx+1}
-                    </span>
-                  </td>
-                  {/* Objeto (sticky) */}
-                  <td style={{ ...TD, width:160, position:'sticky', left:28, background: idx%2===0?'#fff':'#fafafe', zIndex:1 }}>
-                    <InlineEdit value={row.objeto} placeholder="t_kfca_…" mono
-                      onSave={v => updateCell(row.id, 'objeto', v)}/>
-                  </td>
-                  {/* Descripción */}
-                  <td style={{ ...TD, maxWidth:200 }}>
-                    <InlineEdit value={row.descripcion} placeholder="Descripción…"
-                      onSave={v => updateCell(row.id, 'descripcion', v)}/>
-                  </td>
-                  {/* Doc link */}
-                  <td style={{ ...TD, width:60 }}>
-                    <LinkCell value={row.documentacion} onSave={v => updateCell(row.id, 'documentacion', v)}/>
-                  </td>
-                  {/* V. Modelo */}
-                  <td style={{ ...TD, width:72 }}>
-                    <InlineEdit value={row.versionModelo} placeholder="3.0.0"
-                      onSave={v => updateCell(row.id, 'versionModelo', v)}/>
-                  </td>
-                  {/* V. Objeto */}
-                  <td style={{ ...TD, width:72 }}>
-                    <InlineEdit value={row.versionObjeto} placeholder="1.0.0"
-                      onSave={v => updateCell(row.id, 'versionObjeto', v)}/>
-                  </td>
-                  {/* Diccionario link */}
-                  <td style={{ ...TD, width:56 }}>
-                    <LinkCell value={row.diccionario} onSave={v => updateCell(row.id, 'diccionario', v)}/>
-                  </td>
-                  {/* Stage cells */}
-                  {stages.map(s => {
-                    const val    = row.stages[s.id] ?? '';
-                    const isPct  = s.type === 'percent';
-                    const pctNum = isPct && val !== '' ? Number(val) : 0;
-
-                    // Percent cell
-                    if (isPct) {
-                      const pctBg = val === '' ? '#fff'
-                        : pctNum >= 100 ? '#dcfce7'
-                        : pctNum >= 75  ? '#d1fae5'
-                        : pctNum >= 50  ? '#fef9c3'
-                        : pctNum >= 25  ? '#fff7ed'
-                        : '#fff';
-                      const pctTx = val === '' ? '#cbd5e1'
-                        : pctNum >= 100 ? '#15803d'
-                        : pctNum >= 75  ? '#059669'
-                        : pctNum >= 50  ? '#a16207'
-                        : '#d97706';
-                      const canEditStage = canAccess(user?.role, 'write_bitacora');
-                      return (
-                        <td key={s.id} style={{ ...TD, width:52, padding:0, cursor: canEditStage ? 'pointer' : 'default', background: pctBg, position:'relative' }}
-                          onClick={() => canEditStage && cycleStage(row.id, s.id)}
-                          title={canEditStage ? `${s.label}: clic para cambiar · clic derecho para valor exacto` : s.label}
-                          onContextMenu={e => {
-                            if (!canEditStage) return;
-                            e.preventDefault();
-                            const v = prompt(`% para "${s.label}" (0-100):`, val || '0');
-                            if (v !== null) { const n = Math.min(100,Math.max(0,Number(v)||0)); setStageVal(row.id, s.id, String(n)); }
-                          }}>
-                          {val !== '' && (
-                            <div style={{ position:'absolute', bottom:0, left:0, right:0, height:3, background:'#e2e8f0' }}>
-                              <div style={{ width:`${pctNum}%`, height:'100%', background: pctNum>=100?'#059669':pctNum>=50?'#d97706':'#f59e0b', transition:'width .2s' }}/>
-                            </div>
-                          )}
-                          <span style={{ fontSize:10, fontWeight:600, color: pctTx, display:'block', textAlign:'center', lineHeight:'28px' }}>
-                            {val === '' ? '' : `${val}%`}
-                          </span>
-                        </td>
-                      );
-                    }
-
-                    // Check cell
-                    const isCustom = val !== '' && val !== 'Sí' && val !== 'N/A';
-                    const canEditCheck = canAccess(user?.role, 'write_bitacora');
-                    return (
-                      <td key={s.id} style={{ ...TD, width:52, textAlign:'center', padding:0,
-                        background: isCustom ? '#fef9c3' : (CELL_BG[val] ?? '#fff'),
-                        cursor: canEditCheck ? 'pointer' : 'default' }}
-                        onClick={() => canEditCheck && cycleStage(row.id, s.id)}
-                        title={canEditCheck ? `${s.label}: clic para cambiar · clic derecho para valor personalizado` : s.label}
-                        onContextMenu={e => {
-                          if (!canEditCheck) return;
-                          e.preventDefault();
-                          const v = prompt(`Valor para "${s.label}" (Sí / N/A / texto):`, val);
-                          if (v !== null) setStageVal(row.id, s.id, v.trim());
-                        }}>
-                        <span style={{ fontSize: isCustom?9:12, fontWeight: 600, color: isCustom?'#92400e':(CELL_COLOR[val]??'#111') }}>
-                          {val === 'Sí' ? '✓' : val === 'N/A' ? <span style={{fontSize:8}}>N/A</span> : val || ''}
-                        </span>
-                      </td>
-                    );
-                  })}
-                  {/* Empty add-col placeholder */}
-                  <td style={{ ...TD, width:36 }}/>
-                  {/* Delete row — solo líderes/referentes/PM */}
-                  <td style={{ ...TD, width:28 }}>
-                    {canAccess(user?.role, 'write_bitacora') && (
-                      <button onClick={()=>delRow(row.id)}
-                        style={{ border:'none', background:'none', cursor:'pointer', color:'#cbd5e1', padding:2,
-                          display:'flex', lineHeight:1 }}>
-                        <Trash2 size={12}/>
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-
-      <p style={{ margin:'8px 0 0', fontSize:10, color:'#94a3b8' }}>
-        Columna <strong>Check</strong>: clic para ciclar ✓ → N/A → vacío · clic derecho para valor personalizado &nbsp;|&nbsp;
-        Columna <strong>%</strong>: clic para avanzar 0 → 25 → 50 → 75 → 100% · clic derecho para valor exacto · Clic en celda de texto para editar
-      </p>
-
-      {/* Add stage column modal */}
-      {addStage && (
-        <div style={{ position:'fixed', inset:0, background:'rgba(15,23,42,.45)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:200 }}>
-          <div style={{ background:'#fff', borderRadius:14, padding:'24px', width:380, boxShadow:'0 20px 60px rgba(0,0,0,.25)' }}>
-            <p style={{ margin:'0 0 12px', fontWeight:700, fontSize:14, color:'#111' }}>Nueva columna de etapa</p>
-            <label style={lbl()}>Nombre de la etapa</label>
-            <input value={newStLbl} onChange={e=>setNewStL(e.target.value)} placeholder="Ej: Aprobación QA"
-              onKeyDown={e=>e.key==='Enter'&&addStageCol()}
-              style={{ ...inp(), marginBottom:12 }} autoFocus/>
-            <label style={lbl()}>Tipo de celda</label>
-            <div style={{ display:'flex', gap:8, marginBottom:16 }}>
-              {(['check','percent'] as const).map(t => (
-                <button key={t} onClick={()=>setNewStT(t)}
-                  style={{ flex:1, padding:'8px 0', fontSize:12, fontWeight:newStType===t?700:400, borderRadius:8,
-                    border:`1.5px solid ${newStType===t?'#dc2626':'#e2e8f0'}`,
-                    background: newStType===t?'#fef2f2':'#fff',
-                    color: newStType===t?'#dc2626':'#64748b', cursor:'pointer' }}>
-                  {t === 'check' ? '✓ Check (Sí / N/A)' : '% Porcentaje (0–100)'}
-                </button>
-              ))}
-            </div>
-            <div style={{ display:'flex', gap:8, justifyContent:'flex-end' }}>
-              <button onClick={()=>{setAddSt(false);setNewStL('');setNewStT('check');}} style={btnSec()}>Cancelar</button>
-              <button onClick={addStageCol} style={btnPrimary()}>Agregar</button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ─── Style helpers ────────────────────────────────────────────────────────────
 
-function inp(): React.CSSProperties { return { width:'100%', padding:'7px 10px', fontSize:12, border:'0.5px solid #e2e8f0', borderRadius:7, background:'#fff', boxSizing:'border-box', outline:'none' }; }
-function lbl(): React.CSSProperties { return { fontSize:11, color:'#64748b', display:'block', marginBottom:4 }; }
-function btnPrimary(): React.CSSProperties { return { padding:'8px 16px', fontSize:12, background:'#dc2626', color:'#fff', border:'none', borderRadius:7, cursor:'pointer', fontWeight:500 }; }
-function btnSec(): React.CSSProperties { return { padding:'8px 14px', fontSize:12, border:'0.5px solid #e2e8f0', borderRadius:7, background:'#fff', cursor:'pointer', color:'#374151' }; }
+export function inp(): React.CSSProperties { return { width:'100%', padding:'7px 10px', fontSize:12, border:'0.5px solid #e2e8f0', borderRadius:7, background:'#fff', boxSizing:'border-box', outline:'none' }; }
+export function lbl(): React.CSSProperties { return { fontSize:11, color:'#64748b', display:'block', marginBottom:4 }; }
+export function btnPrimary(): React.CSSProperties { return { padding:'8px 16px', fontSize:12, background:'#dc2626', color:'#fff', border:'none', borderRadius:7, cursor:'pointer', fontWeight:500 }; }
+export function btnSec(): React.CSSProperties { return { padding:'8px 14px', fontSize:12, border:'0.5px solid #e2e8f0', borderRadius:7, background:'#fff', cursor:'pointer', color:'#374151' }; }
 function emptyBox(): React.CSSProperties { return { background:'#fff', border:'0.5px solid #e2e8f0', borderRadius:12, padding:'48px 0', textAlign:'center', display:'flex', flexDirection:'column', alignItems:'center' }; }
 
 // ─── Main export — solo Cambios funcionales ───────────────────────────────────

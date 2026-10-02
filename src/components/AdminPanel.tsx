@@ -958,7 +958,8 @@ const BACKUP_KEYS = [
   'timia_plan_configs', 'timia_plan_startdates', 'timia_plan_pcts', 'timia_etapa_states',
   'timia_activity_done_dates', 'timia_activity_assignees', 'timia_activity_jiras', 'timia_plan_historial',
   'timia_plan_issues', 'timia_kanban_tasks', 'timia_bitacora', 'timia_circuitos',
-  'timia_inv_stages', 'timia_inv_v2', 'timia_links', 'timia_imputaciones',
+  'timia_inv_stages', 'timia_inv_v2', 'timia_inv_transmision', 'timia_inv_datax', 'timia_datax_config',
+  'timia_links', 'timia_imputaciones',
   'timia_tr_features', 'timia_tr_entries', 'timia_access_requests',
 ];
 
