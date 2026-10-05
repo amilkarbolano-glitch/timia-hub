@@ -875,11 +875,30 @@ function TabSolicitudes() {
   const d = (r: AccessRequest) => draft[r.id] ?? { role: 'developer' as UserRole, projectIds: [] };
   const setD = (r: AccessRequest, patch: Partial<{ role: UserRole; projectIds: string[] }>) => setDraft(x => ({ ...x, [r.id]: { ...d(r), ...patch } }));
 
+  /** Marca la solicitud como resuelta, sin tocar la lista de usuarios. */
+  function resolver(r: AccessRequest, status: 'approved' | 'rejected') {
+    const next = reqs.map(x => x.id === r.id
+      ? { ...x, status, resolvedAt: new Date().toISOString(), resolvedBy: user?.name ?? '' }
+      : x);
+    setReqs(next); adminStore.saveAccessRequests(next);
+  }
+
   function approve(r: AccessRequest) {
     const cfg = d(r);
-    if (!cfg.projectIds.length && cfg.role !== 'account_manager') { alert('Asigna al menos un proyecto.'); return; }
     const users = adminStore.getUsers();
-    if (users.some(u => u.email.toLowerCase() === r.email)) { alert('Ese correo ya existe en Usuarios.'); return; }
+    const yaExiste = users.find(u => u.email.toLowerCase() === r.email);
+
+    // Si el usuario ya está creado, la solicitud solo le falta el sello. Antes esto
+    // era un callejón sin salida: se negaba con un alert y la solicitud se quedaba
+    // pendiente para siempre. Pasa cuando la creación del usuario se guardó pero el
+    // cierre de la solicitud no.
+    if (yaExiste) {
+      if (!confirm(`${r.email} ya está en Usuarios como ${yaExiste.role} (${yaExiste.projectIds.join(', ') || 'sin proyectos'}).\n\n¿Cerrar la solicitud como aprobada? No se le cambia el rol ni los proyectos.`)) return;
+      resolver(r, 'approved');
+      return;
+    }
+
+    if (!cfg.projectIds.length && cfg.role !== 'account_manager') { alert('Asigna al menos un proyecto.'); return; }
     const name = r.name || r.email.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
     const ini = name.split(' ').filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('') || 'US';
     const color = COLORS[users.length % COLORS.length];
@@ -888,13 +907,11 @@ function TabSolicitudes() {
       projectIds: cfg.role === 'account_manager' ? projects.map(p => p.id) : cfg.projectIds, initials: ini, avatarColor: color, active: true,
       areaLabel: `${({ account_manager: 'Gerente de cuenta', pm: 'Project Manager', tech_lead: 'Líder técnico', developer: 'Desarrollador' } as Record<string, string>)[cfg.role]} · ${cfg.projectIds.map(pid => projects.find(p => p.id === pid)?.name ?? pid).join(' · ') || 'todos los proyectos'}` };
     adminStore.saveUsers([...users, newUser]);
-    const next = reqs.map(x => x.id === r.id ? { ...x, status: 'approved' as const, resolvedAt: new Date().toISOString(), resolvedBy: user?.name ?? '' } : x);
-    setReqs(next); adminStore.saveAccessRequests(next);
+    resolver(r, 'approved');
   }
   function reject(r: AccessRequest) {
     if (!confirm(`¿Rechazar la solicitud de ${r.email}?`)) return;
-    const next = reqs.map(x => x.id === r.id ? { ...x, status: 'rejected' as const, resolvedAt: new Date().toISOString(), resolvedBy: user?.name ?? '' } : x);
-    setReqs(next); adminStore.saveAccessRequests(next);
+    resolver(r, 'rejected');
   }
   const fmt = (iso?: string) => iso ? new Date(iso).toLocaleString('es-CO', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
 
