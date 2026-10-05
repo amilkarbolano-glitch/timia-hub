@@ -17,7 +17,8 @@
     "seed:sync": "cp public/db.json ../timia-hub-api/seed.json",
     "e2e:api": "tsx scripts/e2e-api.tsx",
     "verif:avance": "tsx scripts/verif-avance.ts",
-    "verif:rol": "tsx scripts/verif-rol.ts"
+    "verif:rol": "tsx scripts/verif-rol.ts",
+    "verif:tablero": "tsx scripts/verif-tablero.ts"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",

@@ -9,7 +9,7 @@ import { CRONO_MAIN_NAME } from '../lib/adminStore';
 
 export interface PlanOutlineActivity { name: string; startWeek: number; endWeek: number; etapas?: { id: string; label: string }[] }
 export interface PlanOutlineEntregable { id: string; name: string; activities: PlanOutlineActivity[] }
-export interface PlanOutline { planKey: string; projectId: string; cronoId?: string; cronoName?: string; entregables: PlanOutlineEntregable[] }
+export interface PlanOutline { planKey: string; projectId: string; cronoId?: string; cronoName?: string; startDate?: string; entregables: PlanOutlineEntregable[] }
 
 export function impactKey(i: PlanImpact) { return `${i.planKey}|${i.entregableId}|${i.actIdx}|${i.etapaId ?? ''}`; }
 
