@@ -13,17 +13,18 @@ import { sincronizarPlanDesdeTablero } from '../lib/planTablero';
 
 const ROLE_PERMS: Record<string, {
   canCreate: boolean; canEdit: boolean; canAssign: boolean;
-  canDelete: boolean; canMove: boolean; canComment: boolean;
+  canDelete: boolean; canMove: boolean; canComment: boolean; canLink: boolean;
 }> = {
-  account_manager: { canCreate:true, canEdit:true, canAssign:true, canDelete:true, canMove:true, canComment:true },
-  pm:           { canCreate:true,  canEdit:true,  canAssign:true,  canDelete:true,  canMove:true,  canComment:true  },
-  tech_lead:    { canCreate:true,  canEdit:true,  canAssign:true,  canDelete:true,  canMove:true,  canComment:true  },
-  developer:    { canCreate:false, canEdit:false, canAssign:false, canDelete:false, canMove:true,  canComment:true  },
+  account_manager: { canCreate:true, canEdit:true, canAssign:true, canDelete:true, canMove:true, canComment:true, canLink:true },
+  pm:           { canCreate:true,  canEdit:true,  canAssign:true,  canDelete:true,  canMove:true,  canComment:true, canLink:true  },
+  tech_lead:    { canCreate:true,  canEdit:true,  canAssign:true,  canDelete:true,  canMove:true,  canComment:true, canLink:true  },
+  developer:    { canCreate:false, canEdit:false, canAssign:false, canDelete:false, canMove:true,  canComment:true, canLink:true  },
 };
 // Ahora los permisos salen de la matriz (Herramientas › Roles y permisos); ROLE_PERMS queda como referencia
 const PERM_MAP: Record<keyof typeof ROLE_PERMS.pm, string> = {
   canCreate: 'tasks.manage', canEdit: 'tasks.manage', canDelete: 'tasks.manage',
   canAssign: 'tasks.assign', canMove: 'tasks.update_status', canComment: 'tasks.comment',
+  canLink: 'tasks.link',
 };
 function perm(role: string, key: keyof typeof ROLE_PERMS.pm) {
   return canAccess(role as any, PERM_MAP[key]);
@@ -108,6 +109,9 @@ function TaskDrawer({ task, allUsers, role, onSave, onDelete, onClose }: DrawerP
   if (!t) return null;
 
   const canEdit   = permIn(user, t.projectId, 'canEdit');
+  // Adjuntar enlaces va aparte de editar la tarea: un developer documenta su
+  // propio trabajo (PR, evidencia, Confluence) sin poder tocar título ni fechas.
+  const canLink   = permIn(user, t.projectId, 'canLink');
   const canAssign = permIn(user, t.projectId, 'canAssign');
   const canDelete = permIn(user, t.projectId, 'canDelete');
   void role;
@@ -314,14 +318,14 @@ function TaskDrawer({ task, allUsers, role, onSave, onDelete, onClose }: DrawerP
           <div style={{ marginBottom:16 }}>
             <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:7 }}>
               <p style={{ margin:0, fontSize:10, fontWeight:700, color:'#374151', textTransform:'uppercase', letterSpacing:'.04em' }}>Adjuntos / Links</p>
-              {canEdit && (
+              {canLink && (
                 <button onClick={()=>setShowAddLink(v=>!v)}
                   style={{ fontSize:9, padding:'2px 8px', borderRadius:5, background:'#f1f5f9', border:'none', cursor:'pointer', color:'#374151', fontWeight:600 }}>
                   {showAddLink ? 'Cancelar' : '+ Añadir'}
                 </button>
               )}
             </div>
-            {showAddLink && canEdit && (
+            {showAddLink && canLink && (
               <div style={{ padding:'8px 10px', background:'#f8fafc', borderRadius:7, border:'0.5px solid #e2e8f0', marginBottom:6 }}>
                 <input placeholder="Título del enlace" value={newLinkTitle} onChange={e=>setNewLinkTitle(e.target.value)}
                   style={{ width:'100%', fontSize:11, padding:'4px 7px', border:'1px solid #e2e8f0', borderRadius:5, outline:'none', marginBottom:5 }}/>
@@ -338,7 +342,7 @@ function TaskDrawer({ task, allUsers, role, onSave, onDelete, onClose }: DrawerP
               <div key={l.id} style={{ display:'flex', alignItems:'center', gap:6, padding:'4px 0' }}>
                 <LinkIcon size={10} color="#64748b"/>
                 <a href={l.url} target="_blank" rel="noreferrer" style={{ fontSize:11, color:'#2563eb', fontWeight:500, flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{l.title}</a>
-                {canEdit && (
+                {canLink && (
                   <button onClick={()=>save({ links:(t.links??[]).filter(x=>x.id!==l.id) })}
                     style={{ border:'none', background:'none', cursor:'pointer', color:'#94a3b8', padding:0, display:'flex' }}><X size={10}/></button>
                 )}

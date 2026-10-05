@@ -28,6 +28,7 @@ export const PERMISSIONS: PermissionDef[] = [
   { id: 'tasks.update_status', module: 'Tablero', label: 'Mover tareas de estado' },
   { id: 'tasks.assign',        module: 'Tablero', label: 'Asignar tareas' },
   { id: 'tasks.comment',       module: 'Tablero', label: 'Comentar tareas' },
+  { id: 'tasks.link',          module: 'Tablero', label: 'Adjuntar enlaces a una tarea' },
   { id: 'bitacora.view',       module: 'Tareas · cambios funcionales', label: 'Ver cambios funcionales' },
   { id: 'bitacora.write',      module: 'Tareas · cambios funcionales', label: 'Registrar cambios funcionales' },
   { id: 'circuitos.view',      module: 'Circuitos BBVA', label: 'Ver circuitos' },
@@ -67,7 +68,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, string[]> = {
   tech_lead: [
     'plan.view', 'plan.edit_progress', 'plan.manage_issues', 'plan.export',
     'estimaciones.view', 'estimaciones.edit',
-    'tasks.view', 'tasks.manage', 'tasks.update_status', 'tasks.assign', 'tasks.comment',
+    'tasks.view', 'tasks.manage', 'tasks.update_status', 'tasks.assign', 'tasks.comment', 'tasks.link',
     'bitacora.view', 'bitacora.write', 'circuitos.view', 'circuitos.edit',
     'inventario.view', 'inventario.edit', 'inventario.configure', 'links.edit', 'imputaciones.edit',
     'tr.view', 'tr.load_own', 'tr.load_any', 'tr.manage_features',
@@ -76,7 +77,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, string[]> = {
   // Desarrollador: ve lo suyo, mueve sus tareas, reporta bloqueantes, carga su TR
   developer: [
     'plan.manage_issues',
-    'tasks.view', 'tasks.update_status', 'tasks.comment',
+    'tasks.view', 'tasks.update_status', 'tasks.comment', 'tasks.link',
     'bitacora.view', 'bitacora.write', 'circuitos.view',
     'inventario.view', 'inventario.edit',
     'tr.view', 'tr.load_own',
