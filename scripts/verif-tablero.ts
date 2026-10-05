@@ -8,7 +8,7 @@ const store: Record<string, string> = {};
   removeItem: (k: string) => { delete store[k]; },
 };
 
-const { adminStore } = await import('../src/lib/adminStore');
+const { adminStore, PRIORIDADES, ESTADOS_KANBAN, normalizaTarea } = await import('../src/lib/adminStore');
 const { sincronizarAsignados, sincronizarPlanDesdeTablero, reconciliarTablero, fechasDeActividad } =
   await import('../src/lib/planTablero');
 
@@ -33,6 +33,22 @@ ok(t.fromPlan === true && t.isLocked === true, 'nace marcada fromPlan e isLocked
 ok(t.projectId === 'MIGBD' && t.entregableId === 'ent-dev' && t.actIdx === 3, 'queda vinculada a la actividad');
 ok(t.title === META.titulo, 'toma el nombre de la actividad');
 ok(t.status === 'backlog', 'entra al backlog');
+
+// ── 1b. Los valores tienen que existir en el catálogo ───────────────────────
+// Una tarjeta con priority:'media' (minúscula) dejaba el tablero en blanco:
+// PRIORITY_COLORS['media'] es undefined y la vista leía .bg sobre undefined.
+console.log('\n── Valores del catálogo ──');
+ok(PRIORIDADES.includes(t.priority), `priority "${t.priority}" está en ${PRIORIDADES.join(' | ')}`);
+ok(ESTADOS_KANBAN.includes(t.status), `status "${t.status}" está en ${ESTADOS_KANBAN.join(' | ')}`);
+
+// y lo que ya esté guardado con un valor inválido se cura al leer
+const sucia = normalizaTarea({ id:'x', priority:'media', status:'en_curso', assigneeIds:null });
+ok(sucia.priority === 'Media', `normaliza "media" → "${sucia.priority}"`);
+ok(sucia.status === 'backlog', `normaliza un estado desconocido → "${sucia.status}"`);
+ok(Array.isArray(sucia.assigneeIds) && Array.isArray(sucia.links) && Array.isArray(sucia.comments),
+   'rellena las listas que falten, para que la vista nunca itere sobre null');
+ok(normalizaTarea({ id:'y', priority:'Alta', status:'done' }).priority === 'Alta',
+   'no toca una prioridad que ya es válida');
 
 // ── 2. Fechas reales, en días hábiles ────────────────────────────────────────
 console.log('\n── Fechas ──');
@@ -69,7 +85,7 @@ ok(tareas().length === 0, 'el tablero queda limpio');
 // con trabajo encima no se borra: se queda sin asignados
 sincronizarAsignados('MIGBD', 'ent-dev', 3, ['u-santiago'], META, HOL);
 let conTrabajo = tareas();
-conTrabajo[0] = { ...conTrabajo[0], status: 'en_curso' };
+conTrabajo[0] = { ...conTrabajo[0], status: 'in-progress' };
 adminStore.saveKanbanTasks(conTrabajo);
 ok(sincronizarAsignados('MIGBD', 'ent-dev', 3, [], META, HOL) === 'actualizada',
    'una tarjeta ya en curso no se borra');
@@ -126,7 +142,7 @@ ok(tareas().length === 3, 'sigue habiendo 3 tarjetas');
 
 // no toca una tarjeta que el equipo ya movió
 let movida = tareas();
-movida[0] = { ...movida[0], status: 'hecho', title: 'renombrada a mano' };
+movida[0] = { ...movida[0], status: 'done', title: 'renombrada a mano' };
 adminStore.saveKanbanTasks(movida);
 reconciliarTablero(planes, HOL);
 ok(tareas().find(x => x.id === movida[0].id)!.title === 'renombrada a mano',
