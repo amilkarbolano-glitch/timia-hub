@@ -118,3 +118,44 @@ console.log('\n── Rol principal del badge ──');
   console.log(bf === 0 ? 'rol principal OK' : `rol principal: ${bf} fallas`);
   if (bf) process.exit(1);
 }
+
+// ── Matriz guardada vs permisos nuevos ────────────────────────────────────────
+// Un permiso añadido al catálogo después de que alguien guardara la matriz desde
+// Roles y permisos nacía apagado para todos, sin ninguna señal. Así se perdió
+// tasks.link: la matriz de producción tenía los 5 roles con listas explícitas.
+console.log('\n── Matriz guardada y permisos nuevos ──');
+{
+  const { DEFAULT_ROLE_PERMISSIONS: DEF, ALL_PERMISSIONS: ALL, currentMatrix, saveMatrix } = await import('../src/lib/permissions');
+  const store: Record<string, string> = {};
+  (globalThis as any).localStorage = {
+    getItem: (k: string) => store[k] ?? null,
+    setItem: (k: string, v: string) => { store[k] = v; },
+    removeItem: (k: string) => { delete store[k]; },
+  };
+  const sinPermiso = (perm: string) => Object.fromEntries(
+    Object.entries(DEF).map(([r, ps]) => [r, (ps as string[]).filter(p => p !== perm)]));
+
+  // como estaba en producción: listas explícitas, guardadas antes de que existiera tasks.link
+  store.timia_role_permissions = JSON.stringify(sinPermiso('tasks.link'));
+  let m = currentMatrix();
+  ok(m.developer.includes('tasks.link'), 'un permiso nuevo llega al developer (que lo tiene por defecto)');
+  ok(m.tech_lead.includes('tasks.link'), 'y al líder técnico');
+  ok(!m.developer.includes('plan.view'), 'no se cuelan permisos que el developer no tiene por defecto');
+
+  // un permiso viejo quitado a mano sigue quitado
+  store.timia_role_permissions = JSON.stringify(sinPermiso('tasks.comment'));
+  ok(!currentMatrix().developer.includes('tasks.comment'), 'lo que el admin quitó de un permiso ya existente no vuelve');
+
+  // al guardar se anota el catálogo, y a partir de ahí lo guardado manda sobre todo
+  (globalThis as any).fetch = undefined;
+  saveMatrix(sinPermiso('tasks.link'));
+  const guardado = JSON.parse(store.timia_role_permissions);
+  ok(Array.isArray(guardado._catalog) && guardado._catalog.length === ALL.length,
+     `saveMatrix anota el catálogo vigente (${guardado._catalog?.length} permisos)`);
+  m = currentMatrix();
+  ok(!m.developer.includes('tasks.link'), 'quitarlo ahora, con el catálogo anotado, sí se respeta');
+  ok(!('_catalog' in m), '_catalog no aparece como si fuera un rol');
+}
+
+console.log(f === 0 ? '\nmatriz de permisos OK' : `\n${f} fallas`);
+if (f) process.exit(1);

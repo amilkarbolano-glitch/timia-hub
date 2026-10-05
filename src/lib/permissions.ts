@@ -162,6 +162,30 @@ export function allRoleMeta(): Record<string, { name: string; description: strin
 }
 
 /** Matriz vigente: defaults + ajustes guardados por el PM (el PM siempre tiene todo). */
+// Catálogo anterior a que la matriz empezara a anotar el suyo en "_catalog".
+// Las matrices guardadas antes no dicen qué permisos existían al guardarse; esta
+// lista lo zanja sin adivinar. Es una foto fija: no se le añade nada nuevo.
+// Espejo de CATALOGO_HEREDADO en el backend.
+const CATALOGO_HEREDADO: readonly string[] = [
+  'projects.view_all', 'projects.create', 'projects.manage', 'team.manage', 'roles.manage',
+  'config.manage', 'plan.view', 'plan.edit_progress', 'plan.manage_issues', 'plan.export',
+  'estimaciones.view', 'estimaciones.edit', 'estimaciones.generate', 'tasks.view',
+  'tasks.manage', 'tasks.update_status', 'tasks.assign', 'tasks.comment', 'bitacora.view',
+  'bitacora.write', 'circuitos.view', 'circuitos.edit', 'inventario.view', 'inventario.edit',
+  'inventario.configure', 'links.edit', 'imputaciones.edit', 'tr.view', 'tr.load_own',
+  'tr.load_any', 'tr.manage_features', 'analytics.view', 'bank_status.view', 'standup.generate',
+  'audit.view'
+];
+
+/** Qué permisos existían cuando se guardó la matriz (se anota en "_catalog").
+ *  Sin esa anotación no se adivina: deducirlo de la unión de los roles haría que
+ *  un permiso quitado de todos los roles se viera igual que uno que no existía. */
+function catalogoGuardado(stored: Record<string, unknown>): Set<string> {
+  const anotado = stored._catalog;
+  if (Array.isArray(anotado) && anotado.length) return new Set(anotado.filter(p => typeof p === 'string'));
+  return new Set(CATALOGO_HEREDADO);
+}
+
 export function currentMatrix(): Record<string, string[]> {
   const out: Record<string, string[]> = { ...DEFAULT_ROLE_PERMISSIONS };
   for (const r of customRoles()) out[r.id] = r.permissions;
@@ -169,8 +193,16 @@ export function currentMatrix(): Record<string, string[]> {
     const raw = localStorage.getItem(KEY);
     const stored = raw ? JSON.parse(raw) : null;
     if (stored && typeof stored === 'object') {
+      // Lo guardado manda, pero solo sobre los permisos que existían al guardarlo.
+      // Antes mandaba sobre todo: un permiso nuevo nacía apagado para todos en
+      // cuanto alguien hubiera pulsado Guardar alguna vez. Pasó con tasks.link.
+      const conocidos = catalogoGuardado(stored);
+      const nuevos = ALL_PERMISSIONS.filter(p => !conocidos.has(p));
       (Object.keys(out) as UserRole[]).forEach(r => {
-        if (Array.isArray(stored[r])) out[r] = stored[r].filter((p: unknown) => typeof p === 'string' && ALL_PERMISSIONS.includes(p as string));
+        if (!Array.isArray(stored[r])) return;
+        const elegidos = stored[r].filter((p: unknown) => typeof p === 'string' && ALL_PERMISSIONS.includes(p as string));
+        const heredados = (out[r] ?? []).filter(p => nuevos.includes(p) && !elegidos.includes(p));
+        out[r] = [...elegidos, ...heredados];
       });
     }
   } catch {}
@@ -254,7 +286,9 @@ export function hasPermission(role: string | undefined, permission: string): boo
   return currentMatrix()[r]?.includes(p) ?? false;
 }
 
-/** Guarda la matriz (solo PM; el servidor también lo verifica). */
+/** Guarda la matriz (solo PM; el servidor también lo verifica).
+ *  Se anota el catálogo vigente para saber, más adelante, qué permisos decidió
+ *  el administrador y cuáles aparecieron después (esos siguen el default). */
 export function saveMatrix(matrix: Record<string, string[]>): void {
-  persistSet(KEY, matrix);   // localStorage + API (el servidor la aplica en la siguiente petición)
+  persistSet(KEY, { ...matrix, _catalog: ALL_PERMISSIONS });   // localStorage + API
 }
