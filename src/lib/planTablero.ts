@@ -63,7 +63,7 @@ export function tarjetaDesdeActividad(
     id: `plan-${projectId}-${cronoId ?? 'main'}-${entregableId}-${actIdx}`,
     title: meta.titulo,
     description: meta.entregableName ? `Plan de trabajo · ${meta.entregableName}` : 'Plan de trabajo',
-    priority: 'media',
+    priority: 'Media',
     startDate, endDate,
     status: 'backlog',
     assigneeIds,

@@ -44,6 +44,10 @@ const COLUMNS: { id: KanbanStatus; title: string; color: string; dot: string }[]
   { id: 'done',        title: 'Finalizado',    color: '#f0fdf4', dot: '#22c55e' },
 ];
 
+const PRIORITY_FALLBACK = { bg:'#f1f5f9', text:'#475569' };
+/** Nunca indexar PRIORITY_COLORS directo: un valor inesperado dejaba la vista en blanco. */
+const prioColor = (p: unknown) => PRIORITY_COLORS[p as Priority] ?? PRIORITY_FALLBACK;
+
 const PRIORITY_COLORS: Record<Priority, { bg: string; text: string }> = {
   Baja:    { bg:'#f1f5f9', text:'#475569' },
   Media:   { bg:'#dbeafe', text:'#1d4ed8' },
@@ -200,11 +204,11 @@ function TaskDrawer({ task, allUsers, role, onSave, onDelete, onClose }: DrawerP
             )}
             {canEdit ? (
               <select value={t.priority} onChange={e => save({ priority: e.target.value as Priority })}
-                style={{ fontSize:10, padding:'2px 6px', borderRadius:5, border:'1px solid #e2e8f0', background: PRIORITY_COLORS[t.priority].bg, color: PRIORITY_COLORS[t.priority].text, fontWeight:600, cursor:'pointer' }}>
+                style={{ fontSize:10, padding:'2px 6px', borderRadius:5, border:'1px solid #e2e8f0', background: prioColor(t.priority).bg, color: prioColor(t.priority).text, fontWeight:600, cursor:'pointer' }}>
                 {(['Baja','Media','Alta','Crítica'] as Priority[]).map(p => <option key={p} value={p}>{p}</option>)}
               </select>
             ) : (
-              <span style={{ fontSize:10, padding:'2px 8px', borderRadius:5, fontWeight:600, background: PRIORITY_COLORS[t.priority].bg, color: PRIORITY_COLORS[t.priority].text }}>{t.priority}</span>
+              <span style={{ fontSize:10, padding:'2px 8px', borderRadius:5, fontWeight:600, background: prioColor(t.priority).bg, color: prioColor(t.priority).text }}>{t.priority}</span>
             )}
           </div>
         </div>
@@ -646,7 +650,7 @@ export default function KanbanBoard({ userRole }: KanbanBoardProps) {
                                   {/* Priority + project */}
                                   <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:6 }}>
                                     <div style={{ display:'flex', gap:4, alignItems:'center' }}>
-                                      <span style={{ fontSize:9, fontWeight:700, padding:'1px 6px', borderRadius:4, background:PRIORITY_COLORS[task.priority].bg, color:PRIORITY_COLORS[task.priority].text }}>{task.priority}</span>
+                                      <span style={{ fontSize:9, fontWeight:700, padding:'1px 6px', borderRadius:4, background:prioColor(task.priority).bg, color:prioColor(task.priority).text }}>{task.priority}</span>
                                       {proj && <span style={{ fontSize:8, fontWeight:700, padding:'1px 5px', borderRadius:4, background:proj.color+'18', color:proj.color }}>{proj.id}</span>}
                                       {task.jiraId && <span style={{ fontSize:8, fontWeight:600, padding:'1px 5px', borderRadius:4, background:'#dbeafe', color:'#1d4ed8' }}>{task.jiraId}</span>}
                                     </div>

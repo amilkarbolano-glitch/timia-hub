@@ -178,6 +178,19 @@ export interface KanbanTask {
 
 const DEFAULT_KANBAN_TASKS: KanbanTask[] = [];
 
+export const PRIORIDADES: Priority[] = ['Baja', 'Media', 'Alta', 'Crítica'];
+export const ESTADOS_KANBAN: KanbanStatus[] = ['backlog', 'in-progress', 'review', 'done'];
+
+/** Deja una tarjeta con valores del catálogo. Lo que no reconoce, lo lleva al default. */
+export function normalizaTarea(t: any): KanbanTask {
+  const prioridad = PRIORIDADES.find(p => p.toLowerCase() === String(t?.priority ?? '').toLowerCase());
+  const estado    = ESTADOS_KANBAN.find(e => e === t?.status);
+  return { ...t, priority: prioridad ?? 'Media', status: estado ?? 'backlog',
+           assigneeIds: Array.isArray(t?.assigneeIds) ? t.assigneeIds : [],
+           links: Array.isArray(t?.links) ? t.links : [],
+           comments: Array.isArray(t?.comments) ? t.comments : [] };
+}
+
 // ─── Plan de Trabajo — Etapas y trazabilidad ─────────────────────────────────
 
 /** Una etapa dentro de una actividad del plan */
@@ -565,8 +578,11 @@ export const adminStore = {
       .sort((a, b) => (a.cronoId ? 1 : 0) - (b.cronoId ? 1 : 0));
   },
 
-  // Kanban tasks — merges new default tasks on every load (migration-safe)
-  getKanbanTasks: (): KanbanTask[] => load('kanban_tasks', DEFAULT_KANBAN_TASKS),
+  // Kanban tasks — se sanean al leer: una tarjeta guardada con una prioridad o un
+  // estado fuera del catálogo tumbaba el tablero entero (PRIORITY_COLORS[x] era
+  // undefined y se leía .bg sobre undefined). Normalizar aquí repara también lo
+  // que ya esté en la base, sin migración aparte.
+  getKanbanTasks: (): KanbanTask[] => load<KanbanTask[]>('kanban_tasks', DEFAULT_KANBAN_TASKS).map(normalizaTarea),
   saveKanbanTasks: (t: KanbanTask[]) => save('kanban_tasks', t),
 
   // Imputaciones Jira
