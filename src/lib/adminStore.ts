@@ -576,16 +576,4 @@ export const adminStore = {
   // Activity done dates: key = `${projectId}-${entregableId}-${actIdx}`
   getActivityDoneDates: (): Record<string, string> => persistGet('timia_activity_done_dates', {}),
   saveActivityDoneDates: (d: Record<string, string>) => persistSet('timia_activity_done_dates', d),
-
-  // Sync a specific plan-activity assignee to its kanban card
-  // planKey puede ser `${projectId}` o `${projectId}::${cronoId}`
-  syncKanbanAssignees: (planKey: string, entregableId: string, actIdx: number, assigneeIds: string[]) => {
-    const { projectId, cronoId } = splitPlanKey(planKey);
-    const tasks = load<KanbanTask[]>('kanban_tasks', DEFAULT_KANBAN_TASKS);
-    const idx = tasks.findIndex(t => t.projectId === projectId && (t.cronoId ?? undefined) === cronoId && t.entregableId === entregableId && t.actIdx === actIdx);
-    if (idx >= 0) {
-      tasks[idx] = { ...tasks[idx], assigneeIds };
-      save('kanban_tasks', tasks);
-    }
-  },
 };

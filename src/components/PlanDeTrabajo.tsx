@@ -9,6 +9,7 @@ import { FlowStepper } from './SetupProject';
 import ImpactPicker, { ImpactChips, impactLabel, type PlanOutline } from './ImpactPicker';
 import { persistSet } from '../lib/persist';
 import { snapToBusinessDay, addBusinessDays, computeBusinessWeekIdx, dateToBusinessWeekIdx, businessDaysBetween } from '../lib/businessDays';
+import { sincronizarAsignados, reconciliarTablero, type MetaActividad } from '../lib/planTablero';
 import {
   adminStore,
   type PlanEtapa, type EtapaStates, type PlanHistorialEntry,
@@ -2217,7 +2218,7 @@ export function getPlanSummaries(): PlanSummary[] {
 export function getPlanOutlines(projectId?: string): PlanOutline[] {
   return buildEffectivePlans()
     .filter(p => !projectId || p.projectId === projectId)
-    .map(p => ({ planKey: p.planKey, projectId: p.projectId, cronoId: p.cronoId, cronoName: p.cronoName,
+    .map(p => ({ planKey: p.planKey, projectId: p.projectId, cronoId: p.cronoId, cronoName: p.cronoName, startDate: p.startDate,
       entregables: p.entregables.map(e => ({ id: e.id, name: e.name, activities: e.activities.map(a => ({ name: a.name, startWeek: a.startWeek, endWeek: a.endWeek, etapas: a.etapas?.map(x => ({ id: x.id, label: x.label })) })) })) }));
 }
 
@@ -2227,6 +2228,21 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
   const [effectivePlans, setEffectivePlans] = useState<WorkPlan[]>(buildEffectivePlans);
   // Refrescar en cada mount (puede venir de Estimaciones con nuevo plan)
   useEffect(() => { setEffectivePlans(buildEffectivePlans()); }, []);
+
+  // Las asignaciones hechas antes de que el plan creara tarjetas quedaron sin
+  // tarjeta, así que el asignado no las veía. Se reconstruyen una vez al abrir
+  // el plan — solo en los proyectos donde este usuario puede gestionar tareas,
+  // porque es él quien firma la escritura ante el servidor.
+  useEffect(() => {
+    const planes = buildEffectivePlans()
+      .filter(p => canInProject(user, 'tasks.manage', p.projectId))
+      .map(p => ({ planKey: p.planKey, startDate: p.startDate,
+        entregables: p.entregables.map(e => ({ id: e.id, name: e.name,
+          activities: e.activities.map(a => ({ name: a.name, startWeek: a.startWeek, endWeek: a.endWeek })) })) }));
+    if (!planes.length) return;
+    const n = reconciliarTablero(planes, new Set(adminStore.getHolidays().map(h => h.date)));
+    if (n) console.info(`[plan→tablero] ${n} tarjeta(s) creadas para asignaciones que no tenían`);
+  }, [user?.id]);
 
   // Filtrar según rol del usuario
   // Un plan se ve si el usuario tiene plan.view con su rol EN ese proyecto (p.ej. dev en FICO no lo ve)
@@ -2397,30 +2413,44 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
     adminStore.saveEtapaStates(nextEtapaStates); adminStore.savePlanPcts(nextPctOverrides); adminStore.saveHistorial(nextHistorial); adminStore.saveActivityDoneDates(nextDone2);
   }
 
-  function handleAssigneeAdd(userId: string) {
+  /** Datos de la actividad del drawer que la tarjeta del tablero necesita. */
+  function metaDelDrawer(): MetaActividad | undefined {
+    if (!drawer) return undefined;
+    const { projectId: planKey, entregableId, actIdx, act } = drawer;
+    const plan = effectivePlans.find(p => p.planKey === planKey);
+    const ent  = plan?.entregables.find(e => e.id === entregableId);
+    return {
+      titulo: act.name,
+      entregableName: ent?.name,
+      startWeek: act.startWeek, endWeek: act.endWeek,
+      planStartDate: plan?.startDate,
+      jiraId: activityJiras[`${planKey}__${entregableId}__${actIdx}`],
+    };
+  }
+
+  /** Guarda los asignados y deja la tarjeta del tablero en línea con ellos. */
+  function guardarAsignados(newIds: string[]) {
     if (!drawer) return;
-    const { projectId, entregableId, actIdx } = drawer;
-    const k = `${projectId}__${entregableId}__${actIdx}`;
-    const current = activityAssignees[k] ?? [];
-    if (current.includes(userId)) return;
-    const newIds = [...current, userId];
+    const { projectId: planKey, entregableId, actIdx } = drawer;
+    const k = `${planKey}__${entregableId}__${actIdx}`;
     const next = { ...activityAssignees, [k]: newIds };
     setActivityAssignees(next);
     adminStore.saveActivityAssignees(next);
-    // Sync al Kanban: si existe una tarea vinculada a este plan, actualiza sus assignees
-    adminStore.syncKanbanAssignees(projectId, entregableId, actIdx, newIds);
+    // El tablero es donde el asignado ve su trabajo: si no existe la tarjeta, se crea.
+    sincronizarAsignados(planKey, entregableId, actIdx, newIds, metaDelDrawer(), holidays);
+  }
+
+  function handleAssigneeAdd(userId: string) {
+    if (!drawer) return;
+    const current = activityAssignees[`${drawer.projectId}__${drawer.entregableId}__${drawer.actIdx}`] ?? [];
+    if (current.includes(userId)) return;
+    guardarAsignados([...current, userId]);
   }
 
   function handleAssigneeRemove(userId: string) {
     if (!drawer) return;
-    const { projectId, entregableId, actIdx } = drawer;
-    const k = `${projectId}__${entregableId}__${actIdx}`;
-    const newIds = (activityAssignees[k] ?? []).filter(id => id !== userId);
-    const next = { ...activityAssignees, [k]: newIds };
-    setActivityAssignees(next);
-    adminStore.saveActivityAssignees(next);
-    // Sync al Kanban: si existe una tarea vinculada a este plan, actualiza sus assignees
-    adminStore.syncKanbanAssignees(projectId, entregableId, actIdx, newIds);
+    const current = activityAssignees[`${drawer.projectId}__${drawer.entregableId}__${drawer.actIdx}`] ?? [];
+    guardarAsignados(current.filter(id => id !== userId));
   }
 
   async function handleExportPptx() {

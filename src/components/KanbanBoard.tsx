@@ -7,6 +7,7 @@ import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth, PROJECTS, canAccess, canInProject, effectiveRole, ROLE_LABEL } from '../contexts/AuthContext';
 import { adminStore, makePlanKey, type KanbanTask, type KanbanStatus, type AdminUser, type Priority } from '../lib/adminStore';
+import { sincronizarPlanDesdeTablero } from '../lib/planTablero';
 
 // ─── Permisos por rol ─────────────────────────────────────────────────────────
 
@@ -462,9 +463,11 @@ export default function KanbanBoard({ userRole }: KanbanBoardProps) {
       ? [...tasks.slice(0,idx), t, ...tasks.slice(idx+1)]
       : [...tasks, t];
     save(updated);
-    // Sincronizar asignados de vuelta al Plan de Trabajo si es tarea de plan
+    // Sincronizar asignados de vuelta al Plan de Trabajo si es tarea de plan.
+    // Antes esto llamaba a syncKanbanAssignees, que reescribía la tarjeta que
+    // acabábamos de guardar en vez de tocar las asignaciones del plan.
     if (t.fromPlan && t.projectId && t.entregableId !== undefined && t.actIdx !== undefined) {
-      adminStore.syncKanbanAssignees(makePlanKey(t.projectId, t.cronoId), t.entregableId, t.actIdx, t.assigneeIds);
+      sincronizarPlanDesdeTablero(makePlanKey(t.projectId, t.cronoId), t.entregableId, t.actIdx, t.assigneeIds);
     }
     setDrawer(updated.find(x => x.id === t.id) ?? null);
   }
