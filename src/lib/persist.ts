@@ -146,14 +146,31 @@ export async function loadFromApi(): Promise<Record<string, unknown> | null> {
   }
 }
 
-async function flush(key: string) {
+async function flush(key: string, reintento = 0) {
   const value = state.queue.get(key);
   state.queue.delete(key);
   state.pending.delete(key);
   if (state.mode !== 'api' || state.base === null) return;
   try {
     const res = await fetchWithTimeout(`${state.base}/api/state/${encodeURIComponent(key)}`, { method: 'PUT', headers: headers(), body: JSON.stringify({ value }) }, 10000);
-    if (res.status === 401) { state.sessionLost = true; notify(); return; }   // sesión caducada: no reintentar
+    if (res.status === 401) {
+      // Un 401 en una escritura no siempre es la sesión caducada: el servidor
+      // también responde así si no encuentra al usuario en ese instante. Antes se
+      // asumía lo peor, se deslogueaba y la escritura se perdía. Ahora se
+      // pregunta a /api/auth/me: si la sesión está viva, se reintenta una vez.
+      const viva = await apiMe().catch(() => null);
+      if (viva && reintento === 0) {
+        state.queue.set(key, value);
+        state.pending.set(key, setTimeout(() => flush(key, 1), 600));
+        notify(); return;
+      }
+      if (viva) {                                   // sigue fallando: avisar sin desloguear
+        state.failures++;
+        state.lastError = { key, detail: 'El servidor rechazó la escritura (401) pero la sesión sigue activa', at: Date.now() };
+        notify(); return;
+      }
+      state.sessionLost = true; notify(); return;    // la sesión sí caducó
+    }
     if (res.status === 403) {
       // Permiso denegado por el servidor: no reintentar, avisar y resincronizar esa colección
       let detail = 'Permiso denegado'; try { detail = (await res.json()).detail ?? detail; } catch {}
