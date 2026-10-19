@@ -17,7 +17,7 @@ import {
   issueImpacts, changeExtensionDays, makePlanKey, splitPlanKey, planKeyOf, CRONO_MAIN_NAME,
 } from '../lib/adminStore';
 import {
-  type PesoModo, PESO_MODO_DEFAULT, seriePlanConsolidada, marcasDe,
+  type PesoModo, PESO_MODO_DEFAULT, seriePlanConsolidada, seriePlanFase, marcasDe,
   enSemana, realPlan, type AvanceFase,
 } from '../lib/avance';
 
@@ -597,11 +597,13 @@ function ActivityDrawer({ projectId, entregableId, actIdx, act, effectivePct, et
 
 // ─── EntregableSection ────────────────────────────────────────────────────────
 
-function EntregableSection({ block, projectId, sectionIdx, getActivityPct, setActivityPct, esPctManual, onActivityClick, onGoEstimaciones, todayWeekIdx, getDoneDate, planStartDate, holidays, weekLabels, issues, changes, planKey }: {
+function EntregableSection({ block, projectId, sectionIdx, getActivityPct, setActivityPct, esPctManual, onActivityClick, onGoEstimaciones, todayWeekIdx, getDoneDate, planStartDate, holidays, weekLabels, issues, changes, planKey, pesoModo = PESO_MODO_DEFAULT, planWeeks }: {
   block: PlanEntregable; projectId: string; sectionIdx: number;
   getActivityPct: (i: number) => number;
   setActivityPct: (i: number, pct: number) => void;
   esPctManual?: (i: number) => boolean;
+  pesoModo?: PesoModo;
+  planWeeks?: number;
   onActivityClick: (i: number, act: PlanActivity) => void;
   onGoEstimaciones?: () => void;
   todayWeekIdx?: number;
@@ -645,12 +647,37 @@ function EntregableSection({ block, projectId, sectionIdx, getActivityPct, setAc
     : block.pctReal;
   // pctExp dinámico: promedio de lo que debería estar completado hoy según el Gantt
   // Esperado sobre la línea base y esperado replanificado (fin corrido por cambios funcionales)
-  const basePctExp = block.activities.length > 0 && todayWeekIdx !== undefined
-    ? parseFloat((block.activities.reduce((s, a) => s + computeActExpPct(a.startWeek, a.endWeek, todayWeekIdx), 0) / block.activities.length).toFixed(1))
-    : block.pctExp;
-  const dynamicPctExp = block.activities.length > 0 && todayWeekIdx !== undefined
-    ? parseFloat((block.activities.reduce((s, a, i) => s + computeActExpPct(a.startWeek, extensionFor(changes, planKey, block.id, i, a.endWeek, issues, holidays).effEndWeek, todayWeekIdx), 0) / block.activities.length).toFixed(1))
-    : block.pctExp;
+  // El esperado de la fase tiene que usar el mismo método que el resto del plan.
+  // Con 'actividad-semana' (el del Excel del PM) se cuenta por casillas: factor de
+  // la fase = 100 / casillas, acumulado hasta hoy. Antes esta insignia siempre
+  // contaba por actividades — "¿cuántas deberían estar al 100%?" — y en una fase
+  // cuyas tareas terminan todas más adelante daba 0% aunque ya hubiera semanas
+  // corridas. Es lo que pasaba en Componentes ADA: 0% aquí contra 25% en el Excel.
+  const faseAvance: AvanceFase = {
+    id: block.id, label: block.name,
+    activities: block.activities.map(a => ({ weeks: a.weeks, startWeek: a.startWeek, endWeek: a.endWeek })),
+  };
+  const semanasFase = planWeeks ?? Math.max(1, ...block.activities.map(a => a.endWeek));
+  const esperadoPorCasillas = (fase: AvanceFase) =>
+    todayWeekIdx === undefined ? block.pctExp
+      : parseFloat(enSemana(seriePlanFase(fase, semanasFase), todayWeekIdx + 1).toFixed(1));
+
+  const basePctExp = block.activities.length === 0 || todayWeekIdx === undefined
+    ? block.pctExp
+    : pesoModo === 'actividad-semana'
+      ? esperadoPorCasillas(faseAvance)
+      : parseFloat((block.activities.reduce((s, a) => s + computeActExpPct(a.startWeek, a.endWeek, todayWeekIdx), 0) / block.activities.length).toFixed(1));
+  const dynamicPctExp = block.activities.length === 0 || todayWeekIdx === undefined
+    ? block.pctExp
+    : pesoModo === 'actividad-semana'
+      ? esperadoPorCasillas({ ...faseAvance, activities: block.activities.map((a, i) => {
+          const eff = extensionFor(changes, planKey, block.id, i, a.endWeek, issues, holidays).effEndWeek;
+          const base = marcasDe({ weeks: a.weeks, startWeek: a.startWeek, endWeek: a.endWeek });
+          const extra: number[] = [];
+          for (let w = a.endWeek + 1; w <= eff; w++) extra.push(w);
+          return { weeks: [...base, ...extra], startWeek: a.startWeek, endWeek: eff };
+        }) })
+      : parseFloat((block.activities.reduce((s, a, i) => s + computeActExpPct(a.startWeek, extensionFor(changes, planKey, block.id, i, a.endWeek, issues, holidays).effEndWeek, todayWeekIdx), 0) / block.activities.length).toFixed(1));
   const sectionHasExt = block.activities.some((a, i) => extensionFor(changes, planKey, block.id, i, a.endWeek, issues, holidays).days > 0);
   const dif = parseFloat((effectivePctReal - dynamicPctExp).toFixed(1));
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
@@ -1231,6 +1258,7 @@ function PlanDetail({ plan, getActivityPct, setActivityPct, esPctManual, onActiv
             getActivityPct={i => getActivityPct(e.id,i,e.activities[i])}
             setActivityPct={(i,pct) => setActivityPct(e.id,i,pct)}
             esPctManual={i => esPctManual?.(e.id,i) ?? false}
+            pesoModo={pesoModo} planWeeks={planWeeks}
             onActivityClick={(i,a) => onActivityClick(e.id,i,a)}
             onGoEstimaciones={onGoEstimaciones}
             todayWeekIdx={todayWeekIdx}

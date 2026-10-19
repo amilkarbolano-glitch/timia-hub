@@ -20,6 +20,7 @@
     "verif:rol": "tsx scripts/verif-rol.ts",
     "verif:tablero": "tsx scripts/verif-tablero.ts",
     "verif:pct": "tsx scripts/verif-pct.ts",
+    "verif:esperado": "tsx scripts/verif-esperado.ts",
     "verif:tipos": "tsx scripts/verif-tipos.ts"
   },
   "dependencies": {
