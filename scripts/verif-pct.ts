@@ -50,5 +50,21 @@ ok(real === 70, `las subtareas dicen ${real}% (10+40+20)`);
 ok(calcular(spark, new Set(['spark-1','spark-2','spark-3']), 60, true) === 60,
    'pero el líder puede dejarlo en 60 sin desmarcar nada');
 
+// ── Que la interfaz no vuelva a cerrar la puerta ─────────────────────────────
+// La lógica puede estar bien y la celda no abrirse igual: pasó que startEdit ya
+// permitía editar con subtareas, pero el render seguía con
+//   {editing && !hasEtapas ? <input/> : <span/>}
+// así que el input nunca aparecía. tsc no ve esto; esta comprobación sí.
+console.log('\n── La celda del % se puede abrir ──');
+{
+  const src = await import('node:fs').then(fs => fs.readFileSync('src/components/PlanDeTrabajo.tsx', 'utf8'));
+  ok(!/\{\s*editing\s*&&\s*!hasEtapas\s*\?/.test(src),
+     'el input no está condicionado a que la actividad NO tenga subtareas');
+  ok(/function startEdit\(\)[\s\S]{0,220}if\s*\(!onPctChange \|\| isSubtask\)/.test(src),
+     'startEdit solo bloquea subtareas del Gantt, no actividades con etapas');
+  ok(/onClick=\{e => \{ e\.stopPropagation\(\); startEdit\(\); \}\}/.test(src),
+     'la celda llama a startEdit y no deja que el clic abra el drawer');
+}
+
 console.log(f === 0 ? '\n% manual OK' : `\n${f} fallas`);
 if (f) process.exit(1);
