@@ -158,10 +158,10 @@ function GanttCell({ wi, act, effectivePct, isSubtask, todayWeekIdx, issueMark, 
 
 // ─── GanttRow ─────────────────────────────────────────────────────────────────
 
-function GanttRow({ act, effectivePct, idx, expanded, onToggle, isSubtask = false, onPctChange, onActivityClick, todayWeekIdx, doneDateLabel, issues = [], issueWeeks, changes, ext }: {
+function GanttRow({ act, effectivePct, idx, expanded, onToggle, isSubtask = false, onPctChange, pctManual = false, onActivityClick, todayWeekIdx, doneDateLabel, issues = [], issueWeeks, changes, ext }: {
   act: PlanActivity; effectivePct: number; idx: number; expanded: boolean;
   onToggle: () => void; isSubtask?: boolean;
-  onPctChange?: (n: number) => void; onActivityClick?: () => void;
+  onPctChange?: (n: number) => void; pctManual?: boolean; onActivityClick?: () => void;
   todayWeekIdx?: number; doneDateLabel?: string;
   /** Alertas/bloqueantes abiertos que impactan esta actividad */
   issues?: PlanIssue[];
@@ -180,8 +180,13 @@ function GanttRow({ act, effectivePct, idx, expanded, onToggle, isSubtask = fals
   const [editing, setEditing] = useState(false);
   const [inputVal, setInputVal] = useState(String(effectivePct));
 
-  function startEdit() { if (!onPctChange || isSubtask || hasEtapas) return; setInputVal(String(effectivePct)); setEditing(true); }
-  function confirmEdit() { const n = Math.max(0, Math.min(100, parseInt(inputVal) || 0)); onPctChange?.(n); setEditing(false); }
+  function startEdit() { if (!onPctChange || isSubtask) return; setInputVal(String(effectivePct)); setEditing(true); }
+  function confirmEdit() {
+    // vacío → -1 avisa al padre de que hay que quitar el valor manual
+    const txt = inputVal.trim();
+    onPctChange?.(txt === '' ? -1 : Math.max(0, Math.min(100, parseInt(txt) || 0)));
+    setEditing(false);
+  }
 
   return (
     <tr style={{ background: hasBloq ? '#fff5f5' : hasAlert ? '#fffbeb' : isSubtask ? '#f8fffb' : idx % 2 === 0 ? '#fff' : '#fafafe' }}
@@ -231,9 +236,11 @@ function GanttRow({ act, effectivePct, idx, expanded, onToggle, isSubtask = fals
           <span style={{ display: 'inline-block', padding: '2px 6px', borderRadius: 6, fontSize: 10, fontWeight: 600,
             background: effectivePct >= 100 ? '#dcfce7' : effectivePct > 0 ? '#fef9c3' : '#f1f5f9',
             color: effectivePct >= 100 ? '#15803d' : effectivePct > 0 ? '#a16207' : '#94a3b8',
-            cursor: onPctChange && !isSubtask && !hasEtapas ? 'pointer' : 'default',
-            outline: onPctChange && !isSubtask && !hasEtapas ? '1.5px dashed #0d948850' : 'none' }}>
-            {effectivePct}%
+            cursor: onPctChange && !isSubtask ? 'pointer' : 'default',
+            outline: onPctChange && !isSubtask ? `1.5px dashed ${pctManual ? '#b4530950' : '#0d948850'}` : 'none' }}
+            title={pctManual ? 'Avance puesto a mano. Déjalo vacío para volver al que calculan las subtareas.'
+                             : (hasEtapas ? 'Lo calculan las subtareas. Clic para fijarlo a mano.' : 'Clic para editar')}>
+            {effectivePct}%{pctManual && <b style={{ marginLeft: 3, fontSize: 8, color: '#b45309' }}>·m</b>}
           </span>
         )}
       </td>
@@ -584,10 +591,11 @@ function ActivityDrawer({ projectId, entregableId, actIdx, act, effectivePct, et
 
 // ─── EntregableSection ────────────────────────────────────────────────────────
 
-function EntregableSection({ block, projectId, sectionIdx, getActivityPct, setActivityPct, onActivityClick, onGoEstimaciones, todayWeekIdx, getDoneDate, planStartDate, holidays, weekLabels, issues, changes, planKey }: {
+function EntregableSection({ block, projectId, sectionIdx, getActivityPct, setActivityPct, esPctManual, onActivityClick, onGoEstimaciones, todayWeekIdx, getDoneDate, planStartDate, holidays, weekLabels, issues, changes, planKey }: {
   block: PlanEntregable; projectId: string; sectionIdx: number;
   getActivityPct: (i: number) => number;
   setActivityPct: (i: number, pct: number) => void;
+  esPctManual?: (i: number) => boolean;
   onActivityClick: (i: number, act: PlanActivity) => void;
   onGoEstimaciones?: () => void;
   todayWeekIdx?: number;
@@ -693,7 +701,8 @@ function EntregableSection({ block, projectId, sectionIdx, getActivityPct, setAc
               {effectiveActivities.map((act, i) => (
                 <React.Fragment key={i}>
                   <GanttRow act={act} effectivePct={act.pct} idx={i} expanded={expanded.has(i)} onToggle={() => toggle(i)}
-                    onPctChange={v => setActivityPct(i, v)} onActivityClick={() => onActivityClick(i, block.activities[i])}
+                    onPctChange={v => setActivityPct(i, v)} pctManual={esPctManual?.(i) ?? false}
+                    onActivityClick={() => onActivityClick(i, block.activities[i])}
                     todayWeekIdx={todayWeekIdx} doneDateLabel={getDoneDate?.(i)}
                     issues={issuesFor(i).list} issueWeeks={issuesFor(i).weeks} changes={changesFor(i)} ext={extFor(i)}/>
                   {expanded.has(i) && act.subtasks?.map((sub, si) => (
@@ -959,7 +968,7 @@ function saveNotes(projectId: string, data: { pasos:string[]; alertas:string[]; 
   persistSet(`timia_notes_${projectId}`, data);
 }
 
-function PlanDetail({ plan, getActivityPct, setActivityPct, onActivityClick, onGoEstimaciones, getDoneDate, holidays, issues, onIssuesChange, userName, changes, outlines, canIssues = true }: {
+function PlanDetail({ plan, getActivityPct, setActivityPct, esPctManual, onActivityClick, onGoEstimaciones, getDoneDate, holidays, issues, onIssuesChange, userName, changes, outlines, canIssues = true }: {
   plan: WorkPlan;
   canIssues?: boolean;
   issues: PlanIssue[];
@@ -969,6 +978,7 @@ function PlanDetail({ plan, getActivityPct, setActivityPct, onActivityClick, onG
   userName: string;
   getActivityPct: (eid: string, ai: number, a: PlanActivity) => number;
   setActivityPct: (eid: string, ai: number, pct: number) => void;
+  esPctManual?: (eid: string, ai: number) => boolean;
   onActivityClick: (eid: string, ai: number, a: PlanActivity) => void;
   onGoEstimaciones?: () => void;
   holidays: Set<string>;
@@ -1214,6 +1224,7 @@ function PlanDetail({ plan, getActivityPct, setActivityPct, onActivityClick, onG
           <EntregableSection key={e.id} block={e} projectId={plan.projectId} sectionIdx={ei}
             getActivityPct={i => getActivityPct(e.id,i,e.activities[i])}
             setActivityPct={(i,pct) => setActivityPct(e.id,i,pct)}
+            esPctManual={i => esPctManual?.(e.id,i) ?? false}
             onActivityClick={(i,a) => onActivityClick(e.id,i,a)}
             onGoEstimaciones={onGoEstimaciones}
             todayWeekIdx={todayWeekIdx}
@@ -2345,21 +2356,36 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
 
   // ── Effective pct: fallback to act.pct if no etapa states set yet ──────────
   // NOTA: el primer parámetro es el planKey del cronograma (projectId para el principal).
+  /** % que suman las subtareas marcadas. null si la actividad no tiene o nadie las ha tocado. */
+  function pctDeEtapas(projectId: string, entregableId: string, actIdx: number, act: PlanActivity): number | null {
+    if (!act.etapas?.length) return null;
+    const clave = (id: string) => `${projectId}__${entregableId}__${actIdx}__${id}`;
+    if (!act.etapas.some(e => etapaStates[clave(e.id)] !== undefined)) return null;
+    return Math.min(100, act.etapas.reduce((sum, e) => sum + (etapaStates[clave(e.id)]?.done ? e.peso : 0), 0));
+  }
+
+  /** Avance de una actividad.
+   *  El % puesto a mano manda sobre el que calculan las subtareas: la suma de pesos
+   *  es una guía, no una camisa de fuerza, y el líder necesita poder ajustarla sin
+   *  tener que inventar marcas en las subtareas para llegar a la cifra real.
+   *  Borrando el valor manual se vuelve al cálculo automático. */
   function getActivityPct(projectId: string, entregableId: string, actIdx: number, act: PlanActivity): number {
-    if (act.etapas?.length) {
-      // Check if user has interacted with any etapa for this activity
-      const anyInteracted = act.etapas.some(e => {
-        const k = `${projectId}__${entregableId}__${actIdx}__${e.id}`;
-        return etapaStates[k] !== undefined;
-      });
-      if (!anyInteracted) return act.pct; // show original progress
-      return Math.min(100, act.etapas.reduce((sum, e) => {
-        const k = `${projectId}__${entregableId}__${actIdx}__${e.id}`;
-        return sum + (etapaStates[k]?.done ? e.peso : 0);
-      }, 0));
-    }
     const k = `${projectId}-${entregableId}-${actIdx}`;
-    return pctOverrides[k] !== undefined ? pctOverrides[k] : act.pct;
+    if (pctOverrides[k] !== undefined) return pctOverrides[k];
+    const deEtapas = pctDeEtapas(projectId, entregableId, actIdx, act);
+    return deEtapas !== null ? deEtapas : act.pct;
+  }
+
+  /** ¿El % de esta actividad está puesto a mano? */
+  function esPctManual(projectId: string, entregableId: string, actIdx: number): boolean {
+    return pctOverrides[`${projectId}-${entregableId}-${actIdx}`] !== undefined;
+  }
+
+  /** Quita el valor manual y devuelve la actividad al cálculo de sus subtareas. */
+  function quitarPctManual(entregableId: string, actIdx: number) {
+    const k = `${selected}-${entregableId}-${actIdx}`;
+    const next = { ...pctOverrides }; delete next[k];
+    setPctOverrides(next); adminStore.savePlanPcts(next);
   }
 
   function setActivityPctManual(entregableId: string, actIdx: number, pct: number) {
@@ -3040,7 +3066,8 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
             <PlanDetail
               plan={plan}
               getActivityPct={(eid,ai,a)=>getActivityPct(plan.planKey,eid,ai,a)}
-              setActivityPct={(eid,ai,pct)=>setActivityPctManual(eid,ai,pct)}
+              setActivityPct={(eid,ai,pct)=> pct < 0 ? quitarPctManual(eid,ai) : setActivityPctManual(eid,ai,pct)}
+              esPctManual={(eid,ai)=>esPctManual(selected,eid,ai)}
               onActivityClick={(eid,ai,a)=>setDrawer({projectId:plan.planKey,entregableId:eid,actIdx:ai,act:a})}
               onGoEstimaciones={onGoEstimaciones}
               getDoneDate={(eid,ai)=>getDoneDateLabel(plan.planKey,eid,ai)}
