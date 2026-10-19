@@ -180,7 +180,13 @@ function GanttRow({ act, effectivePct, idx, expanded, onToggle, isSubtask = fals
   const [editing, setEditing] = useState(false);
   const [inputVal, setInputVal] = useState(String(effectivePct));
 
-  function startEdit() { if (!onPctChange || isSubtask) return; setInputVal(String(effectivePct)); setEditing(true); }
+  function startEdit() {
+    if (!onPctChange || isSubtask) return;
+    // Si el % lo calculan las subtareas, el campo arranca vacío: lo que escribas
+    // lo fija a mano, y dejarlo vacío devuelve la actividad al cálculo automático.
+    setInputVal(pctManual || !hasEtapas ? String(effectivePct) : '');
+    setEditing(true);
+  }
   function confirmEdit() {
     // vacío → -1 avisa al padre de que hay que quitar el valor manual
     const txt = inputVal.trim();
@@ -228,7 +234,7 @@ function GanttRow({ act, effectivePct, idx, expanded, onToggle, isSubtask = fals
         </div>
       </td>
       <td style={{ textAlign: 'center', padding: '4px 5px', borderRight: '0.5px solid #e2e8f0', width: 56 }} onClick={e => { e.stopPropagation(); startEdit(); }}>
-        {editing && !hasEtapas ? (
+        {editing ? (
           <input value={inputVal} onChange={e => setInputVal(e.target.value)} onBlur={confirmEdit}
             onKeyDown={e => { if (e.key==='Enter') confirmEdit(); if (e.key==='Escape') setEditing(false); }}
             autoFocus style={{ width: 44, padding: '2px 4px', fontSize: 11, fontWeight: 600, textAlign: 'center', border: '1.5px solid #0d9488', borderRadius: 5, outline: 'none' }}/>
