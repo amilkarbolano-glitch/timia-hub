@@ -288,20 +288,23 @@ function Tuberia({ objetos, cat, onAbrir }: { objetos: ObjetoFabrica[]; cat: Pas
             <div style={{ padding:7, display:'flex', flexDirection:'column', gap:5, flex:1 }}>
               {objs.length === 0 && <p style={{ margin:'auto', fontSize:10.5, color:'#94a3b8' }}>—</p>}
               {objs.map(o => {
-                const c = colorEstado(o.estado), f = frenos(o, cat);
+                const c = colorEstado(o.estado), a = avance(o, undefined, cat);
+                // El nombre de lo que falta ya está en la barra de abajo y en la
+                // ficha; aquí la pregunta es cuánto lleva, que es lo comparable
+                // entre objetos de una misma fase.
                 return (
-                  <button key={o.id} onClick={()=>onAbrir(o.id)}
+                  <button key={o.id} onClick={()=>onAbrir(o.id)} title={frenos(o, cat).map(x=>x.label).join(' · ')}
                     style={{ textAlign:'left', border:`0.5px solid ${c.borde}`, background:c.bg, borderRadius:8,
                              padding:'7px 9px', cursor:'pointer' }}>
                     <div style={{ ...mono, fontSize:10, fontWeight:600, color:'#111', overflow:'hidden',
                                   textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{o.objetoInsumo || o.objeto}</div>
                     <div style={{ fontSize:9, color:c.text, marginTop:2 }}>{codigoProyecto(o.proyecto)} · {o.estado}</div>
-                    {f.length > 0 && (
-                      <div style={{ fontSize:8.5, color:'#b45309', marginTop:3, display:'flex', alignItems:'center', gap:3 }}>
-                        <AlertTriangle size={8}/> falta: {f.map(x=>x.label).join(', ').slice(0,38)}
-                      </div>
-                    )}
-                    <div style={{ marginTop:5 }}><Tira o={o} cat={cat} alto={5}/></div>
+                    <div style={{ display:'flex', alignItems:'center', gap:6, marginTop:5 }}>
+                      <div style={{ flex:1 }}><Tira o={o} cat={cat} alto={5}/></div>
+                      <span style={{ fontSize:9.5, fontWeight:700, flexShrink:0,
+                        color: a.pct===100 ? '#047857' : a.pct>0 ? '#6d28d9' : '#94a3b8' }}>{a.pct}%</span>
+                      <span style={{ fontSize:8.5, color:'#64748b', flexShrink:0 }}>{a.ok}/{a.aplican}</span>
+                    </div>
                   </button>
                 );
               })}
