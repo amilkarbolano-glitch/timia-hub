@@ -490,7 +490,7 @@ function Panel({ o, cat, puedeEditar, onCerrar, onGuardar, onEditar, onBorrar }:
 
   function editarPaso(pasoId: string, campo: 'fecha'|'inicio'|'nota'|'link', valor: string) {
     if (!puedeEditar) return;
-    const prev = o.pasos?.[pasoId] ?? { estado: 'pte' as EstadoPaso };
+    const prev: PasoObjeto = o.pasos?.[pasoId] ?? { estado: 'pte' };
     const pasos = { ...o.pasos, [pasoId]: { ...prev, [campo]: valor || undefined } };
     onGuardar({ ...o, pasos });
   }
