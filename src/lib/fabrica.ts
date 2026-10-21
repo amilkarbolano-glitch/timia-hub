@@ -182,9 +182,12 @@ export function avance(o: ObjetoFabrica, fase?: string, ps: PasoCatalogo[] = pas
   let ok = 0, aplican = 0, pendientes = 0;
   for (const p of lista) {
     const v = o.pasos?.[p.id];
-    if (!v || v.estado === 'na') continue;
+    // Solo los NA salen de la cuenta. Un paso sin marcar es trabajo que falta,
+    // no trabajo que no existe: antes no contaba, y por eso un objeto con los
+    // 4 pasos de Gobierno hechos mostraba 100% teniendo 26 pasos por delante.
+    if (v?.estado === 'na') continue;
     aplican++;
-    if (v.estado === 'ok') ok++; else pendientes++;
+    if (v?.estado === 'ok') ok++; else pendientes++;
   }
   return { ok, aplican, pendientes, pct: aplican ? Math.round(ok / aplican * 100) : 0 };
 }
@@ -199,13 +202,17 @@ export function faseActual(o: ObjetoFabrica, ps: PasoCatalogo[] = pasos()): stri
   return fs[fs.length - 1] ?? '';
 }
 
-/** Pasos que están frenando al objeto: pendientes en su fase actual. */
-export function frenos(o: ObjetoFabrica, ps: PasoCatalogo[] = pasos()): PasoCatalogo[] {
-  const f = faseActual(o, ps);
+/** Pasos de una fase que siguen pendientes: sin marcar o marcados pendientes. */
+function pendientesDe(o: ObjetoFabrica, f: string, ps: PasoCatalogo[]): PasoCatalogo[] {
   return pasosDeFase(f, ps).filter(p => {
     const v = o.pasos?.[p.id];
-    return v && v.estado !== 'ok' && v.estado !== 'na';
+    return v?.estado !== 'ok' && v?.estado !== 'na';
   });
+}
+
+/** Pasos que están frenando al objeto: pendientes en su fase actual. */
+export function frenos(o: ObjetoFabrica, ps: PasoCatalogo[] = pasos()): PasoCatalogo[] {
+  return pendientesDe(o, faseActual(o, ps), ps);
 }
 
 /** Código corto del proyecto: "SDATOOL-51117 SDM1" → "SDATOOL-51117". */

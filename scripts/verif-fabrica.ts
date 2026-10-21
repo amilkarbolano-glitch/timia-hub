@@ -89,8 +89,13 @@ ok(conMsd.every(o => avance(o, undefined, renombrado).pct === avance(o, undefine
 // Agregar un paso al final: nadie lo tiene marcado, así que nadie cambia.
 const conNuevo: PasoCatalogo[] = [...PASOS, { id: nuevoId('Cierre formal', PASOS), label:'Cierre formal', fase:'Producción' }];
 ok(conNuevo.length === 27 && conNuevo[26].id === 'cierre-formal', 'se agrega un paso con id derivado del nombre');
-ok(objetos.every(o => avance(o, undefined, conNuevo).pct === avance(o, undefined, PASOS).pct),
-   'un paso nuevo que nadie marcó no altera ningún avance');
+// Consecuencia de que un paso sin marcar cuente como pendiente: agregar un
+// paso al catálogo baja el % de todos, porque es trabajo que nadie ha hecho.
+// Es correcto, pero conviene saberlo antes de agregar uno con los 55 cargados.
+ok(objetos.every(o => avance(o, undefined, conNuevo).pct <= avance(o, undefined, PASOS).pct),
+   'agregar un paso al catálogo baja el % de los objetos: es trabajo nuevo que nadie hizo');
+ok(objetos.some(o => avance(o, undefined, conNuevo).pct < avance(o, undefined, PASOS).pct),
+   'y se nota de verdad, no es un cambio cosmético');
 
 // Un id repetido se desambigua en vez de pisar al existente.
 ok(nuevoId('MSD', PASOS) === 'msd-2', 'un nombre que ya existe recibe un id distinto, no pisa al otro');
@@ -171,5 +176,43 @@ ok(na(conNota)?.nota === 'esperando al banco', 'marcar N/A conserva la nota');
 ok(na(null)?.estado === 'na', 'N/A marca el paso como no aplicable');
 ok(na({ estado:'ok', fecha: HOY })?.fecha === undefined, 'N/A borra las fechas: un paso que no se hace no tiene cuándo');
 ok(na({ estado:'na' }) === null, 'volver a pulsar N/A lo deja sin marcar');
+
+console.log('\n── Una fase vacía no es una fase superada ──');
+// Lo que reportó David: marcaba los 4 pasos de Gobierno y el objeto saltaba a
+// Producción. La causa: una fase sin ninguna marca daba aplican=0, y faseActual
+// la saltaba como si no aplicara, cayendo hasta la última. Un objeto recién
+// creado aparecía en Producción desde el primer día.
+function nuevo(): ObjetoFabrica {
+  return { id:'t', proyecto:'P', objetoInsumo:'t', objeto:'', responsable:'', contactoBanco:'',
+           periodicidad:'', estado:'Por iniciar', comentarios:'', fechaRecepcion:'', pasos:{} };
+}
+ok(faseActual(nuevo(), PASOS) === 'Gobierno', 'un objeto recién creado está en Gobierno, no en Producción');
+ok(avance(nuevo(), undefined, PASOS).pct === 0, 'y va en 0%');
+ok(avance(nuevo(), undefined, PASOS).aplican === 26, 'con los 26 pasos por delante, no con cero');
+
+const conGobierno = nuevo();
+for (const p of pasosDeFase('Gobierno', PASOS)) conGobierno.pasos[p.id] = { estado: 'ok' };
+ok(faseActual(conGobierno, PASOS) === 'Desarrollo', 'terminar Gobierno lleva a Desarrollo, no a Producción');
+const aG = avance(conGobierno, undefined, PASOS);
+ok(aG.pct === 15, `con Gobierno hecho va en ${aG.pct}%, no en 100% (4 de 26)`);
+ok(frenos(conGobierno, PASOS).length === 6, 'y los frenos son los 6 pasos de Desarrollo, aunque nadie los haya tocado');
+
+// Una fase entera en NA sí se salta: ese objeto no pasa por ahí.
+const saltaDesarrollo = nuevo();
+for (const p of pasosDeFase('Gobierno', PASOS))   saltaDesarrollo.pasos[p.id] = { estado: 'ok' };
+for (const p of pasosDeFase('Desarrollo', PASOS)) saltaDesarrollo.pasos[p.id] = { estado: 'na' };
+ok(faseActual(saltaDesarrollo, PASOS) === 'Pruebas',
+   'una fase marcada entera como no aplica sí se salta: esa es la diferencia con estar vacía');
+
+console.log('\n── Las cifras del Excel no se mueven ──');
+// Los blancos del Excel se congelaron como NA al cargar, así que el % que
+// David reporta sigue siendo el mismo pese al cambio de cálculo.
+const finali = objetos.filter(o => o.estado === 'Finalizado');
+ok(finali.filter(o => avance(o, undefined, PASOS).pct === 100).length === 23,
+   '23 de 25 finalizados siguen al 100%, igual que antes del cambio');
+ok(Math.round(objetos.reduce((s,o) => s + avance(o, undefined, PASOS).pct, 0) / objetos.length) === 87,
+   'el avance medio de los 55 sigue en 87%');
+ok(objetos.every(o => Object.keys(o.pasos).length === 26),
+   'los 55 objetos tienen los 26 pasos resueltos, sin casillas en blanco');
 
 console.log(f ? `\n${f} fallas` : '\nfábrica OK');
