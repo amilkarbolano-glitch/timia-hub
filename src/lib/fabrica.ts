@@ -78,9 +78,10 @@ export const FASES_SEMILLA = ['Gobierno', 'Desarrollo', 'Pruebas', 'Certificaci�
  * es solo con qué empieza si nunca se ha editado.
  */
 export const PASOS_SEMILLA: PasoCatalogo[] = [
-  { id: 'vobo-gob-funcional',          label: 'VoBo Gob Funcional',          fase: 'Gobierno' },
-  { id: 'inicializaci-n-n-bula',       label: 'Inicialización Nébula',       fase: 'Gobierno' },
-  { id: 'gt-revisi-n-prediccionario',  label: 'GT Revisión Prediccionario',  fase: 'Gobierno' },
+  // Gobierno arranca en el diccionario. Lo anterior —VoBo Gob Funcional,
+  // Inicialización Nébula, GT Revisión Prediccionario— ocurre antes de que el
+  // objeto llegue a la fábrica, así que seguirlo aquí solo movía porcentajes
+  // sobre trabajo que no es de David.
   { id: 'generaci-n-diccionario',      label: 'Generación Diccionario',      fase: 'Gobierno' },
   { id: 'gt-revisi-n-diccionario',     label: 'GT Revisión Diccionario',     fase: 'Gobierno' },
   { id: 'schemas-work',                label: 'Schemas Work',                fase: 'Gobierno' },
@@ -93,6 +94,7 @@ export const PASOS_SEMILLA: PasoCatalogo[] = [
   { id: 'componentes-hammurabi',       label: 'Componentes Hammurabi',       fase: 'Desarrollo' },
   { id: 'componentes-smartcleaner',    label: 'Componentes Smartcleaner',    fase: 'Desarrollo' },
 
+  { id: 'despliegue-a-work',           label: 'Despliegue a Work',           fase: 'Pruebas' },
   { id: 'pruebas-en-work',             label: 'Pruebas en Work',             fase: 'Pruebas' },
   { id: 'creaci-n-de-mallas-control-m',label: 'Creación de mallas Control-M',fase: 'Pruebas' },
   { id: 'pruebas-control-m',           label: 'Pruebas Control-M',           fase: 'Pruebas' },

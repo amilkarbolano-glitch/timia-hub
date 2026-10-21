@@ -18,10 +18,15 @@ const objetos: ObjetoFabrica[] = JSON.parse(readFileSync('public/db.json','utf8'
 
 console.log('── Los datos del Excel ──');
 ok(objetos.length === 55, `55 objetos (hay ${objetos.length})`);
-ok(PASOS.length === 28, `28 pasos en el catálogo (hay ${PASOS.length})`);
+ok(PASOS.length === 26, `26 pasos en el catálogo (hay ${PASOS.length})`);
+ok(pasosDeFase('Gobierno', PASOS)[0].id === 'generaci-n-diccionario',
+   'Gobierno arranca en Generación Diccionario, no en lo que pasa antes de la fábrica');
+ok(PASOS.some(p => p.id === 'despliegue-a-work'), 'existe el paso Despliegue a Work');
+ok(PASOS.findIndex(p => p.id === 'despliegue-a-work') < PASOS.findIndex(p => p.id === 'pruebas-en-work'),
+   'y va antes de Pruebas en Work: primero se despliega, luego se prueba');
 ok(new Set(objetos.map(o => o.proyecto)).size === 14, '14 proyectos distintos');
-ok(FASES.reduce((s, x) => s + pasosDeFase(x, PASOS).length, 0) === 28, 'las 5 fases cubren los 28 pasos, sin solapes');
-ok(new Set(PASOS.map(p => p.id)).size === 28, 'los ids de paso no se repiten');
+ok(FASES.reduce((s, x) => s + pasosDeFase(x, PASOS).length, 0) === 26, 'las 5 fases cubren los 26 pasos, sin solapes');
+ok(new Set(PASOS.map(p => p.id)).size === 26, 'los ids de paso no se repiten');
 
 const pasosUsados = new Set(objetos.flatMap(o => Object.keys(o.pasos)));
 const catalogo = new Set(PASOS.map(p => p.id));
@@ -53,7 +58,7 @@ const conNA = objetos.filter(o => Object.values(o.pasos).some(p => p.estado === 
 ok(conNA.length > 0, `${conNA.length} objetos tienen pasos que no les aplican`);
 const ej = conNA[0];
 const a = avance(ej, undefined, PASOS);
-ok(a.aplican < 28, `ejemplo: a «${ej.objetoInsumo.slice(0,28)}» le aplican ${a.aplican} de 28 pasos`);
+ok(a.aplican < 26, `ejemplo: a «${ej.objetoInsumo.slice(0,28)}» le aplican ${a.aplican} de 26 pasos`);
 
 console.log('\n── Fase actual y frenos ──');
 for (const o of objetos.filter(x => !['Finalizado','Desestimado'].includes(x.estado)).slice(0,4)) {
@@ -83,7 +88,7 @@ ok(conMsd.every(o => avance(o, undefined, renombrado).pct === avance(o, undefine
 
 // Agregar un paso al final: nadie lo tiene marcado, así que nadie cambia.
 const conNuevo: PasoCatalogo[] = [...PASOS, { id: nuevoId('Cierre formal', PASOS), label:'Cierre formal', fase:'Producción' }];
-ok(conNuevo.length === 29 && conNuevo[28].id === 'cierre-formal', 'se agrega un paso con id derivado del nombre');
+ok(conNuevo.length === 27 && conNuevo[26].id === 'cierre-formal', 'se agrega un paso con id derivado del nombre');
 ok(objetos.every(o => avance(o, undefined, conNuevo).pct === avance(o, undefined, PASOS).pct),
    'un paso nuevo que nadie marcó no altera ningún avance');
 
