@@ -9,7 +9,7 @@ import { Factory, Search, ExternalLink, AlertTriangle, Copy, Check, Plus, Settin
          Trash2, ChevronUp, ChevronDown, ArrowLeft, Pencil } from 'lucide-react';
 import {
   fabricaStore, pasosDeFase, avance, faseActual, frenos, objetoNuevo, nuevoId, mover,
-  colorEstado, codigoProyecto, nombreProyecto, ESTADOS, fases as fasesDe,
+  colorEstado, codigoProyecto, nombreProyecto, ESTADOS, fases as fasesDe, duracion, fechaCol,
   type ObjetoFabrica, type PasoCatalogo, type EstadoPaso, type PasoObjeto,
 } from '../lib/fabrica';
 import { useAuth, canAccess } from '../contexts/AuthContext';
@@ -36,9 +36,32 @@ function Copiar({ texto }: { texto: string }) {
       onClick={e => { e.stopPropagation(); navigator.clipboard?.writeText(texto).catch(()=>{});
                       setOk(true); setTimeout(()=>setOk(false), 1400); }}
       style={{ border:'none', background:'none', cursor:'pointer', padding:2,
-               color: ok ? '#059669' : '#cbd5e1', display:'inline-flex', flexShrink:0 }}>
+               color: ok ? '#059669' : '#94a3b8', display:'inline-flex', flexShrink:0 }}>
       {ok ? <Check size={11}/> : <Copy size={11}/>}
     </button>
+  );
+}
+
+/**
+ * Campo de fecha. La fábrica escribe dd/mm/aaaa y así están las 1128 casillas
+ * ya cargadas, pero teclear eso a mano es lento y se presta a errores; así que
+ * por dentro usa el calendario del navegador y por fuera sigue guardando
+ * dd/mm/aaaa. Se puede borrar dejándolo vacío.
+ */
+function Fecha({ etiqueta, valor, onCambio }: {
+  etiqueta: string; valor?: string; onCambio: (v: string)=>void;
+}) {
+  const d = fechaCol(valor);
+  const iso = d ? `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` : '';
+  return (
+    <label style={{ display:'block' }}>
+      <span style={{ fontSize:9, color:'#94a3b8', display:'block', marginBottom:2 }}>{etiqueta}</span>
+      <input type="date" value={iso} onChange={e => {
+          const [a, m, dd] = e.target.value.split('-');
+          onCambio(e.target.value ? `${dd}/${m}/${a}` : '');
+        }}
+        style={{ ...inputS, fontSize:10.5, padding:'5px 7px' }}/>
+    </label>
   );
 }
 
@@ -50,11 +73,16 @@ function Tira({ o, cat, alto = 7 }: { o: ObjetoFabrica; cat: PasoCatalogo[]; alt
         <div key={f} style={{ display:'flex', gap:1, marginRight:3 }}>
           {pasosDeFase(f, cat).map(p => {
             const v = o.pasos?.[p.id];
-            const c = !v || v.estado === 'na' ? '#f1f5f9'
-                    : v.estado === 'ok' ? '#059669'
+            // Sin marcar queda casi en blanco y «no aplica» en gris sólido: así
+            // la tira distingue lo que falta de lo que este objeto no hace.
+            const c = !v ? '#f1f5f9'
+                    : v.estado === 'na'  ? '#dbe2ea'
+                    : v.estado === 'ok'  ? '#059669'
                     : v.estado === 'pte' ? '#f59e0b' : '#a78bfa';
-            return <i key={p.id} title={`${f} · ${p.label}${v?.fecha ? ` · ${v.fecha}` : ''} — ${
-                     !v || v.estado==='na' ? 'no aplica' : v.estado==='ok' ? 'hecho' : v.estado==='pte' ? 'pendiente' : (v.nota ?? 'otro')}`}
+            const cuando = v?.inicio && v?.fecha ? ` · ${v.inicio} → ${v.fecha}` : v?.fecha ? ` · ${v.fecha}` : '';
+            return <i key={p.id} title={`${f} · ${p.label}${cuando} — ${
+                     !v ? 'sin marcar' : v.estado==='na' ? 'no aplica' : v.estado==='ok' ? 'hecho'
+                     : v.estado==='pte' ? 'pendiente' : (v.nota ?? 'otro')}`}
                      style={{ width:4, height:alto, borderRadius:1, background:c, flexShrink:0 }}/>;
           })}
         </div>
@@ -110,7 +138,7 @@ export default function Fabrica() {
 
   if (!objetos.length && !editando) return (
     <div style={{ padding:'60px 36px', textAlign:'center' }}>
-      <Factory size={26} color="#cbd5e1" style={{ margin:'0 auto 10px', display:'block' }}/>
+      <Factory size={26} color="#94a3b8" style={{ margin:'0 auto 10px', display:'block' }}/>
       <p style={{ fontSize:13, color:'#94a3b8', margin:'0 0 14px' }}>Todavía no hay objetos cargados en la fábrica.</p>
       {puedeEditar && (
         <button onClick={()=>setEditando(objetoNuevo())} style={{ ...botonS, background:'#6d28d9', color:'#fff', border:'none' }}>
@@ -144,7 +172,7 @@ export default function Fabrica() {
           <h2 style={{ margin:0, fontSize:18, fontWeight:700, letterSpacing:'-.3px' }}>Fábrica · estatus interno</h2>
           <p style={{ margin:'2px 0 0', fontSize:12, color:'#94a3b8' }}>
             {objetos.length} objetos de {proyectos.length} proyectos · cada uno recorre {cat.length} pasos
-            {!puedeEditar && <span style={{ color:'#cbd5e1' }}> · solo lectura</span>}
+            {!puedeEditar && <span style={{ color:'#94a3b8' }}> · solo lectura</span>}
           </p>
         </div>
         {puedeEditar && (
@@ -161,7 +189,7 @@ export default function Fabrica() {
             ['Avance medio', `${pctMedio}%`, '#4b5563'],
             ['Bloqueados', bloqueados.length, bloqueados.length ? '#b91c1c' : '#4b5563']].map(([l,v,bg]) => (
             <div key={l as string} style={{ textAlign:'center', padding:'5px 14px', background:bg as string, borderRadius:8 }}>
-              <div style={{ fontSize:8, color:'#cbd5e1' }}>{l}</div>
+              <div style={{ fontSize:8, color:'#94a3b8' }}>{l}</div>
               <div style={{ fontSize:15, fontWeight:700, color:'#fff' }}>{v}</div>
             </div>
           ))}
@@ -237,10 +265,10 @@ function Tuberia({ objetos, cat, onAbrir }: { objetos: ObjetoFabrica[]; cat: Pas
                           justifyContent:'center', fontSize:9, fontWeight:700, flexShrink:0,
                           background:'#fff', color:'#6d28d9', border:'1.5px solid #ddd6fe' }}>{i+1}</i>
               <span style={{ fontSize:11.5, fontWeight:650, color:'#374151', flex:1 }}>{fase}</span>
-              <span style={{ fontSize:11, fontWeight:700, color: objs.length ? '#6d28d9' : '#cbd5e1' }}>{objs.length}</span>
+              <span style={{ fontSize:11, fontWeight:700, color: objs.length ? '#6d28d9' : '#94a3b8' }}>{objs.length}</span>
             </div>
             <div style={{ padding:7, display:'flex', flexDirection:'column', gap:5, flex:1 }}>
-              {objs.length === 0 && <p style={{ margin:'auto', fontSize:10.5, color:'#cbd5e1' }}>—</p>}
+              {objs.length === 0 && <p style={{ margin:'auto', fontSize:10.5, color:'#94a3b8' }}>—</p>}
               {objs.map(o => {
                 const c = colorEstado(o.estado), f = frenos(o, cat);
                 return (
@@ -319,8 +347,8 @@ function Tabla({ objetos, cat, onAbrir }: { objetos: ObjetoFabrica[]; cat: PasoC
                   </td>
                   <td style={td}><Tira o={o} cat={cat}/></td>
                   <td style={{...td, textAlign:'center'}}>
-                    <div style={{ fontSize:11, fontWeight:700, color: a.pct===100?'#047857':a.pct>0?'#b45309':'#cbd5e1' }}>{a.pct}%</div>
-                    <div style={{ fontSize:9, color:'#cbd5e1' }}>{a.ok}/{a.aplican}</div>
+                    <div style={{ fontSize:11, fontWeight:700, color: a.pct===100?'#047857':a.pct>0?'#b45309':'#94a3b8' }}>{a.pct}%</div>
+                    <div style={{ fontSize:9, color:'#94a3b8' }}>{a.ok}/{a.aplican}</div>
                   </td>
                 </tr>
               );
@@ -412,7 +440,7 @@ function Panel({ o, cat, puedeEditar, onCerrar, onGuardar, onEditar, onBorrar }:
     onGuardar({ ...o, pasos });
   }
 
-  function editarPaso(pasoId: string, campo: 'fecha'|'nota'|'link', valor: string) {
+  function editarPaso(pasoId: string, campo: 'fecha'|'inicio'|'nota'|'link', valor: string) {
     if (!puedeEditar) return;
     const prev = o.pasos?.[pasoId] ?? { estado: 'pte' as EstadoPaso };
     const pasos = { ...o.pasos, [pasoId]: { ...prev, [campo]: valor || undefined } };
@@ -466,7 +494,7 @@ function Panel({ o, cat, puedeEditar, onCerrar, onGuardar, onEditar, onBorrar }:
               <div style={{ width:`${a.pct}%`, height:'100%', background: a.pct===100?'#059669':'#6d28d9' }}/>
             </div>
             <span style={{ fontSize:12, fontWeight:700, color:'#64748b' }}>{a.pct}%</span>
-            <span style={{ fontSize:10.5, color:'#cbd5e1' }}>{a.ok} de {a.aplican}</span>
+            <span style={{ fontSize:10.5, color:'#94a3b8' }}>{a.ok} de {a.aplican}</span>
           </div>
         </div>
 
@@ -517,47 +545,67 @@ function Panel({ o, cat, puedeEditar, onCerrar, onGuardar, onEditar, onBorrar }:
                 <div style={{ border:'0.5px solid #f1f5f9', borderRadius:9, overflow:'hidden' }}>
                   {pasos.map((p, k) => {
                     const v = o.pasos?.[p.id];
-                    const na = !v || v.estado === 'na', ok = v?.estado === 'ok';
+                    // «sin marcar» y «no aplica» son cosas distintas: el primero es
+                    // trabajo que falta, el segundo trabajo que este objeto no hace.
+                    // Dibujarlos igual —los dos en gris y tachados— hacía que una fase
+                    // entera por empezar pareciera descartada.
+                    const na = v?.estado === 'na', ok = v?.estado === 'ok';
                     const abierto = detalleDe === p.id;
+                    const dias = duracion(v);
                     return (
-                      <div key={p.id} style={{ borderTop: k ? '0.5px solid #f8fafc' : 'none',
-                        background: ok ? '#f0fdf4' : v?.estado === 'pte' ? '#fffbeb' : v?.estado === 'otro' ? '#faf5ff' : '#fff' }}>
+                      <div key={p.id} style={{ borderTop: k ? '0.5px solid #eef2f6' : 'none',
+                        background: ok ? '#f0fdf4' : v?.estado === 'pte' ? '#fffbeb'
+                                  : v?.estado === 'otro' ? '#faf5ff' : na ? '#f8fafc' : '#fff' }}>
                         <div onClick={()=>ciclar(p.id)}
                           title={puedeEditar ? `${ETIQUETA[v?.estado ?? ''] ?? 'sin marcar'} — clic para cambiar` : (ETIQUETA[v?.estado ?? ''] ?? 'sin marcar')}
                           style={{ display:'flex', alignItems:'center', gap:9, padding:'6px 11px',
-                                   opacity: na ? .5 : 1, cursor: puedeEditar ? 'pointer' : 'default' }}>
+                                   cursor: puedeEditar ? 'pointer' : 'default' }}>
                           <i style={{ width:13, height:13, borderRadius:4, flexShrink:0, display:'inline-flex',
-                            alignItems:'center', justifyContent:'center', fontSize:8, fontWeight:700,
-                            background: ok ? '#059669' : na ? '#f1f5f9' : '#fff', color:'#fff',
-                            border:`1.5px solid ${ok ? '#059669' : na ? '#e2e8f0' : v?.estado==='pte' ? '#f59e0b' : '#a78bfa'}` }}>
-                            {ok ? '✓' : ''}</i>
-                          <span style={{ flex:1, fontSize:11, color: na ? '#cbd5e1' : ok ? '#047857' : '#374151',
-                                         textDecoration: na ? 'line-through' : 'none' }}>{p.label}</span>
-                          {v?.nota && <span title={v.nota} style={{ fontSize:9, color:'#7c3aed', maxWidth:110,
+                            alignItems:'center', justifyContent:'center', fontSize:9, fontWeight:700, lineHeight:1,
+                            background: ok ? '#059669' : na ? '#e2e8f0' : '#fff',
+                            color: na ? '#64748b' : '#fff',
+                            border:`1.5px solid ${ok ? '#059669' : na ? '#94a3b8'
+                                   : v?.estado==='pte' ? '#f59e0b' : v?.estado==='otro' ? '#a78bfa' : '#94a3b8'}` }}>
+                            {ok ? '✓' : na ? '–' : ''}</i>
+                          <span style={{ flex:1, fontSize:11,
+                            color: ok ? '#047857' : na ? '#94a3b8' : '#334155' }}>{p.label}</span>
+                          {na && <span style={{ fontSize:9, color:'#94a3b8', flexShrink:0 }}>no aplica</span>}
+                          {v?.nota && <span title={v.nota} style={{ fontSize:9, color:'#7c3aed', maxWidth:100,
                             overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{v.nota}</span>}
                           {v?.link && <a href={v.link} target="_blank" rel="noopener" onClick={e=>e.stopPropagation()}
                             style={{ color:'#0e7490', display:'inline-flex' }}><ExternalLink size={10}/></a>}
                           {v?.link && <Copiar texto={v.link}/>}
-                          {v?.fecha && <span style={{ fontSize:9.5, color:'#94a3b8', flexShrink:0 }}>{v.fecha}</span>}
+                          {dias !== null && <span title={`${dias} día${dias!==1?'s':''} hábil${dias!==1?'es':''}`}
+                            style={{ fontSize:9, color:'#64748b', background:'#f1f5f9', borderRadius:4,
+                                     padding:'1px 5px', flexShrink:0 }}>{dias}d</span>}
+                          {(v?.inicio || v?.fecha) && (
+                            <span style={{ fontSize:9.5, color:'#64748b', flexShrink:0 }}>
+                              {v.inicio && v.fecha ? `${v.inicio} → ${v.fecha}`
+                               : v.inicio ? `desde ${v.inicio}` : v.fecha}
+                            </span>
+                          )}
                           {puedeEditar && (
-                            <button title="Fecha, nota y enlace"
+                            <button title="Fechas, nota y enlace"
                               onClick={e => { e.stopPropagation(); setDetalleDe(abierto ? null : p.id); }}
                               style={{ border:'none', background:'none', cursor:'pointer', padding:0, display:'flex',
-                                       color: abierto ? '#6d28d9' : '#e2e8f0', flexShrink:0 }}>
+                                       color: abierto ? '#6d28d9' : '#94a3b8', flexShrink:0 }}>
                               <ChevronDown size={12} style={{ transform: abierto ? 'rotate(180deg)' : 'none' }}/></button>
                           )}
                         </div>
                         {abierto && puedeEditar && (
-                          <div style={{ display:'grid', gap:5, gridTemplateColumns:'90px 1fr', padding:'4px 11px 9px 33px' }}>
-                            <input defaultValue={v?.fecha ?? ''} placeholder="dd/mm/aaaa"
-                              onBlur={e=>editarPaso(p.id, 'fecha', e.target.value.trim())}
-                              style={{ ...inputS, fontSize:10.5 }}/>
+                          <div style={{ display:'grid', gap:5, gridTemplateColumns:'1fr 1fr', padding:'2px 11px 9px 33px' }}>
+                            <Fecha etiqueta="Inicio" valor={v?.inicio} onCambio={x=>editarPaso(p.id, 'inicio', x)}/>
+                            <Fecha etiqueta="Fin"    valor={v?.fecha}  onCambio={x=>editarPaso(p.id, 'fecha',  x)}/>
                             <input defaultValue={v?.nota ?? ''} placeholder="Nota (p. ej. qué lo trabó)"
                               onBlur={e=>editarPaso(p.id, 'nota', e.target.value.trim())}
-                              style={{ ...inputS, fontSize:10.5 }}/>
+                              style={{ ...inputS, fontSize:10.5, gridColumn:'1 / -1' }}/>
                             <input defaultValue={v?.link ?? ''} placeholder="Enlace (repo, documento, WO…)"
                               onBlur={e=>editarPaso(p.id, 'link', e.target.value.trim())}
                               style={{ ...inputS, fontSize:10.5, gridColumn:'1 / -1' }}/>
+                            {v?.inicio && v?.fecha && duracion(v) === null && (
+                              <span style={{ gridColumn:'1 / -1', fontSize:9.5, color:'#b45309' }}>
+                                El fin queda antes del inicio.</span>
+                            )}
                           </div>
                         )}
                       </div>
@@ -720,7 +768,7 @@ function FichaProyecto({ proyecto, objetos, cat, onVolver, onAbrir, panel }: {
                 <div style={{ minWidth:0 }}>
                   <div style={{ fontSize:11, color:'#374151', overflow:'hidden', textOverflow:'ellipsis',
                                 whiteSpace:'nowrap' }}>{paso.label}</div>
-                  <div style={{ fontSize:9, color:'#cbd5e1' }}>{paso.fase}</div>
+                  <div style={{ fontSize:9, color:'#94a3b8' }}>{paso.fase}</div>
                 </div>
               </div>
             ))}
@@ -738,7 +786,7 @@ function FichaProyecto({ proyecto, objetos, cat, onVolver, onAbrir, panel }: {
               <div key={t as string} style={{ marginBottom:8 }}>
                 <div style={{ fontSize:9.5, color:'#94a3b8', marginBottom:3 }}>{t}</div>
                 <div style={{ display:'flex', gap:4, flexWrap:'wrap' }}>
-                  {(gente as string[]).length === 0 && <span style={{ fontSize:11, color:'#cbd5e1' }}>—</span>}
+                  {(gente as string[]).length === 0 && <span style={{ fontSize:11, color:'#94a3b8' }}>—</span>}
                   {(gente as string[]).map(p => (
                     <span key={p} style={{ fontSize:10.5, padding:'2px 8px', borderRadius:6,
                       background:'#f8fafc', color:'#475569', display:'inline-flex', alignItems:'center', gap:2 }}>
@@ -892,7 +940,7 @@ function ConfigPasos({ cat, objetos, onCerrar, onGuardar }: {
               <div style={{ display:'flex', alignItems:'center', gap:7, marginBottom:5 }}>
                 <span style={{ fontSize:11, fontWeight:700, color:'#6d28d9', textTransform:'uppercase',
                                letterSpacing:'.05em' }}>{fase}</span>
-                <span style={{ fontSize:10, color:'#cbd5e1' }}>{pasosDeFase(fase, ps).length}</span>
+                <span style={{ fontSize:10, color:'#94a3b8' }}>{pasosDeFase(fase, ps).length}</span>
                 <button onClick={()=>agregar(fase)} style={{ border:'none', background:'none', cursor:'pointer',
                   color:'#a78bfa', fontSize:10.5, display:'flex', alignItems:'center', gap:2, padding:0 }}>
                   <Plus size={10}/>paso</button>
@@ -905,15 +953,15 @@ function ConfigPasos({ cat, objetos, onCerrar, onGuardar }: {
                       borderTop: k ? '0.5px solid #f8fafc' : 'none' }}>
                       <span style={{ flex:1, fontSize:11, color:'#374151' }}>{p.label}</span>
                       {n > 0 && <span title={`Marcado en ${n} objeto${n!==1?'s':''}`}
-                        style={{ fontSize:9, color:'#cbd5e1' }}>{n}</span>}
+                        style={{ fontSize:9, color:'#94a3b8' }}>{n}</span>}
                       <button onClick={()=>setPs(mover(ps, p.id, -1))} title="Subir"
-                        style={{ border:'none', background:'none', cursor:'pointer', color:'#cbd5e1', padding:1, display:'flex' }}>
+                        style={{ border:'none', background:'none', cursor:'pointer', color:'#94a3b8', padding:1, display:'flex' }}>
                         <ChevronUp size={12}/></button>
                       <button onClick={()=>setPs(mover(ps, p.id, 1))} title="Bajar"
-                        style={{ border:'none', background:'none', cursor:'pointer', color:'#cbd5e1', padding:1, display:'flex' }}>
+                        style={{ border:'none', background:'none', cursor:'pointer', color:'#94a3b8', padding:1, display:'flex' }}>
                         <ChevronDown size={12}/></button>
                       <button onClick={()=>renombrar(p.id)} title="Renombrar"
-                        style={{ border:'none', background:'none', cursor:'pointer', color:'#cbd5e1', padding:1, display:'flex' }}>
+                        style={{ border:'none', background:'none', cursor:'pointer', color:'#94a3b8', padding:1, display:'flex' }}>
                         <Pencil size={11}/></button>
                       <button onClick={()=>quitar(p.id)} title="Quitar"
                         style={{ border:'none', background:'none', cursor:'pointer', color:'#fca5a5', padding:1, display:'flex' }}>

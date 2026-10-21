@@ -12,12 +12,41 @@ export type EstadoPaso = 'ok' | 'pte' | 'na' | 'otro';
 
 export interface PasoObjeto {
   estado: EstadoPaso;
-  /** Fecha en que se completó, tal como la anota la fábrica (dd/mm/aaaa). */
+  /**
+   * Fecha de cierre del paso (dd/mm/aaaa), tal como la anota la fábrica.
+   * Se llama `fecha` y no `fin` porque así venían las celdas del Excel y así
+   * están los 1128 pasos ya cargados; renombrarla obligaría a migrar todo
+   * para no ganar nada.
+   */
   fecha?: string;
+  /** Cuándo se empezó. El Excel no la traía: se llena desde la herramienta. */
+  inicio?: string;
   /** Algunas celdas traen el enlace al repo o al documento en vez de un estado. */
   link?: string;
   /** Texto libre cuando la celda no es OK/NA/PTE. */
   nota?: string;
+}
+
+/** Cuántos días hábiles tomó un paso, si tiene las dos fechas. */
+export function duracion(p: PasoObjeto | undefined): number | null {
+  const a = fechaCol(p?.inicio), b = fechaCol(p?.fecha);
+  if (!a || !b || b < a) return null;
+  let dias = 0;
+  for (const d = new Date(a); d <= b; d.setDate(d.getDate() + 1)) {
+    const s = d.getDay();
+    if (s !== 0 && s !== 6) dias++;
+  }
+  return dias;
+}
+
+/** dd/mm/aaaa → Date. La fábrica escribe en ese formato, no en ISO. */
+export function fechaCol(s?: string): Date | null {
+  if (!s) return null;
+  const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+  if (!m) return null;
+  const año = m[3].length === 2 ? 2000 + +m[3] : +m[3];
+  const d = new Date(año, +m[2] - 1, +m[1]);
+  return isNaN(d.getTime()) ? null : d;
 }
 
 export interface ObjetoFabrica {

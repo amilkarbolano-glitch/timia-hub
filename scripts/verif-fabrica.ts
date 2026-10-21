@@ -3,7 +3,8 @@
 // Cifras de referencia leídas de "Status Fábrica - Interno.xlsx", hoja Estatus Global.
 
 import { PASOS_SEMILLA as PASOS, fases, pasosDeFase, avance, faseActual, frenos, nuevoId, mover,
-         codigoProyecto, nombreProyecto, type ObjetoFabrica, type PasoCatalogo } from '../src/lib/fabrica';
+         duracion, fechaCol, codigoProyecto, nombreProyecto,
+         type ObjetoFabrica, type PasoCatalogo } from '../src/lib/fabrica';
 
 // El catálogo vive en la base; en pruebas se pasa explícito para no depender
 // de lo que haya guardado el navegador.
@@ -134,5 +135,25 @@ ok(siguiente('otro') === 'ok',    'una celda con nota del Excel → hecho al pri
 
 const conNota = objetos.flatMap(o => Object.values(o.pasos)).filter(p => p.estado === 'otro');
 ok(conNota.length > 0, `hay ${conNota.length} celdas con nota a las que aplica ese primer clic`);
+
+console.log('\n── Fechas de inicio y fin ──');
+// La fábrica escribe dd/mm/aaaa, no ISO. Leer mal el formato daría duraciones
+// absurdas sin que nadie se dé cuenta, así que se fija aquí.
+ok(fechaCol('02/06/2026')!.getMonth() === 5, '02/06/2026 es junio, no febrero');
+ok(fechaCol('26/05/26')!.getFullYear() === 2026, 'el año de dos cifras se completa a 2026');
+ok(fechaCol('2026-06-02') === null, 'una fecha en ISO no se interpreta como dd/mm');
+ok(fechaCol('') === null && fechaCol(undefined) === null, 'vacío no es una fecha');
+
+// Duración en días hábiles, porque la fábrica no trabaja fines de semana.
+ok(duracion({ estado:'ok', inicio:'01/06/2026', fecha:'05/06/2026' }) === 5, 'lunes a viernes son 5 días hábiles');
+ok(duracion({ estado:'ok', inicio:'05/06/2026', fecha:'08/06/2026' }) === 2, 'viernes a lunes son 2: el fin de semana no cuenta');
+ok(duracion({ estado:'ok', inicio:'01/06/2026', fecha:'01/06/2026' }) === 1, 'empezar y terminar el mismo día es 1 día');
+ok(duracion({ estado:'ok', fecha:'01/06/2026' }) === null, 'sin inicio no hay duración que mostrar');
+ok(duracion({ estado:'ok', inicio:'10/06/2026', fecha:'01/06/2026' }) === null, 'un fin anterior al inicio no da una duración negativa');
+
+// Los datos del Excel solo traían la fecha de cierre; inicio queda por llenar.
+const conFin = objetos.flatMap(o => Object.values(o.pasos)).filter(p => p.fecha);
+ok(conFin.length > 0 && conFin.every(p => p.inicio === undefined),
+   `las ${conFin.length} fechas que venían del Excel se conservan como fin, sin inventar un inicio`);
 
 console.log(f ? `\n${f} fallas` : '\nfábrica OK');
