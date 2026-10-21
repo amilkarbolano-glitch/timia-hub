@@ -16,11 +16,10 @@ import {
   Link2,
   Package,
   Layers,
-  Activity,
-} from 'lucide-react';
+  Activity, Factory } from 'lucide-react';
 import { TimiaMark, TimiaWordmark } from './TimiaLogo';
 
-export type View = 'setup-project' | 'setup-team' | 'setup-tasks' | 'dashboard' | 'standards' | 'analytics' | 'audit' | 'bank-status' | 'notifications' | 'roles-permissions' | 'project-templates' | 'admin' | 'circuitos-bbva' | 'bitacora' | 'estimaciones' | 'plan-trabajo' | 'imputaciones' | 'inventario' | 'links' | 'proyectos' | 'activity-report';
+export type View = 'setup-project' | 'setup-team' | 'setup-tasks' | 'dashboard' | 'standards' | 'analytics' | 'audit' | 'bank-status' | 'notifications' | 'roles-permissions' | 'project-templates' | 'admin' | 'circuitos-bbva' | 'bitacora' | 'estimaciones' | 'plan-trabajo' | 'imputaciones' | 'inventario' | 'links' | 'proyectos' | 'activity-report' | 'fabrica';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -51,7 +50,7 @@ export default function Layout({ children, currentView, onViewChange, userRole }
   const herramientasViews: View[] = ['roles-permissions','audit','project-templates'];
   const herramientasActive = herramientasViews.includes(currentView);
 
-  const repoViews: View[] = ['imputaciones','activity-report','inventario','links'];
+  const repoViews: View[] = ['imputaciones','activity-report','inventario','links','fabrica'];
   const repoActive = repoViews.includes(currentView);
 
   return (
@@ -147,6 +146,10 @@ export default function Layout({ children, currentView, onViewChange, userRole }
                     <button onClick={() => { setShowRepo(false); onViewChange('inventario'); }}
                       className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm text-left transition-colors ${currentView==='inventario'?'bg-primary/10 text-primary font-semibold':'text-slate-600 hover:bg-slate-50'}`}>
                       <Package size={13}/> Inventario
+                    </button>
+                    <button onClick={() => { setShowRepo(false); onViewChange('fabrica'); }}
+                      className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm text-left transition-colors ${currentView==='fabrica'?'bg-primary/10 text-primary font-semibold':'text-slate-600 hover:bg-slate-50'}`}>
+                      <Factory size={13}/> Fábrica · estatus
                     </button>
                     <button onClick={() => { setShowRepo(false); onViewChange('links'); }}
                       className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm text-left transition-colors ${currentView==='links'?'bg-primary/10 text-primary font-semibold':'text-slate-600 hover:bg-slate-50'}`}>

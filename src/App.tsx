@@ -15,6 +15,7 @@ import AdminPanel from './components/AdminPanel';
 import CircuitosBBVA from './components/CircuitosBBVA';
 import Bitacora, { TabLinks } from './components/Bitacora';
 import Inventario from './components/Inventario';
+import Fabrica from './components/Fabrica';
 import ImputacionesJira from './components/ImputacionesJira';
 import ActivityReport from './components/ActivityReport';
 import Estimaciones from './components/Estimaciones';
@@ -211,6 +212,9 @@ function AppInner() {
             <Inventario user={user}/>
           </div>
         );
+
+      case 'fabrica':
+        return canAccess(role, 'fabrica.view') ? <Fabrica /> : <AccessDenied onBack={goHome}/>;
 
       case 'proyectos':
         return canAccess(role, 'projects.view_all') || role === 'pm' ? <ProyectosPage /> : <AccessDenied onBack={goHome}/>;

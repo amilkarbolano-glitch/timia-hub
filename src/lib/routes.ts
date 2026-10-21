@@ -8,7 +8,7 @@ const BASE = ((import.meta as any).env?.BASE_URL ?? '/').replace(/\/+$/, '');   
 export const VIEW_PATHS: Record<View, string> = {
   'analytics': '/', 'dashboard': '/tablero', 'plan-trabajo': '/plan', 'estimaciones': '/estimaciones',
   'bitacora': '/tareas', 'imputaciones': '/imputaciones', 'activity-report': '/activity-report',
-  'inventario': '/inventario', 'links': '/links', 'circuitos-bbva': '/circuitos', 'proyectos': '/proyectos',
+  'inventario': '/inventario', 'fabrica': '/fabrica', 'links': '/links', 'circuitos-bbva': '/circuitos', 'proyectos': '/proyectos',
   'admin': '/admin', 'roles-permissions': '/admin/roles', 'audit': '/auditoria', 'bank-status': '/banco',
   'standards': '/estandares', 'notifications': '/notificaciones', 'project-templates': '/plantillas',
   'setup-project': '/nuevo-proyecto', 'setup-team': '/nuevo-proyecto/equipo', 'setup-tasks': '/nuevo-proyecto/tareas',
