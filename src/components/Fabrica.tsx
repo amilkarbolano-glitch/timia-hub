@@ -10,15 +10,13 @@ import { Factory, Search, ExternalLink, AlertTriangle, Copy, Check, Plus, Settin
 import {
   fabricaStore, pasosDeFase, avance, faseActual, frenos, objetoNuevo, nuevoId, mover,
   colorEstado, codigoProyecto, nombreProyecto, ESTADOS, fases as fasesDe, duracion, fechaCol,
-  type ObjetoFabrica, type PasoCatalogo, type EstadoPaso, type PasoObjeto,
+  type ObjetoFabrica, type PasoCatalogo, type PasoObjeto,
 } from '../lib/fabrica';
 import { useAuth, canAccess } from '../contexts/AuthContext';
 
 type Vista = 'tuberia' | 'objetos' | 'proyectos';
 
 /** El ciclo al hacer clic en un paso. Vacío es "ni siquiera empezó". */
-const CICLO: (EstadoPaso | undefined)[] = [undefined, 'ok', 'pte', 'na'];
-const ETIQUETA: Record<string, string> = { ok:'hecho', pte:'pendiente', na:'no aplica', otro:'con nota' };
 
 const inputS: React.CSSProperties = { width:'100%', padding:'6px 9px', fontSize:11.5,
   border:'0.5px solid #e2e8f0', borderRadius:7, outline:'none', boxSizing:'border-box' };
@@ -38,6 +36,26 @@ function Copiar({ texto }: { texto: string }) {
       style={{ border:'none', background:'none', cursor:'pointer', padding:2,
                color: ok ? '#059669' : '#94a3b8', display:'inline-flex', flexShrink:0 }}>
       {ok ? <Check size={11}/> : <Copy size={11}/>}
+    </button>
+  );
+}
+
+/**
+ * Botoncito de estado del paso. Encendido se pinta con su color; apagado queda
+ * en gris claro pero legible, para que se vea que está ahí y se puede pulsar.
+ */
+function Marca({ activo, color, fondo, borde, titulo, onClick, children }: {
+  activo: boolean; color: string; fondo: string; borde: string; titulo: string;
+  onClick: ()=>void; children: React.ReactNode;
+}) {
+  return (
+    <button title={titulo} onClick={onClick}
+      style={{ fontSize:9, fontWeight:600, padding:'2.5px 7px', borderRadius:6, cursor:'pointer',
+               whiteSpace:'nowrap', lineHeight:1.25,
+               background: activo ? fondo : '#fff',
+               color:      activo ? color : '#94a3b8',
+               border: `0.5px solid ${activo ? borde : '#e2e8f0'}` }}>
+      {children}
     </button>
   );
 }
@@ -419,25 +437,55 @@ function Panel({ o, cat, puedeEditar, onCerrar, onGuardar, onEditar, onBorrar }:
   const c = colorEstado(o.estado), a = avance(o, undefined, cat), f = frenos(o, cat);
   const [detalleDe, setDetalleDe] = useState<string | null>(null);
 
-  /** Un clic avanza el estado del paso. Lo más común es marcar hecho, así que
-      ese es el primer salto; la fecha se pone sola porque si no, nadie la pone. */
-  function ciclar(pasoId: string) {
+  const hoy = () => new Date().toLocaleDateString('es-CO');
+
+  function escribir(pasoId: string, v: PasoObjeto | null) {
     if (!puedeEditar) return;
-    // 'otro' es una celda con texto libre del Excel, no un paso hecho: desde ahí
-    // el clic debe llevar a «hecho», igual que desde sin marcar. Tratarlo como
-    // si fuera 'ok' mandaba el primer clic a «pendiente», que no es lo que
-    // espera nadie que esté marcando avance.
-    const actual = o.pasos?.[pasoId]?.estado;
-    const i = CICLO.indexOf(actual === 'otro' ? undefined : actual);
-    const sig = CICLO[(i + 1) % CICLO.length];
     const pasos = { ...o.pasos };
-    if (!sig) delete pasos[pasoId];
-    else {
-      const prev: Partial<PasoObjeto> = pasos[pasoId] ?? {};
-      pasos[pasoId] = { ...prev, estado: sig,
-        fecha: sig === 'ok' ? (prev.fecha ?? new Date().toLocaleDateString('es-CO')) : prev.fecha };
-    }
+    if (v) pasos[pasoId] = v; else delete pasos[pasoId];
     onGuardar({ ...o, pasos });
+  }
+
+  /**
+   * «Iniciado» y «Finalizado» como dos interruptores, en vez de un clic que
+   * rotaba entre cuatro estados. Lo que pasaba antes: al desmarcar un paso
+   * hecho quedaba en «pendiente» —naranja— con la fecha de cierre todavía
+   * puesta, y nadie entendía por qué. Aquí cada botón dice lo que hace y se
+   * apaga volviendo a pulsarlo.
+   *
+   * Finalizar sin haber iniciado es válido: la mitad de las casillas del Excel
+   * traen solo la fecha de cierre, porque eso es lo que se anota cuando algo
+   * sale bien a la primera.
+   */
+  function marcarInicio(pasoId: string) {
+    const v = o.pasos?.[pasoId];
+    if (v?.inicio) {
+      // Apagar «iniciado»: si ya estaba finalizado, sigue finalizado.
+      const resto: PasoObjeto = { ...v, inicio: undefined };
+      escribir(pasoId, v.estado === 'ok' ? resto
+                     : resto.nota || resto.link ? { ...resto, estado: 'pte' } : null);
+    } else {
+      escribir(pasoId, { ...(v ?? {}), estado: v?.estado === 'ok' ? 'ok' : 'pte', inicio: hoy() });
+    }
+  }
+
+  function marcarFin(pasoId: string) {
+    const v = o.pasos?.[pasoId];
+    if (v?.estado === 'ok') {
+      // Apagar «finalizado» borra la fecha de fin: dejarla puesta en un paso
+      // que ya no está hecho es justo lo que confundía antes.
+      const resto: PasoObjeto = { ...v, estado: 'pte', fecha: undefined };
+      escribir(pasoId, resto.inicio || resto.nota || resto.link ? resto : null);
+    } else {
+      escribir(pasoId, { ...(v ?? {}), estado: 'ok', fecha: v?.fecha ?? hoy() });
+    }
+  }
+
+  /** «No aplica» es excluyente: un paso que este objeto no hace no tiene fechas. */
+  function marcarNA(pasoId: string) {
+    const v = o.pasos?.[pasoId];
+    escribir(pasoId, v?.estado === 'na' ? null
+                   : { estado: 'na', nota: v?.nota, link: v?.link });
   }
 
   function editarPaso(pasoId: string, campo: 'fecha'|'inicio'|'nota'|'link', valor: string) {
@@ -521,9 +569,10 @@ function Panel({ o, cat, puedeEditar, onCerrar, onGuardar, onEditar, onBorrar }:
           </dl>
 
           {puedeEditar && (
-            <p style={{ margin:'0 0 11px', fontSize:10.5, color:'#a78bfa' }}>
-              Clic en un paso para cambiarlo: sin marcar → hecho → pendiente → no aplica.
-              Clic en la fecha o la nota para escribirlas.
+            <p style={{ margin:'0 0 11px', fontSize:10.5, color:'#64748b', lineHeight:1.6 }}>
+              <b style={{ color:'#b45309' }}>Iniciado</b> y <b style={{ color:'#047857' }}>Finalizado</b> ponen
+              la fecha de hoy; se quitan volviéndolos a pulsar. <b>N/A</b> es para un paso
+              por el que este objeto no pasa. Abre la fila para corregir las fechas o dejar una nota.
             </p>
           )}
 
@@ -556,10 +605,9 @@ function Panel({ o, cat, puedeEditar, onCerrar, onGuardar, onEditar, onBorrar }:
                       <div key={p.id} style={{ borderTop: k ? '0.5px solid #eef2f6' : 'none',
                         background: ok ? '#f0fdf4' : v?.estado === 'pte' ? '#fffbeb'
                                   : v?.estado === 'otro' ? '#faf5ff' : na ? '#f8fafc' : '#fff' }}>
-                        <div onClick={()=>ciclar(p.id)}
-                          title={puedeEditar ? `${ETIQUETA[v?.estado ?? ''] ?? 'sin marcar'} — clic para cambiar` : (ETIQUETA[v?.estado ?? ''] ?? 'sin marcar')}
-                          style={{ display:'flex', alignItems:'center', gap:9, padding:'6px 11px',
-                                   cursor: puedeEditar ? 'pointer' : 'default' }}>
+                        <div onClick={()=>setDetalleDe(abierto ? null : p.id)}
+                          style={{ display:'flex', alignItems:'center', gap:8, padding:'5px 9px 5px 11px',
+                                   cursor:'pointer' }}>
                           <i style={{ width:13, height:13, borderRadius:4, flexShrink:0, display:'inline-flex',
                             alignItems:'center', justifyContent:'center', fontSize:9, fontWeight:700, lineHeight:1,
                             background: ok ? '#059669' : na ? '#e2e8f0' : '#fff',
@@ -567,44 +615,65 @@ function Panel({ o, cat, puedeEditar, onCerrar, onGuardar, onEditar, onBorrar }:
                             border:`1.5px solid ${ok ? '#059669' : na ? '#94a3b8'
                                    : v?.estado==='pte' ? '#f59e0b' : v?.estado==='otro' ? '#a78bfa' : '#94a3b8'}` }}>
                             {ok ? '✓' : na ? '–' : ''}</i>
-                          <span style={{ flex:1, fontSize:11,
+                          <span style={{ flex:1, fontSize:11, minWidth:0, overflow:'hidden',
+                            textOverflow:'ellipsis', whiteSpace:'nowrap',
                             color: ok ? '#047857' : na ? '#94a3b8' : '#334155' }}>{p.label}</span>
-                          {na && <span style={{ fontSize:9, color:'#94a3b8', flexShrink:0 }}>no aplica</span>}
-                          {v?.nota && <span title={v.nota} style={{ fontSize:9, color:'#7c3aed', maxWidth:100,
-                            overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{v.nota}</span>}
+
+                          {v?.nota && <span title={v.nota} style={{ fontSize:9, color:'#7c3aed', maxWidth:80,
+                            overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', flexShrink:0 }}>{v.nota}</span>}
                           {v?.link && <a href={v.link} target="_blank" rel="noopener" onClick={e=>e.stopPropagation()}
-                            style={{ color:'#0e7490', display:'inline-flex' }}><ExternalLink size={10}/></a>}
+                            style={{ color:'#0e7490', display:'inline-flex', flexShrink:0 }}><ExternalLink size={10}/></a>}
                           {v?.link && <Copiar texto={v.link}/>}
                           {dias !== null && <span title={`${dias} día${dias!==1?'s':''} hábil${dias!==1?'es':''}`}
                             style={{ fontSize:9, color:'#64748b', background:'#f1f5f9', borderRadius:4,
                                      padding:'1px 5px', flexShrink:0 }}>{dias}d</span>}
-                          {(v?.inicio || v?.fecha) && (
+
+                          {puedeEditar ? (
+                            <div style={{ display:'flex', gap:3, flexShrink:0 }} onClick={e=>e.stopPropagation()}>
+                              <Marca activo={!!v?.inicio} color="#b45309" fondo="#fef3c7" borde="#fde68a"
+                                titulo={v?.inicio ? `Iniciado el ${v.inicio} — pulsa para quitarlo` : 'Marcar como iniciado hoy'}
+                                onClick={()=>marcarInicio(p.id)}>Iniciado</Marca>
+                              <Marca activo={ok} color="#047857" fondo="#d1fae5" borde="#a7f3d0"
+                                titulo={ok ? `Finalizado el ${v?.fecha} — pulsa para quitarlo` : 'Marcar como finalizado hoy'}
+                                onClick={()=>marcarFin(p.id)}>Finalizado</Marca>
+                              <Marca activo={na} color="#475569" fondo="#e2e8f0" borde="#cbd5e1"
+                                titulo={na ? 'No aplica — pulsa para quitarlo' : 'Este objeto no pasa por este paso'}
+                                onClick={()=>marcarNA(p.id)}>N/A</Marca>
+                            </div>
+                          ) : (
                             <span style={{ fontSize:9.5, color:'#64748b', flexShrink:0 }}>
-                              {v.inicio && v.fecha ? `${v.inicio} → ${v.fecha}`
-                               : v.inicio ? `desde ${v.inicio}` : v.fecha}
-                            </span>
+                              {na ? 'no aplica' : v?.inicio && v?.fecha ? `${v.inicio} → ${v.fecha}`
+                               : v?.inicio ? `desde ${v.inicio}` : v?.fecha ?? ''}</span>
                           )}
-                          {puedeEditar && (
-                            <button title="Fechas, nota y enlace"
-                              onClick={e => { e.stopPropagation(); setDetalleDe(abierto ? null : p.id); }}
-                              style={{ border:'none', background:'none', cursor:'pointer', padding:0, display:'flex',
-                                       color: abierto ? '#6d28d9' : '#94a3b8', flexShrink:0 }}>
-                              <ChevronDown size={12} style={{ transform: abierto ? 'rotate(180deg)' : 'none' }}/></button>
-                          )}
+                          <ChevronDown size={12} style={{ flexShrink:0, color: abierto ? '#6d28d9' : '#cbd5e1',
+                            transform: abierto ? 'rotate(180deg)' : 'none' }}/>
                         </div>
-                        {abierto && puedeEditar && (
-                          <div style={{ display:'grid', gap:5, gridTemplateColumns:'1fr 1fr', padding:'2px 11px 9px 33px' }}>
-                            <Fecha etiqueta="Inicio" valor={v?.inicio} onCambio={x=>editarPaso(p.id, 'inicio', x)}/>
-                            <Fecha etiqueta="Fin"    valor={v?.fecha}  onCambio={x=>editarPaso(p.id, 'fecha',  x)}/>
-                            <input defaultValue={v?.nota ?? ''} placeholder="Nota (p. ej. qué lo trabó)"
-                              onBlur={e=>editarPaso(p.id, 'nota', e.target.value.trim())}
-                              style={{ ...inputS, fontSize:10.5, gridColumn:'1 / -1' }}/>
-                            <input defaultValue={v?.link ?? ''} placeholder="Enlace (repo, documento, WO…)"
-                              onBlur={e=>editarPaso(p.id, 'link', e.target.value.trim())}
-                              style={{ ...inputS, fontSize:10.5, gridColumn:'1 / -1' }}/>
-                            {v?.inicio && v?.fecha && duracion(v) === null && (
-                              <span style={{ gridColumn:'1 / -1', fontSize:9.5, color:'#b45309' }}>
-                                El fin queda antes del inicio.</span>
+                        {abierto && (
+                          <div style={{ display:'grid', gap:5, gridTemplateColumns:'1fr 1fr',
+                                        padding:'2px 11px 9px 33px' }}>
+                            {puedeEditar ? (
+                              <>
+                                <Fecha etiqueta="Inicio" valor={v?.inicio} onCambio={x=>editarPaso(p.id, 'inicio', x)}/>
+                                <Fecha etiqueta="Fin"    valor={v?.fecha}  onCambio={x=>editarPaso(p.id, 'fecha',  x)}/>
+                                <input defaultValue={v?.nota ?? ''} placeholder="Nota (p. ej. qué lo trabó)"
+                                  onBlur={e=>editarPaso(p.id, 'nota', e.target.value.trim())}
+                                  style={{ ...inputS, fontSize:10.5, gridColumn:'1 / -1' }}/>
+                                <input defaultValue={v?.link ?? ''} placeholder="Enlace (repo, documento, WO…)"
+                                  onBlur={e=>editarPaso(p.id, 'link', e.target.value.trim())}
+                                  style={{ ...inputS, fontSize:10.5, gridColumn:'1 / -1' }}/>
+                                {v?.inicio && v?.fecha && dias === null && (
+                                  <span style={{ gridColumn:'1 / -1', fontSize:9.5, color:'#b45309' }}>
+                                    El fin queda antes del inicio.</span>
+                                )}
+                              </>
+                            ) : (
+                              <dl style={{ gridColumn:'1 / -1', margin:0, display:'grid',
+                                           gridTemplateColumns:'auto 1fr', gap:'3px 10px', fontSize:10.5 }}>
+                                {v?.inicio && <><dt style={{ color:'#94a3b8' }}>Inicio</dt><dd style={{ margin:0 }}>{v.inicio}</dd></>}
+                                {v?.fecha  && <><dt style={{ color:'#94a3b8' }}>Fin</dt><dd style={{ margin:0 }}>{v.fecha}</dd></>}
+                                {v?.nota   && <><dt style={{ color:'#94a3b8' }}>Nota</dt><dd style={{ margin:0 }}>{v.nota}</dd></>}
+                                {!v && <dd style={{ gridColumn:'1 / -1', margin:0, color:'#94a3b8' }}>Sin marcar.</dd>}
+                              </dl>
                             )}
                           </div>
                         )}

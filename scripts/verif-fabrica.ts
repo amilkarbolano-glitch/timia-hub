@@ -119,41 +119,52 @@ ok(faseActual({ ...objetos.find(o => avance(o, undefined, PASOS).pct === 100)!, 
    'un objeto terminado pasa a la fase nueva cuando se le marca un paso ahí');
 
 
-console.log('\n── El ciclo al marcar un paso ──');
-// Replica de la función `ciclar` del panel. Si cambia allá, este test lo caza.
-const CICLO: (string | undefined)[] = [undefined, 'ok', 'pte', 'na'];
-const siguiente = (actual?: string) =>
-  CICLO[(CICLO.indexOf(actual === 'otro' ? undefined : actual) + 1) % CICLO.length];
+console.log('\n── Los botones Iniciado / Finalizado ──');
+// Réplica de marcarInicio/marcarFin/marcarNA del panel. Antes el estado se
+// rotaba con un solo clic y al desmarcar un paso hecho quedaba en «pendiente»
+// con la fecha de cierre puesta; eso es lo que estos checks impiden que vuelva.
+type P = { estado: string; inicio?: string; fecha?: string; nota?: string; link?: string } | null;
+const HOY = '21/10/2026';
 
-ok(siguiente(undefined) === 'ok', 'sin marcar → hecho');
-ok(siguiente('ok')  === 'pte',    'hecho → pendiente');
-ok(siguiente('pte') === 'na',     'pendiente → no aplica');
-ok(siguiente('na')  === undefined,'no aplica → sin marcar, y vuelve a empezar');
-// Las celdas con texto libre del Excel ('Atendido… Cambio Delimitador') no son
-// pasos hechos: el primer clic sobre ellas tiene que marcar hecho.
-ok(siguiente('otro') === 'ok',    'una celda con nota del Excel → hecho al primer clic');
+function inicio(v: P): P {
+  if (v?.inicio) {
+    const r = { ...v, inicio: undefined };
+    return v.estado === 'ok' ? r : (r.nota || r.link ? { ...r, estado: 'pte' } : null);
+  }
+  return { ...(v ?? {}), estado: v?.estado === 'ok' ? 'ok' : 'pte', inicio: HOY };
+}
+function fin(v: P): P {
+  if (v?.estado === 'ok') {
+    const r = { ...v, estado: 'pte', fecha: undefined };
+    return r.inicio || r.nota || r.link ? r : null;
+  }
+  return { ...(v ?? {}), estado: 'ok', fecha: v?.fecha ?? HOY };
+}
+const na = (v: P): P => v?.estado === 'na' ? null : { estado: 'na', nota: v?.nota, link: v?.link };
 
-const conNota = objetos.flatMap(o => Object.values(o.pasos)).filter(p => p.estado === 'otro');
-ok(conNota.length > 0, `hay ${conNota.length} celdas con nota a las que aplica ese primer clic`);
+ok(inicio(null)?.estado === 'pte' && inicio(null)?.inicio === HOY, 'Iniciado pone pendiente con la fecha de hoy');
+ok(fin(null)?.estado === 'ok' && fin(null)?.fecha === HOY, 'Finalizado pone hecho con la fecha de hoy');
+ok(fin(null)?.inicio === undefined, 'finalizar sin haber iniciado no inventa una fecha de inicio');
 
-console.log('\n── Fechas de inicio y fin ──');
-// La fábrica escribe dd/mm/aaaa, no ISO. Leer mal el formato daría duraciones
-// absurdas sin que nadie se dé cuenta, así que se fija aquí.
-ok(fechaCol('02/06/2026')!.getMonth() === 5, '02/06/2026 es junio, no febrero');
-ok(fechaCol('26/05/26')!.getFullYear() === 2026, 'el año de dos cifras se completa a 2026');
-ok(fechaCol('2026-06-02') === null, 'una fecha en ISO no se interpreta como dd/mm');
-ok(fechaCol('') === null && fechaCol(undefined) === null, 'vacío no es una fecha');
+// El caso que confundió al jefe: desmarcar dejaba naranja y con fecha de fin.
+const hecho = fin(inicio(null));
+ok(hecho?.estado === 'ok' && hecho?.inicio === HOY && hecho?.fecha === HOY, 'iniciar y finalizar deja las dos fechas');
+const desmarcado = fin(hecho);
+ok(desmarcado?.estado === 'pte', 'quitar Finalizado lo devuelve a iniciado');
+ok(desmarcado?.fecha === undefined, 'y borra la fecha de fin, que era lo que confundía');
+ok(desmarcado?.inicio === HOY, 'pero conserva la fecha de inicio');
 
-// Duración en días hábiles, porque la fábrica no trabaja fines de semana.
-ok(duracion({ estado:'ok', inicio:'01/06/2026', fecha:'05/06/2026' }) === 5, 'lunes a viernes son 5 días hábiles');
-ok(duracion({ estado:'ok', inicio:'05/06/2026', fecha:'08/06/2026' }) === 2, 'viernes a lunes son 2: el fin de semana no cuenta');
-ok(duracion({ estado:'ok', inicio:'01/06/2026', fecha:'01/06/2026' }) === 1, 'empezar y terminar el mismo día es 1 día');
-ok(duracion({ estado:'ok', fecha:'01/06/2026' }) === null, 'sin inicio no hay duración que mostrar');
-ok(duracion({ estado:'ok', inicio:'10/06/2026', fecha:'01/06/2026' }) === null, 'un fin anterior al inicio no da una duración negativa');
+ok(fin(fin(null)) === null, 'poner y quitar Finalizado sin más datos deja el paso limpio');
+ok(inicio(inicio(null)) === null, 'poner y quitar Iniciado deja el paso limpio');
+ok(inicio(hecho)?.estado === 'ok', 'quitar Iniciado en un paso finalizado no lo desfinaliza');
 
-// Los datos del Excel solo traían la fecha de cierre; inicio queda por llenar.
-const conFin = objetos.flatMap(o => Object.values(o.pasos)).filter(p => p.fecha);
-ok(conFin.length > 0 && conFin.every(p => p.inicio === undefined),
-   `las ${conFin.length} fechas que venían del Excel se conservan como fin, sin inventar un inicio`);
+// Una nota no se pierde por apagar un botón: es lo único que no se puede rehacer.
+const conNota: P = { estado: 'pte', inicio: HOY, nota: 'esperando al banco' };
+ok(inicio(conNota)?.nota === 'esperando al banco', 'quitar Iniciado conserva la nota');
+ok(na(conNota)?.nota === 'esperando al banco', 'marcar N/A conserva la nota');
+
+ok(na(null)?.estado === 'na', 'N/A marca el paso como no aplicable');
+ok(na({ estado:'ok', fecha: HOY })?.fecha === undefined, 'N/A borra las fechas: un paso que no se hace no tiene cuándo');
+ok(na({ estado:'na' }) === null, 'volver a pulsar N/A lo deja sin marcar');
 
 console.log(f ? `\n${f} fallas` : '\nfábrica OK');
