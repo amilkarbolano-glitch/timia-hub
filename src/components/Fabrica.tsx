@@ -5,14 +5,25 @@
 //   Proyectos→ ¿cómo va cada SDATOOL? (es lo que se reporta hacia afuera)
 
 import React, { useState, useMemo } from 'react';
-import { Factory, Search, X, ExternalLink, AlertTriangle, Copy, Check } from 'lucide-react';
+import { Factory, Search, ExternalLink, AlertTriangle, Copy, Check, Plus, Settings2,
+         Trash2, ChevronUp, ChevronDown, ArrowLeft, Pencil } from 'lucide-react';
 import {
-  fabricaStore, PASOS, FASES, pasosDeFase, avance, faseActual, frenos,
-  colorEstado, codigoProyecto, nombreProyecto,
-  type ObjetoFabrica,
+  fabricaStore, pasosDeFase, avance, faseActual, frenos, objetoNuevo, nuevoId, mover,
+  colorEstado, codigoProyecto, nombreProyecto, ESTADOS, fases as fasesDe,
+  type ObjetoFabrica, type PasoCatalogo, type EstadoPaso, type PasoObjeto,
 } from '../lib/fabrica';
+import { useAuth, canAccess } from '../contexts/AuthContext';
 
 type Vista = 'tuberia' | 'objetos' | 'proyectos';
+
+/** El ciclo al hacer clic en un paso. Vacío es "ni siquiera empezó". */
+const CICLO: (EstadoPaso | undefined)[] = [undefined, 'ok', 'pte', 'na'];
+const ETIQUETA: Record<string, string> = { ok:'hecho', pte:'pendiente', na:'no aplica', otro:'con nota' };
+
+const inputS: React.CSSProperties = { width:'100%', padding:'6px 9px', fontSize:11.5,
+  border:'0.5px solid #e2e8f0', borderRadius:7, outline:'none', boxSizing:'border-box' };
+const botonS: React.CSSProperties = { padding:'7px 13px', fontSize:11.5, fontWeight:600, borderRadius:7,
+  cursor:'pointer', border:'0.5px solid #e2e8f0', background:'#fff', color:'#374151' };
 
 const card: React.CSSProperties = { background:'#fff', border:'0.5px solid #e2e8f0', borderRadius:12 };
 const mono: React.CSSProperties = { fontFamily:'ui-monospace, Menlo, monospace' };
@@ -31,13 +42,13 @@ function Copiar({ texto }: { texto: string }) {
   );
 }
 
-/** Barra de 28 casillas: de un vistazo se ve dónde va y qué le falta. */
-function Tira({ o, alto = 7 }: { o: ObjetoFabrica; alto?: number }) {
+/** Barra de casillas: de un vistazo se ve dónde va y qué le falta. */
+function Tira({ o, cat, alto = 7 }: { o: ObjetoFabrica; cat: PasoCatalogo[]; alto?: number }) {
   return (
     <div style={{ display:'flex', gap:1 }}>
-      {FASES.map(f => (
+      {fasesDe(cat).map(f => (
         <div key={f} style={{ display:'flex', gap:1, marginRight:3 }}>
-          {pasosDeFase(f).map(p => {
+          {pasosDeFase(f, cat).map(p => {
             const v = o.pasos?.[p.id];
             const c = !v || v.estado === 'na' ? '#f1f5f9'
                     : v.estado === 'ok' ? '#059669'
@@ -53,12 +64,38 @@ function Tira({ o, alto = 7 }: { o: ObjetoFabrica; alto?: number }) {
 }
 
 export default function Fabrica() {
-  const objetos = useMemo(() => fabricaStore.objetos(), []);
+  const { user } = useAuth();
+  const puedeEditar = canAccess(user?.role, 'fabrica.edit');
+
+  const [objetos, setObjetos] = useState<ObjetoFabrica[]>(() => fabricaStore.objetos());
+  const [cat, setCat] = useState<PasoCatalogo[]>(() => fabricaStore.pasos());
   const [vista, setVista] = useState<Vista>('tuberia');
   const [busca, setBusca] = useState('');
   const [proy, setProy] = useState('');
   const [resp, setResp] = useState('');
   const [abierto, setAbierto] = useState<string | null>(null);
+  const [editando, setEditando] = useState<ObjetoFabrica | null>(null);
+  const [configPasos, setConfigPasos] = useState(false);
+  const [detalle, setDetalle] = useState<string | null>(null);
+
+  /** Una sola puerta de escritura: si no tiene permiso, no se guarda nada. */
+  function guardar(nuevos: ObjetoFabrica[]) {
+    if (!puedeEditar) return;
+    setObjetos(nuevos);
+    fabricaStore.guardar(nuevos);
+  }
+  function guardarUno(o: ObjetoFabrica) {
+    guardar(objetos.some(x => x.id === o.id) ? objetos.map(x => x.id === o.id ? o : x) : [...objetos, o]);
+  }
+  function borrar(id: string) {
+    guardar(objetos.filter(x => x.id !== id));
+    setAbierto(null);
+  }
+  function guardarCat(ps: PasoCatalogo[]) {
+    if (!puedeEditar) return;
+    setCat(ps);
+    fabricaStore.guardarPasos(ps);
+  }
 
   const proyectos = useMemo(() => [...new Set(objetos.map(o => o.proyecto))].sort(), [objetos]);
   const responsables = useMemo(() => [...new Set(objetos.map(o => o.responsable).filter(Boolean))].sort(), [objetos]);
@@ -69,13 +106,30 @@ export default function Fabrica() {
 
   const bloqueados = vis.filter(o => o.estado === 'Bloqueado');
   const activos = vis.filter(o => !['Finalizado','Desestimado'].includes(o.estado));
-  const pctMedio = activos.length ? Math.round(activos.reduce((s,o) => s + avance(o).pct, 0) / activos.length) : 0;
+  const pctMedio = activos.length ? Math.round(activos.reduce((s,o) => s + avance(o, undefined, cat).pct, 0) / activos.length) : 0;
 
-  if (!objetos.length) return (
+  if (!objetos.length && !editando) return (
     <div style={{ padding:'60px 36px', textAlign:'center' }}>
       <Factory size={26} color="#cbd5e1" style={{ margin:'0 auto 10px', display:'block' }}/>
-      <p style={{ fontSize:13, color:'#94a3b8', margin:0 }}>Todavía no hay objetos cargados en la fábrica.</p>
+      <p style={{ fontSize:13, color:'#94a3b8', margin:'0 0 14px' }}>Todavía no hay objetos cargados en la fábrica.</p>
+      {puedeEditar && (
+        <button onClick={()=>setEditando(objetoNuevo())} style={{ ...botonS, background:'#6d28d9', color:'#fff', border:'none' }}>
+          <Plus size={12} style={{ verticalAlign:-2, marginRight:4 }}/>Agregar el primer objeto</button>
+      )}
     </div>
+  );
+
+  // La ficha de proyecto reemplaza a la lista: es una pantalla, no un modal,
+  // porque es lo que David abre para reportar hacia afuera.
+  if (detalle) return (
+    <FichaProyecto proyecto={detalle} objetos={objetos.filter(o => o.proyecto === detalle)} cat={cat}
+      onVolver={()=>setDetalle(null)} onAbrir={setAbierto}
+      panel={abierto && objetos.some(x=>x.id===abierto)
+        ? <Panel o={objetos.find(x => x.id === abierto)!} cat={cat} puedeEditar={puedeEditar}
+                 onCerrar={()=>setAbierto(null)} onGuardar={guardarUno}
+                 onEditar={()=>{ setEditando(objetos.find(x=>x.id===abierto)!); setAbierto(null); }}
+                 onBorrar={()=>borrar(abierto)}/>
+        : null}/>
   );
 
   return (
@@ -89,9 +143,19 @@ export default function Fabrica() {
         <div style={{ flex:1, minWidth:200 }}>
           <h2 style={{ margin:0, fontSize:18, fontWeight:700, letterSpacing:'-.3px' }}>Fábrica · estatus interno</h2>
           <p style={{ margin:'2px 0 0', fontSize:12, color:'#94a3b8' }}>
-            {objetos.length} objetos de {proyectos.length} proyectos · cada uno recorre {PASOS.length} pasos
+            {objetos.length} objetos de {proyectos.length} proyectos · cada uno recorre {cat.length} pasos
+            {!puedeEditar && <span style={{ color:'#cbd5e1' }}> · solo lectura</span>}
           </p>
         </div>
+        {puedeEditar && (
+          <div style={{ display:'flex', gap:6 }}>
+            <button onClick={()=>setConfigPasos(true)} style={botonS} title="Agregar, renombrar o reordenar los pasos">
+              <Settings2 size={12} style={{ verticalAlign:-2, marginRight:4 }}/>Pasos</button>
+            <button onClick={()=>setEditando(objetoNuevo(proy))}
+              style={{ ...botonS, background:'#6d28d9', color:'#fff', border:'none' }}>
+              <Plus size={12} style={{ verticalAlign:-2, marginRight:4 }}/>Objeto</button>
+          </div>
+        )}
         <div style={{ display:'flex', gap:7 }}>
           {[['Activos', activos.length, '#374151'],
             ['Avance medio', `${pctMedio}%`, '#4b5563'],
@@ -133,24 +197,37 @@ export default function Fabrica() {
         <span style={{ marginLeft:'auto', fontSize:11, color:'#94a3b8' }}>{vis.length} objeto{vis.length!==1?'s':''}</span>
       </div>
 
-      {vista === 'tuberia'   && <Tuberia objetos={vis} onAbrir={setAbierto}/>}
-      {vista === 'objetos'   && <Tabla objetos={vis} onAbrir={setAbierto}/>}
-      {vista === 'proyectos' && <PorProyecto objetos={vis}/>}
+      {vista === 'tuberia'   && <Tuberia objetos={vis} cat={cat} onAbrir={setAbierto}/>}
+      {vista === 'objetos'   && <Tabla objetos={vis} cat={cat} onAbrir={setAbierto}/>}
+      {vista === 'proyectos' && <PorProyecto objetos={vis} cat={cat} onAbrir={setDetalle}/>}
 
-      {abierto && <Panel o={objetos.find(x => x.id === abierto)!} onCerrar={()=>setAbierto(null)}/>}
+      {abierto && objetos.some(x=>x.id===abierto) && (
+        <Panel o={objetos.find(x => x.id === abierto)!} cat={cat} puedeEditar={puedeEditar}
+               onCerrar={()=>setAbierto(null)} onGuardar={guardarUno}
+               onEditar={()=>{ setEditando(objetos.find(x=>x.id===abierto)!); setAbierto(null); }}
+               onBorrar={()=>borrar(abierto)}/>
+      )}
+      {editando && (
+        <FormObjeto o={editando} proyectos={proyectos} responsables={responsables}
+          esNuevo={!objetos.some(x => x.id === editando.id)}
+          onCerrar={()=>setEditando(null)}
+          onGuardar={o => { guardarUno(o); setEditando(null); setAbierto(o.id); }}/>
+      )}
+      {configPasos && <ConfigPasos cat={cat} objetos={objetos} onCerrar={()=>setConfigPasos(false)} onGuardar={guardarCat}/>}
     </div>
   );
 }
 
 // ═══ Tubería — dónde está atascado el trabajo ════════════════════════════════
-function Tuberia({ objetos, onAbrir }: { objetos: ObjetoFabrica[]; onAbrir: (id:string)=>void }) {
+function Tuberia({ objetos, cat, onAbrir }: { objetos: ObjetoFabrica[]; cat: PasoCatalogo[]; onAbrir: (id:string)=>void }) {
   const vivos = objetos.filter(o => !['Finalizado','Desestimado'].includes(o.estado));
   const terminados = objetos.filter(o => o.estado === 'Finalizado');
-  const porFase = FASES.map(f => ({ fase: f, objs: vivos.filter(o => faseActual(o) === f) }));
+  const FS = fasesDe(cat);
+  const porFase = FS.map(f => ({ fase: f, objs: vivos.filter(o => faseActual(o, cat) === f) }));
 
   return (
     <>
-      <div style={{ display:'grid', gap:10, gridTemplateColumns:`repeat(${FASES.length}, minmax(170px, 1fr))`,
+      <div style={{ display:'grid', gap:10, gridTemplateColumns:`repeat(${FS.length}, minmax(170px, 1fr))`,
                     overflowX:'auto', paddingBottom:4 }}>
         {porFase.map(({ fase, objs }, i) => (
           <div key={fase} style={{ ...card, display:'flex', flexDirection:'column', minHeight:120 }}>
@@ -165,7 +242,7 @@ function Tuberia({ objetos, onAbrir }: { objetos: ObjetoFabrica[]; onAbrir: (id:
             <div style={{ padding:7, display:'flex', flexDirection:'column', gap:5, flex:1 }}>
               {objs.length === 0 && <p style={{ margin:'auto', fontSize:10.5, color:'#cbd5e1' }}>—</p>}
               {objs.map(o => {
-                const c = colorEstado(o.estado), f = frenos(o);
+                const c = colorEstado(o.estado), f = frenos(o, cat);
                 return (
                   <button key={o.id} onClick={()=>onAbrir(o.id)}
                     style={{ textAlign:'left', border:`0.5px solid ${c.borde}`, background:c.bg, borderRadius:8,
@@ -178,7 +255,7 @@ function Tuberia({ objetos, onAbrir }: { objetos: ObjetoFabrica[]; onAbrir: (id:
                         <AlertTriangle size={8}/> falta: {f.map(x=>x.label).join(', ').slice(0,38)}
                       </div>
                     )}
-                    <div style={{ marginTop:5 }}><Tira o={o} alto={5}/></div>
+                    <div style={{ marginTop:5 }}><Tira o={o} cat={cat} alto={5}/></div>
                   </button>
                 );
               })}
@@ -197,7 +274,7 @@ function Tuberia({ objetos, onAbrir }: { objetos: ObjetoFabrica[]; onAbrir: (id:
 }
 
 // ═══ Tabla ═══════════════════════════════════════════════════════════════════
-function Tabla({ objetos, onAbrir }: { objetos: ObjetoFabrica[]; onAbrir: (id:string)=>void }) {
+function Tabla({ objetos, cat, onAbrir }: { objetos: ObjetoFabrica[]; cat: PasoCatalogo[]; onAbrir: (id:string)=>void }) {
   const th: React.CSSProperties = { padding:'9px 12px', fontSize:9.5, color:'#94a3b8', fontWeight:650,
     textTransform:'uppercase', letterSpacing:'.05em', textAlign:'left', borderBottom:'0.5px solid #e2e8f0',
     background:'#f8fafc', position:'sticky', top:0 };
@@ -215,7 +292,7 @@ function Tabla({ objetos, onAbrir }: { objetos: ObjetoFabrica[]; onAbrir: (id:st
           </tr></thead>
           <tbody>
             {objetos.map(o => {
-              const a = avance(o), c = colorEstado(o.estado);
+              const a = avance(o, undefined, cat), c = colorEstado(o.estado);
               return (
                 <tr key={o.id} onClick={()=>onAbrir(o.id)} style={{ cursor:'pointer' }}
                     onMouseOver={e=>e.currentTarget.style.background='#fafbfc'}
@@ -240,7 +317,7 @@ function Tabla({ objetos, onAbrir }: { objetos: ObjetoFabrica[]; onAbrir: (id:st
                                    background:c.bg, color:c.text, border:`0.5px solid ${c.borde}`, whiteSpace:'nowrap' }}>
                       {o.estado || '—'}</span>
                   </td>
-                  <td style={td}><Tira o={o}/></td>
+                  <td style={td}><Tira o={o} cat={cat}/></td>
                   <td style={{...td, textAlign:'center'}}>
                     <div style={{ fontSize:11, fontWeight:700, color: a.pct===100?'#047857':a.pct>0?'#b45309':'#cbd5e1' }}>{a.pct}%</div>
                     <div style={{ fontSize:9, color:'#cbd5e1' }}>{a.ok}/{a.aplican}</div>
@@ -256,7 +333,7 @@ function Tabla({ objetos, onAbrir }: { objetos: ObjetoFabrica[]; onAbrir: (id:st
 }
 
 // ═══ Por proyecto — lo que se reporta hacia afuera ═══════════════════════════
-function PorProyecto({ objetos }: { objetos: ObjetoFabrica[] }) {
+function PorProyecto({ objetos, cat, onAbrir }: { objetos: ObjetoFabrica[]; cat: PasoCatalogo[]; onAbrir: (p:string)=>void }) {
   const grupos = useMemo(() => {
     const m = new Map<string, ObjetoFabrica[]>();
     objetos.forEach(o => m.set(o.proyecto, [...(m.get(o.proyecto) ?? []), o]));
@@ -266,11 +343,12 @@ function PorProyecto({ objetos }: { objetos: ObjetoFabrica[] }) {
   return (
     <div style={{ display:'grid', gap:10, gridTemplateColumns:'repeat(auto-fill, minmax(330px, 1fr))' }}>
       {grupos.map(([proyecto, objs]) => {
-        const pct = Math.round(objs.reduce((s,o) => s + avance(o).pct, 0) / objs.length);
+        const pct = Math.round(objs.reduce((s,o) => s + avance(o, undefined, cat).pct, 0) / objs.length);
         const bloq = objs.filter(o => o.estado === 'Bloqueado').length;
         const fin = objs.filter(o => o.estado === 'Finalizado').length;
         return (
-          <div key={proyecto} style={{ ...card, padding:'14px 16px' }}>
+          <div key={proyecto} onClick={()=>onAbrir(proyecto)} title="Abrir la ficha del proyecto"
+               style={{ ...card, padding:'14px 16px', cursor:'pointer' }}>
             <div style={{ fontSize:12.5, fontWeight:700 }}>{codigoProyecto(proyecto)}</div>
             <div style={{ fontSize:10.5, color:'#94a3b8', marginTop:1, marginBottom:10 }}>{nombreProyecto(proyecto) || '—'}</div>
             <div style={{ display:'flex', alignItems:'center', gap:9, marginBottom:10 }}>
@@ -286,13 +364,17 @@ function PorProyecto({ objetos }: { objetos: ObjetoFabrica[] }) {
               {bloq > 0 && <span style={{ fontSize:9.5, padding:'2px 7px', borderRadius:5, background:'#fef2f2', color:'#b91c1c' }}>{bloq} bloqueado{bloq!==1?'s':''}</span>}
             </div>
             <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
-              {objs.map(o => (
+              {objs.slice(0, 8).map(o => (
                 <div key={o.id} style={{ display:'flex', alignItems:'center', gap:7 }}>
                   <span style={{ ...mono, fontSize:9.5, color:'#64748b', flex:1, overflow:'hidden',
                                  textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{o.objetoInsumo || o.objeto}</span>
-                  <Tira o={o} alto={5}/>
+                  <Tira o={o} cat={cat} alto={5}/>
                 </div>
               ))}
+              {objs.length > 8 && (
+                <span style={{ fontSize:9.5, color:'#a78bfa', marginTop:2 }}>
+                  y {objs.length - 8} objeto{objs.length-8!==1?'s':''} más — abrir ficha</span>
+              )}
             </div>
           </div>
         );
@@ -302,8 +384,36 @@ function PorProyecto({ objetos }: { objetos: ObjetoFabrica[] }) {
 }
 
 // ═══ Panel del objeto ════════════════════════════════════════════════════════
-function Panel({ o, onCerrar }: { o: ObjetoFabrica; onCerrar: ()=>void }) {
-  const c = colorEstado(o.estado), a = avance(o), f = frenos(o);
+function Panel({ o, cat, puedeEditar, onCerrar, onGuardar, onEditar, onBorrar }: {
+  o: ObjetoFabrica; cat: PasoCatalogo[]; puedeEditar: boolean;
+  onCerrar: ()=>void; onGuardar: (o: ObjetoFabrica)=>void; onEditar: ()=>void; onBorrar: ()=>void;
+}) {
+  const c = colorEstado(o.estado), a = avance(o, undefined, cat), f = frenos(o, cat);
+  const [detalleDe, setDetalleDe] = useState<string | null>(null);
+
+  /** Un clic avanza el estado del paso. Lo más común es marcar hecho, así que
+      ese es el primer salto; la fecha se pone sola porque si no, nadie la pone. */
+  function ciclar(pasoId: string) {
+    if (!puedeEditar) return;
+    const actual = o.pasos?.[pasoId]?.estado;
+    const i = CICLO.indexOf(actual === 'otro' ? 'ok' : actual);
+    const sig = CICLO[(i + 1) % CICLO.length];
+    const pasos = { ...o.pasos };
+    if (!sig) delete pasos[pasoId];
+    else {
+      const prev: Partial<PasoObjeto> = pasos[pasoId] ?? {};
+      pasos[pasoId] = { ...prev, estado: sig,
+        fecha: sig === 'ok' ? (prev.fecha ?? new Date().toLocaleDateString('es-CO')) : prev.fecha };
+    }
+    onGuardar({ ...o, pasos });
+  }
+
+  function editarPaso(pasoId: string, campo: 'fecha'|'nota'|'link', valor: string) {
+    if (!puedeEditar) return;
+    const prev = o.pasos?.[pasoId] ?? { estado: 'pte' as EstadoPaso };
+    const pasos = { ...o.pasos, [pasoId]: { ...prev, [campo]: valor || undefined } };
+    onGuardar({ ...o, pasos });
+  }
   const dato = (k: string, v: string, m = false) => v ? (
     <><dt style={{ fontSize:10, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'.04em' }}>{k}</dt>
       <dd style={{ margin:0, fontSize:11.5, display:'flex', alignItems:'center', gap:4, minWidth:0 }}>
@@ -332,7 +442,20 @@ function Panel({ o, onCerrar }: { o: ObjetoFabrica; onCerrar: ()=>void }) {
                 {o.periodicidad && <span style={{ fontSize:10, padding:'2px 8px', borderRadius:6, background:'#eff6ff', color:'#1d4ed8' }}>{o.periodicidad}</span>}
               </div>
             </div>
-            <button onClick={onCerrar} style={{ border:'none', background:'none', cursor:'pointer', color:'#94a3b8', fontSize:20, lineHeight:1 }}>&times;</button>
+            <div style={{ display:'flex', alignItems:'center', gap:4, flexShrink:0 }}>
+              {puedeEditar && (
+                <>
+                  <button onClick={onEditar} title="Editar los datos del objeto"
+                    style={{ border:'none', background:'none', cursor:'pointer', color:'#94a3b8', padding:4, display:'flex' }}>
+                    <Pencil size={13}/></button>
+                  <button title="Borrar este objeto de la fábrica"
+                    onClick={() => { if (confirm(`¿Borrar «${o.objetoInsumo || o.objeto}» de la fábrica?`)) onBorrar(); }}
+                    style={{ border:'none', background:'none', cursor:'pointer', color:'#fca5a5', padding:4, display:'flex' }}>
+                    <Trash2 size={13}/></button>
+                </>
+              )}
+              <button onClick={onCerrar} style={{ border:'none', background:'none', cursor:'pointer', color:'#94a3b8', fontSize:20, lineHeight:1 }}>&times;</button>
+            </div>
           </div>
           <div style={{ display:'flex', alignItems:'center', gap:10, marginTop:14 }}>
             <div style={{ flex:1, height:6, background:'#f1f5f9', borderRadius:3, overflow:'hidden' }}>
@@ -351,7 +474,7 @@ function Panel({ o, onCerrar }: { o: ObjetoFabrica; onCerrar: ()=>void }) {
               <AlertTriangle size={11}/> Lo que lo tiene parado
             </div>
             <div style={{ fontSize:11.5, color:'#78350f', marginTop:5 }}>
-              {f.map(x => x.label).join(' · ')} <span style={{ color:'#b45309' }}>— en {faseActual(o)}</span>
+              {f.map(x => x.label).join(' · ')} <span style={{ color:'#b45309' }}>— en {faseActual(o, cat)}</span>
             </div>
           </div>
         )}
@@ -365,9 +488,16 @@ function Panel({ o, onCerrar }: { o: ObjetoFabrica; onCerrar: ()=>void }) {
             {dato('Recepción', o.fechaRecepcion)}
           </dl>
 
-          {FASES.map((fase, i) => {
-            const af = avance(o, fase);
-            const pasos = pasosDeFase(fase);
+          {puedeEditar && (
+            <p style={{ margin:'0 0 11px', fontSize:10.5, color:'#a78bfa' }}>
+              Clic en un paso para cambiarlo: sin marcar → hecho → pendiente → no aplica.
+              Clic en la fecha o la nota para escribirlas.
+            </p>
+          )}
+
+          {fasesDe(cat).map((fase, i) => {
+            const af = avance(o, fase, cat);
+            const pasos = pasosDeFase(fase, cat);
             return (
               <div key={fase} style={{ marginBottom:13 }}>
                 <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6 }}>
@@ -384,23 +514,48 @@ function Panel({ o, onCerrar }: { o: ObjetoFabrica; onCerrar: ()=>void }) {
                   {pasos.map((p, k) => {
                     const v = o.pasos?.[p.id];
                     const na = !v || v.estado === 'na', ok = v?.estado === 'ok';
+                    const abierto = detalleDe === p.id;
                     return (
-                      <div key={p.id} style={{ display:'flex', alignItems:'center', gap:9, padding:'6px 11px',
-                        borderTop: k ? '0.5px solid #f8fafc' : 'none',
-                        background: ok ? '#f0fdf4' : v?.estado === 'pte' ? '#fffbeb' : '#fff', opacity: na ? .45 : 1 }}>
-                        <i style={{ width:13, height:13, borderRadius:4, flexShrink:0, display:'inline-flex',
-                          alignItems:'center', justifyContent:'center', fontSize:8, fontWeight:700,
-                          background: ok ? '#059669' : na ? '#f1f5f9' : '#fff', color:'#fff',
-                          border:`1.5px solid ${ok ? '#059669' : na ? '#e2e8f0' : v?.estado==='pte' ? '#f59e0b' : '#cbd5e1'}` }}>
-                          {ok ? '✓' : na ? '' : ''}</i>
-                        <span style={{ flex:1, fontSize:11, color: na ? '#cbd5e1' : ok ? '#047857' : '#374151',
-                                       textDecoration: na ? 'line-through' : 'none' }}>{p.label}</span>
-                        {v?.nota && <span title={v.nota} style={{ fontSize:9, color:'#7c3aed', maxWidth:120,
-                          overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{v.nota}</span>}
-                        {v?.link && <a href={v.link} target="_blank" rel="noopener" onClick={e=>e.stopPropagation()}
-                          style={{ color:'#0e7490', display:'inline-flex' }}><ExternalLink size={10}/></a>}
-                        {v?.link && <Copiar texto={v.link}/>}
-                        {v?.fecha && <span style={{ fontSize:9.5, color:'#94a3b8', flexShrink:0 }}>{v.fecha}</span>}
+                      <div key={p.id} style={{ borderTop: k ? '0.5px solid #f8fafc' : 'none',
+                        background: ok ? '#f0fdf4' : v?.estado === 'pte' ? '#fffbeb' : v?.estado === 'otro' ? '#faf5ff' : '#fff' }}>
+                        <div onClick={()=>ciclar(p.id)}
+                          title={puedeEditar ? `${ETIQUETA[v?.estado ?? ''] ?? 'sin marcar'} — clic para cambiar` : (ETIQUETA[v?.estado ?? ''] ?? 'sin marcar')}
+                          style={{ display:'flex', alignItems:'center', gap:9, padding:'6px 11px',
+                                   opacity: na ? .5 : 1, cursor: puedeEditar ? 'pointer' : 'default' }}>
+                          <i style={{ width:13, height:13, borderRadius:4, flexShrink:0, display:'inline-flex',
+                            alignItems:'center', justifyContent:'center', fontSize:8, fontWeight:700,
+                            background: ok ? '#059669' : na ? '#f1f5f9' : '#fff', color:'#fff',
+                            border:`1.5px solid ${ok ? '#059669' : na ? '#e2e8f0' : v?.estado==='pte' ? '#f59e0b' : '#a78bfa'}` }}>
+                            {ok ? '✓' : ''}</i>
+                          <span style={{ flex:1, fontSize:11, color: na ? '#cbd5e1' : ok ? '#047857' : '#374151',
+                                         textDecoration: na ? 'line-through' : 'none' }}>{p.label}</span>
+                          {v?.nota && <span title={v.nota} style={{ fontSize:9, color:'#7c3aed', maxWidth:110,
+                            overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{v.nota}</span>}
+                          {v?.link && <a href={v.link} target="_blank" rel="noopener" onClick={e=>e.stopPropagation()}
+                            style={{ color:'#0e7490', display:'inline-flex' }}><ExternalLink size={10}/></a>}
+                          {v?.link && <Copiar texto={v.link}/>}
+                          {v?.fecha && <span style={{ fontSize:9.5, color:'#94a3b8', flexShrink:0 }}>{v.fecha}</span>}
+                          {puedeEditar && (
+                            <button title="Fecha, nota y enlace"
+                              onClick={e => { e.stopPropagation(); setDetalleDe(abierto ? null : p.id); }}
+                              style={{ border:'none', background:'none', cursor:'pointer', padding:0, display:'flex',
+                                       color: abierto ? '#6d28d9' : '#e2e8f0', flexShrink:0 }}>
+                              <ChevronDown size={12} style={{ transform: abierto ? 'rotate(180deg)' : 'none' }}/></button>
+                          )}
+                        </div>
+                        {abierto && puedeEditar && (
+                          <div style={{ display:'grid', gap:5, gridTemplateColumns:'90px 1fr', padding:'4px 11px 9px 33px' }}>
+                            <input defaultValue={v?.fecha ?? ''} placeholder="dd/mm/aaaa"
+                              onBlur={e=>editarPaso(p.id, 'fecha', e.target.value.trim())}
+                              style={{ ...inputS, fontSize:10.5 }}/>
+                            <input defaultValue={v?.nota ?? ''} placeholder="Nota (p. ej. qué lo trabó)"
+                              onBlur={e=>editarPaso(p.id, 'nota', e.target.value.trim())}
+                              style={{ ...inputS, fontSize:10.5 }}/>
+                            <input defaultValue={v?.link ?? ''} placeholder="Enlace (repo, documento, WO…)"
+                              onBlur={e=>editarPaso(p.id, 'link', e.target.value.trim())}
+                              style={{ ...inputS, fontSize:10.5, gridColumn:'1 / -1' }}/>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -416,6 +571,377 @@ function Panel({ o, onCerrar }: { o: ObjetoFabrica; onCerrar: ()=>void }) {
               <p style={{ margin:0, fontSize:11.5, color:'#475569', lineHeight:1.6, whiteSpace:'pre-wrap' }}>{o.comentarios}</p>
             </>
           )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══ Ficha de proyecto ═══════════════════════════════════════════════════════
+// La pregunta que contesta: «¿cómo va SDATOOL-51117 y qué le falta?».
+// Por eso lo primero es el embudo por fase — cuántos objetos pasaron cada una —
+// y enseguida lo que está frenando, agrupado por paso: si cinco objetos esperan
+// la misma certificación, eso es una gestión, no cinco.
+function FichaProyecto({ proyecto, objetos, cat, onVolver, onAbrir, panel }: {
+  proyecto: string; objetos: ObjetoFabrica[]; cat: PasoCatalogo[];
+  onVolver: ()=>void; onAbrir: (id:string)=>void; panel: React.ReactNode;
+}) {
+  const FS = fasesDe(cat);
+  const pct = objetos.length ? Math.round(objetos.reduce((s,o)=>s+avance(o,undefined,cat).pct,0)/objetos.length) : 0;
+  const vivos = objetos.filter(o => !['Finalizado','Desestimado'].includes(o.estado));
+
+  // Cuántos objetos superaron cada fase: el embudo de verdad del proyecto.
+  const embudo = FS.map(f => ({
+    fase: f,
+    completa: objetos.filter(o => avance(o, f, cat).pct === 100 && avance(o, f, cat).aplican > 0).length,
+    aplica:   objetos.filter(o => avance(o, f, cat).aplican > 0).length,
+  }));
+
+  // Frenos agrupados por paso, no por objeto.
+  const cuellos = useMemo(() => {
+    const m = new Map<string, { paso: PasoCatalogo; objs: ObjetoFabrica[] }>();
+    for (const o of vivos) for (const p of frenos(o, cat)) {
+      const e = m.get(p.id) ?? { paso: p, objs: [] };
+      e.objs.push(o); m.set(p.id, e);
+    }
+    return [...m.values()].sort((a,b) => b.objs.length - a.objs.length);
+  }, [objetos, cat]);
+
+  const porEstado = Object.keys(ESTADOS)
+    .map(e => ({ estado: e, n: objetos.filter(o => o.estado === e).length })).filter(x => x.n);
+  const equipo = [...new Set(objetos.map(o => o.responsable).filter(Boolean))];
+  const contactos = [...new Set(objetos.map(o => o.contactoBanco).filter(Boolean))];
+
+  return (
+    <div style={{ padding:'26px 32px 60px', maxWidth:1500, margin:'0 auto' }}>
+      <button onClick={onVolver} style={{ ...botonS, border:'none', background:'none', padding:'4px 0',
+        color:'#6d28d9', marginBottom:12 }}>
+        <ArrowLeft size={12} style={{ verticalAlign:-2, marginRight:5 }}/>Todos los proyectos</button>
+
+      <div style={{ display:'flex', alignItems:'flex-start', gap:14, flexWrap:'wrap', marginBottom:18 }}>
+        <div style={{ flex:1, minWidth:240 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+            <h2 style={{ margin:0, fontSize:19, fontWeight:700, letterSpacing:'-.3px' }}>{codigoProyecto(proyecto)}</h2>
+            <Copiar texto={codigoProyecto(proyecto)}/>
+          </div>
+          <p style={{ margin:'2px 0 0', fontSize:12.5, color:'#64748b' }}>{nombreProyecto(proyecto) || '—'}</p>
+          <div style={{ display:'flex', gap:5, flexWrap:'wrap', marginTop:9 }}>
+            {porEstado.map(({estado,n}) => {
+              const c = colorEstado(estado);
+              return <span key={estado} style={{ fontSize:10, fontWeight:600, padding:'2px 8px', borderRadius:6,
+                background:c.bg, color:c.text, border:`0.5px solid ${c.borde}` }}>{n} {estado.toLowerCase()}</span>;
+            })}
+          </div>
+        </div>
+        <div style={{ ...card, padding:'12px 18px', minWidth:150 }}>
+          <div style={{ fontSize:9.5, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'.05em' }}>Avance medio</div>
+          <div style={{ fontSize:26, fontWeight:700, color:'#111', lineHeight:1.1 }}>{pct}%</div>
+          <div style={{ fontSize:10.5, color:'#94a3b8' }}>{objetos.length} objeto{objetos.length!==1?'s':''} · {vivos.length} en curso</div>
+        </div>
+      </div>
+
+      {/* Embudo por fase */}
+      <div style={{ ...card, padding:'15px 18px', marginBottom:12 }}>
+        <div style={{ fontSize:10, fontWeight:700, color:'#64748b', textTransform:'uppercase',
+                      letterSpacing:'.05em', marginBottom:11 }}>Cuántos objetos pasaron cada fase</div>
+        <div style={{ display:'grid', gap:9, gridTemplateColumns:`repeat(${FS.length}, 1fr)` }}>
+          {embudo.map(({ fase, completa, aplica }, i) => {
+            const p = aplica ? Math.round(completa/aplica*100) : 0;
+            return (
+              <div key={fase}>
+                <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:5 }}>
+                  <i style={{ width:16, height:16, borderRadius:'50%', display:'flex', alignItems:'center',
+                    justifyContent:'center', fontSize:8.5, fontWeight:700, flexShrink:0,
+                    background: p===100?'#059669':'#fff', color: p===100?'#fff':'#6d28d9',
+                    border:`1.5px solid ${p===100?'#059669':'#ddd6fe'}` }}>{p===100?'✓':i+1}</i>
+                  <span style={{ fontSize:11, fontWeight:600, color:'#374151', overflow:'hidden',
+                                 textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{fase}</span>
+                </div>
+                <div style={{ height:5, background:'#f1f5f9', borderRadius:3, overflow:'hidden' }}>
+                  <div style={{ width:`${p}%`, height:'100%', background: p===100?'#059669':'#6d28d9' }}/>
+                </div>
+                <div style={{ fontSize:10, color:'#94a3b8', marginTop:3 }}>
+                  {aplica ? `${completa} de ${aplica}` : 'no aplica'}</div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div style={{ display:'grid', gap:12, gridTemplateColumns:'minmax(300px, 1fr) minmax(260px, 340px)' }}>
+        {/* Objetos */}
+        <div style={{ ...card, overflow:'hidden' }}>
+          <div style={{ padding:'11px 16px', borderBottom:'0.5px solid #f1f5f9', fontSize:10, fontWeight:700,
+                        color:'#64748b', textTransform:'uppercase', letterSpacing:'.05em' }}>Objetos</div>
+          {objetos.map((o, i) => {
+            const a = avance(o, undefined, cat), c = colorEstado(o.estado), fr = frenos(o, cat);
+            return (
+              <div key={o.id} onClick={()=>onAbrir(o.id)}
+                style={{ padding:'10px 16px', borderTop: i?'0.5px solid #f8fafc':'none', cursor:'pointer',
+                         display:'flex', alignItems:'center', gap:11 }}>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:4 }}>
+                    <span style={{ ...mono, fontSize:11, fontWeight:600, overflow:'hidden',
+                      textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{o.objetoInsumo || o.objeto || '—'}</span>
+                    <Copiar texto={o.objetoInsumo || o.objeto}/>
+                  </div>
+                  <div style={{ fontSize:9.5, color:'#94a3b8', marginTop:2 }}>
+                    {o.responsable || 'sin responsable'}
+                    {fr.length > 0 && <span style={{ color:'#b45309' }}> · falta {fr.map(x=>x.label).join(', ').slice(0,44)}</span>}
+                  </div>
+                  <div style={{ marginTop:5 }}><Tira o={o} cat={cat} alto={5}/></div>
+                </div>
+                <span style={{ fontSize:9.5, fontWeight:600, padding:'2px 7px', borderRadius:5, flexShrink:0,
+                  background:c.bg, color:c.text }}>{o.estado}</span>
+                <span style={{ fontSize:11.5, fontWeight:700, color:'#64748b', width:34, textAlign:'right', flexShrink:0 }}>{a.pct}%</span>
+              </div>
+            );
+          })}
+        </div>
+
+        <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+          {/* Cuellos de botella */}
+          <div style={{ ...card, padding:'14px 16px' }}>
+            <div style={{ fontSize:10, fontWeight:700, color:'#64748b', textTransform:'uppercase',
+                          letterSpacing:'.05em', marginBottom:10, display:'flex', alignItems:'center', gap:5 }}>
+              <AlertTriangle size={11} color="#b45309"/> Qué está frenando
+            </div>
+            {cuellos.length === 0 && <p style={{ margin:0, fontSize:11.5, color:'#94a3b8' }}>Nada pendiente en curso.</p>}
+            {cuellos.map(({ paso, objs }) => (
+              <div key={paso.id} style={{ display:'flex', alignItems:'center', gap:8, marginBottom:7 }}>
+                <span style={{ width:20, height:20, borderRadius:6, flexShrink:0, display:'flex',
+                  alignItems:'center', justifyContent:'center', fontSize:10, fontWeight:700,
+                  background: objs.length>1 ? '#fef2f2' : '#fffbeb',
+                  color: objs.length>1 ? '#b91c1c' : '#b45309' }}>{objs.length}</span>
+                <div style={{ minWidth:0 }}>
+                  <div style={{ fontSize:11, color:'#374151', overflow:'hidden', textOverflow:'ellipsis',
+                                whiteSpace:'nowrap' }}>{paso.label}</div>
+                  <div style={{ fontSize:9, color:'#cbd5e1' }}>{paso.fase}</div>
+                </div>
+              </div>
+            ))}
+            {cuellos.some(c => c.objs.length > 1) && (
+              <p style={{ margin:'8px 0 0', fontSize:10, color:'#94a3b8', lineHeight:1.5 }}>
+                Los pasos con varios objetos se destraban de una sola gestión.</p>
+            )}
+          </div>
+
+          {/* Quién */}
+          <div style={{ ...card, padding:'14px 16px' }}>
+            <div style={{ fontSize:10, fontWeight:700, color:'#64748b', textTransform:'uppercase',
+                          letterSpacing:'.05em', marginBottom:9 }}>Quién</div>
+            {[['Fábrica', equipo], ['Banco', contactos]].map(([t, gente]) => (
+              <div key={t as string} style={{ marginBottom:8 }}>
+                <div style={{ fontSize:9.5, color:'#94a3b8', marginBottom:3 }}>{t}</div>
+                <div style={{ display:'flex', gap:4, flexWrap:'wrap' }}>
+                  {(gente as string[]).length === 0 && <span style={{ fontSize:11, color:'#cbd5e1' }}>—</span>}
+                  {(gente as string[]).map(p => (
+                    <span key={p} style={{ fontSize:10.5, padding:'2px 8px', borderRadius:6,
+                      background:'#f8fafc', color:'#475569', display:'inline-flex', alignItems:'center', gap:2 }}>
+                      {p}<Copiar texto={p}/></span>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+      {panel}
+    </div>
+  );
+}
+
+// ═══ Alta y edición de un objeto ═════════════════════════════════════════════
+// Los pasos no se tocan aquí: se marcan en el panel, uno por uno, que es como
+// ocurre en la realidad. Este formulario es solo la ficha del objeto.
+function FormObjeto({ o, proyectos, responsables, esNuevo, onCerrar, onGuardar }: {
+  o: ObjetoFabrica; proyectos: string[]; responsables: string[]; esNuevo: boolean;
+  onCerrar: ()=>void; onGuardar: (o: ObjetoFabrica)=>void;
+}) {
+  const [f, setF] = useState<ObjetoFabrica>(o);
+  const set = (k: keyof ObjetoFabrica) => (e: React.ChangeEvent<HTMLInputElement|HTMLSelectElement|HTMLTextAreaElement>) =>
+    setF({ ...f, [k]: e.target.value });
+
+  // Sin nombre y sin proyecto el objeto no se puede ni buscar ni reportar.
+  const falta = !f.objetoInsumo.trim() || !f.proyecto.trim();
+
+  const campo = (etiqueta: string, nodo: React.ReactNode, ancho = 1) => (
+    <label style={{ gridColumn: `span ${ancho}` }}>
+      <div style={{ fontSize:9.5, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'.04em', marginBottom:3 }}>{etiqueta}</div>
+      {nodo}
+    </label>
+  );
+
+  return (
+    <div onClick={onCerrar} style={{ position:'fixed', inset:0, background:'rgba(15,23,42,.4)', zIndex:110,
+                                     display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
+      <div onClick={e=>e.stopPropagation()} style={{ width:560, maxWidth:'100%', maxHeight:'90vh', overflowY:'auto',
+             background:'#fff', borderRadius:14, boxShadow:'0 20px 60px rgba(0,0,0,.25)' }}>
+        <div style={{ padding:'18px 22px 14px', borderBottom:'0.5px solid #f1f5f9' }}>
+          <h3 style={{ margin:0, fontSize:15, fontWeight:700 }}>{esNuevo ? 'Nuevo objeto' : 'Editar objeto'}</h3>
+          <p style={{ margin:'3px 0 0', fontSize:11, color:'#94a3b8' }}>
+            {esNuevo ? 'Entra sin pasos marcados; se van marcando en su ficha.' : 'Los pasos se marcan en la ficha del objeto.'}
+          </p>
+        </div>
+
+        <div style={{ padding:'16px 22px', display:'grid', gap:11, gridTemplateColumns:'1fr 1fr' }}>
+          {campo('Objeto insumo *', <input autoFocus value={f.objetoInsumo} onChange={set('objetoInsumo')}
+            placeholder="t_kusu_user_err" style={{ ...inputS, ...mono }}/>, 2)}
+
+          {campo('Proyecto *', <>
+            <input value={f.proyecto} onChange={set('proyecto')} list="fab-proyectos"
+              placeholder="SDATOOL-51117 SDM1" style={inputS}/>
+            <datalist id="fab-proyectos">{proyectos.map(p => <option key={p} value={p}/>)}</datalist>
+          </>, 2)}
+
+          {campo('Objeto destino', <input value={f.objeto} onChange={set('objeto')} style={{ ...inputS, ...mono }}/>, 2)}
+
+          {campo('Responsable', <>
+            <input value={f.responsable} onChange={set('responsable')} list="fab-resp" style={inputS}/>
+            <datalist id="fab-resp">{responsables.map(r => <option key={r} value={r}/>)}</datalist>
+          </>)}
+          {campo('Contacto banco', <input value={f.contactoBanco} onChange={set('contactoBanco')} style={inputS}/>)}
+
+          {campo('Estado', <select value={f.estado} onChange={set('estado')} style={inputS}>
+            {Object.keys(ESTADOS).map(e => <option key={e} value={e}>{e}</option>)}
+          </select>)}
+          {campo('Periodicidad', <input value={f.periodicidad} onChange={set('periodicidad')}
+            placeholder="Diario, Mensual, Eventual…" style={inputS}/>)}
+
+          {campo('Fecha de recepción', <input type="date" value={f.fechaRecepcion?.slice(0,10) ?? ''}
+            onChange={set('fechaRecepcion')} style={inputS}/>, 2)}
+
+          {campo('Comentarios', <textarea value={f.comentarios} onChange={set('comentarios')} rows={3}
+            style={{ ...inputS, resize:'vertical', fontFamily:'inherit' }}/>, 2)}
+        </div>
+
+        <div style={{ padding:'12px 22px 18px', display:'flex', gap:8, justifyContent:'flex-end',
+                      borderTop:'0.5px solid #f1f5f9' }}>
+          {falta && <span style={{ fontSize:10.5, color:'#b45309', marginRight:'auto', alignSelf:'center' }}>
+            Hace falta el nombre del objeto y el proyecto</span>}
+          <button onClick={onCerrar} style={botonS}>Cancelar</button>
+          <button disabled={falta} onClick={()=>onGuardar({ ...f, objetoInsumo: f.objetoInsumo.trim(), proyecto: f.proyecto.trim() })}
+            style={{ ...botonS, border:'none', background: falta ? '#e2e8f0' : '#6d28d9',
+                     color: falta ? '#94a3b8' : '#fff', cursor: falta ? 'not-allowed' : 'pointer' }}>
+            {esNuevo ? 'Crear objeto' : 'Guardar'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══ Configurar los pasos ════════════════════════════════════════════════════
+// El proceso de la fábrica cambia. Esto deja cambiarlo sin tocar el código.
+// La única regla dura: si un paso ya tiene datos en objetos reales, borrarlo
+// pierde esos datos, así que se avisa con el número exacto.
+function ConfigPasos({ cat, objetos, onCerrar, onGuardar }: {
+  cat: PasoCatalogo[]; objetos: ObjetoFabrica[]; onCerrar: ()=>void; onGuardar: (p: PasoCatalogo[])=>void;
+}) {
+  const [ps, setPs] = useState<PasoCatalogo[]>(cat);
+  const [nuevaFase, setNuevaFase] = useState('');
+
+  /** Cuántos objetos tienen marcado este paso: lo que se perdería al borrarlo. */
+  const usos = (id: string) => objetos.filter(o => o.pasos?.[id]).length;
+
+  const agregar = (fase: string) => {
+    const label = prompt(`Nombre del paso nuevo en «${fase}»`)?.trim();
+    if (!label) return;
+    const id = nuevoId(label, ps);
+    // Se inserta al final de su fase, que es donde suele ir un paso nuevo.
+    const ult = ps.map(p => p.fase).lastIndexOf(fase);
+    setPs([...ps.slice(0, ult+1), { id, label, fase }, ...ps.slice(ult+1)]);
+  };
+
+  const renombrar = (id: string) => {
+    const p = ps.find(x => x.id === id)!;
+    const label = prompt('Nombre del paso', p.label)?.trim();
+    // El id no cambia al renombrar: los datos ya marcados cuelgan de él.
+    if (label) setPs(ps.map(x => x.id === id ? { ...x, label } : x));
+  };
+
+  const quitar = (id: string) => {
+    const n = usos(id);
+    const p = ps.find(x => x.id === id)!;
+    if (n && !confirm(`«${p.label}» está marcado en ${n} objeto${n!==1?'s':''}. Si lo quitas, se pierde esa marca. ¿Seguir?`)) return;
+    setPs(ps.filter(x => x.id !== id));
+  };
+
+  const fs = fasesDe(ps);
+  const cambiado = JSON.stringify(ps) !== JSON.stringify(cat);
+
+  return (
+    <div onClick={onCerrar} style={{ position:'fixed', inset:0, background:'rgba(15,23,42,.4)', zIndex:110,
+                                     display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
+      <div onClick={e=>e.stopPropagation()} style={{ width:620, maxWidth:'100%', maxHeight:'90vh', display:'flex',
+             flexDirection:'column', background:'#fff', borderRadius:14, boxShadow:'0 20px 60px rgba(0,0,0,.25)' }}>
+        <div style={{ padding:'18px 22px 14px', borderBottom:'0.5px solid #f1f5f9' }}>
+          <h3 style={{ margin:0, fontSize:15, fontWeight:700 }}>Pasos de la fábrica</h3>
+          <p style={{ margin:'3px 0 0', fontSize:11, color:'#94a3b8' }}>
+            {ps.length} pasos en {fs.length} fases · todos los objetos recorren esta lista.
+            El orden es el proceso; mover un paso fuera de su fase lo pasa a la vecina.
+          </p>
+        </div>
+
+        <div style={{ padding:'14px 22px', overflowY:'auto', flex:1 }}>
+          {fs.map(fase => (
+            <div key={fase} style={{ marginBottom:15 }}>
+              <div style={{ display:'flex', alignItems:'center', gap:7, marginBottom:5 }}>
+                <span style={{ fontSize:11, fontWeight:700, color:'#6d28d9', textTransform:'uppercase',
+                               letterSpacing:'.05em' }}>{fase}</span>
+                <span style={{ fontSize:10, color:'#cbd5e1' }}>{pasosDeFase(fase, ps).length}</span>
+                <button onClick={()=>agregar(fase)} style={{ border:'none', background:'none', cursor:'pointer',
+                  color:'#a78bfa', fontSize:10.5, display:'flex', alignItems:'center', gap:2, padding:0 }}>
+                  <Plus size={10}/>paso</button>
+              </div>
+              <div style={{ border:'0.5px solid #f1f5f9', borderRadius:9, overflow:'hidden' }}>
+                {pasosDeFase(fase, ps).map((p, k) => {
+                  const n = usos(p.id);
+                  return (
+                    <div key={p.id} style={{ display:'flex', alignItems:'center', gap:7, padding:'5px 10px',
+                      borderTop: k ? '0.5px solid #f8fafc' : 'none' }}>
+                      <span style={{ flex:1, fontSize:11, color:'#374151' }}>{p.label}</span>
+                      {n > 0 && <span title={`Marcado en ${n} objeto${n!==1?'s':''}`}
+                        style={{ fontSize:9, color:'#cbd5e1' }}>{n}</span>}
+                      <button onClick={()=>setPs(mover(ps, p.id, -1))} title="Subir"
+                        style={{ border:'none', background:'none', cursor:'pointer', color:'#cbd5e1', padding:1, display:'flex' }}>
+                        <ChevronUp size={12}/></button>
+                      <button onClick={()=>setPs(mover(ps, p.id, 1))} title="Bajar"
+                        style={{ border:'none', background:'none', cursor:'pointer', color:'#cbd5e1', padding:1, display:'flex' }}>
+                        <ChevronDown size={12}/></button>
+                      <button onClick={()=>renombrar(p.id)} title="Renombrar"
+                        style={{ border:'none', background:'none', cursor:'pointer', color:'#cbd5e1', padding:1, display:'flex' }}>
+                        <Pencil size={11}/></button>
+                      <button onClick={()=>quitar(p.id)} title="Quitar"
+                        style={{ border:'none', background:'none', cursor:'pointer', color:'#fca5a5', padding:1, display:'flex' }}>
+                        <Trash2 size={11}/></button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+
+          <div style={{ display:'flex', gap:6, alignItems:'center', marginTop:4 }}>
+            <input value={nuevaFase} onChange={e=>setNuevaFase(e.target.value)} placeholder="Nombre de una fase nueva"
+              style={{ ...inputS, flex:1 }}/>
+            <button disabled={!nuevaFase.trim() || fs.includes(nuevaFase.trim())}
+              onClick={()=>{ const f = nuevaFase.trim();
+                setPs([...ps, { id: nuevoId(`${f}-paso`, ps), label: 'Paso nuevo', fase: f }]);
+                setNuevaFase(''); }}
+              style={{ ...botonS, opacity: nuevaFase.trim() && !fs.includes(nuevaFase.trim()) ? 1 : .45 }}>
+              Agregar fase</button>
+          </div>
+        </div>
+
+        <div style={{ padding:'12px 22px 18px', display:'flex', gap:8, justifyContent:'flex-end',
+                      borderTop:'0.5px solid #f1f5f9' }}>
+          <button onClick={()=>setPs(cat)} disabled={!cambiado}
+            style={{ ...botonS, border:'none', background:'none', color: cambiado ? '#94a3b8' : '#e2e8f0',
+                     marginRight:'auto' }}>Deshacer cambios</button>
+          <button onClick={onCerrar} style={botonS}>Cancelar</button>
+          <button onClick={()=>{ onGuardar(ps); onCerrar(); }} disabled={!cambiado}
+            style={{ ...botonS, border:'none', background: cambiado ? '#6d28d9' : '#e2e8f0',
+                     color: cambiado ? '#fff' : '#94a3b8', cursor: cambiado ? 'pointer' : 'default' }}>Guardar pasos</button>
         </div>
       </div>
     </div>

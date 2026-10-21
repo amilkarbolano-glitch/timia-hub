@@ -36,11 +36,19 @@ export interface ObjetoFabrica {
 
 export interface PasoCatalogo { id: string; label: string; fase: string; }
 
-/** Las 5 fases salen de los propios nombres de los pasos del Excel. */
-export const FASES = ['Gobierno', 'Desarrollo', 'Pruebas', 'Certificación', 'Producción'] as const;
-export type Fase = typeof FASES[number];
+/**
+ * Las 5 fases con que arranca el catálogo. No son fijas: salen de los pasos
+ * guardados, así que si David agrega una fase nueva aparece sola.
+ */
+export const FASES_SEMILLA = ['Gobierno', 'Desarrollo', 'Pruebas', 'Certificación', 'Producción'];
 
-export const PASOS: PasoCatalogo[] = [
+/**
+ * Los 28 pasos del Excel son la semilla, no la ley. El proceso de la fábrica
+ * cambia — se agrega una certificación, se deja de usar una herramienta — y
+ * eso no puede obligar a tocar el código. El catálogo vive en la base; esto
+ * es solo con qué empieza si nunca se ha editado.
+ */
+export const PASOS_SEMILLA: PasoCatalogo[] = [
   { id: 'vobo-gob-funcional',          label: 'VoBo Gob Funcional',          fase: 'Gobierno' },
   { id: 'inicializaci-n-n-bula',       label: 'Inicialización Nébula',       fase: 'Gobierno' },
   { id: 'gt-revisi-n-prediccionario',  label: 'GT Revisión Prediccionario',  fase: 'Gobierno' },
@@ -75,7 +83,52 @@ export const PASOS: PasoCatalogo[] = [
   { id: 'post-prod',                     label: 'POST PROD',                 fase: 'Producción' },
 ];
 
-export const pasosDeFase = (f: string) => PASOS.filter(p => p.fase === f);
+// ─── El catálogo vivo ────────────────────────────────────────────────────────
+export const K_PASOS = 'timia_fabrica_pasos';
+
+/** Los pasos tal como están hoy en la base; si nunca se tocaron, la semilla. */
+export function pasos(): PasoCatalogo[] {
+  const g = persistGet<PasoCatalogo[]>(K_PASOS, []);
+  return g.length ? g : PASOS_SEMILLA;
+}
+
+/** Las fases, en el orden en que aparecen los pasos: el orden ES el proceso. */
+export function fases(ps: PasoCatalogo[] = pasos()): string[] {
+  const vistas: string[] = [];
+  for (const p of ps) if (!vistas.includes(p.fase)) vistas.push(p.fase);
+  return vistas;
+}
+
+export const pasosDeFase = (f: string, ps: PasoCatalogo[] = pasos()) => ps.filter(p => p.fase === f);
+
+/**
+ * Id a partir del nombre, evitando chocar con uno existente. Los ids viejos
+ * vienen de los encabezados del Excel ('certificaci-n-kirby', con la ñ y los
+ * acentos ya perdidos) y no se tocan: los datos cargados dependen de ellos.
+ */
+export function nuevoId(label: string, ps: PasoCatalogo[]): string {
+  const base = label.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+                    .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'paso';
+  if (!ps.some(p => p.id === base)) return base;
+  let n = 2;
+  while (ps.some(p => p.id === `${base}-${n}`)) n++;
+  return `${base}-${n}`;
+}
+
+/**
+ * Mueve un paso dentro de su fase, o a la fase vecina si se sale por un
+ * extremo. Así reordenar y cambiar de fase son el mismo gesto.
+ */
+export function mover(ps: PasoCatalogo[], id: string, dir: -1 | 1): PasoCatalogo[] {
+  const i = ps.findIndex(p => p.id === id);
+  if (i < 0) return ps;
+  const j = i + dir;
+  const copia = [...ps];
+  if (j < 0 || j >= ps.length) return ps;
+  if (ps[j].fase !== ps[i].fase) { copia[i] = { ...copia[i], fase: ps[j].fase }; return copia; }
+  [copia[i], copia[j]] = [copia[j], copia[i]];
+  return copia;
+}
 
 /** Colores de los estados del objeto, tal como los usa la fábrica. */
 export const ESTADOS: Record<string, { bg: string; text: string; borde: string }> = {
@@ -93,10 +146,10 @@ export const colorEstado = (e: string) => ESTADOS[e] ?? { bg:'#f8fafc', text:'#6
  * pasan por Kirby, Hammurabi o Control-M, y contarlos como pendientes haría que
  * nada llegara nunca al 100%.
  */
-export function avance(o: ObjetoFabrica, fase?: string) {
-  const pasos = fase ? pasosDeFase(fase) : PASOS;
+export function avance(o: ObjetoFabrica, fase?: string, ps: PasoCatalogo[] = pasos()) {
+  const lista = fase ? pasosDeFase(fase, ps) : ps;
   let ok = 0, aplican = 0, pendientes = 0;
-  for (const p of pasos) {
+  for (const p of lista) {
     const v = o.pasos?.[p.id];
     if (!v || v.estado === 'na') continue;
     aplican++;
@@ -106,18 +159,19 @@ export function avance(o: ObjetoFabrica, fase?: string) {
 }
 
 /** En qué fase está trabajando ahora: la primera que no esté completa. */
-export function faseActual(o: ObjetoFabrica): string {
-  for (const f of FASES) {
-    const a = avance(o, f);
+export function faseActual(o: ObjetoFabrica, ps: PasoCatalogo[] = pasos()): string {
+  const fs = fases(ps);
+  for (const f of fs) {
+    const a = avance(o, f, ps);
     if (a.aplican > 0 && a.pct < 100) return f;
   }
-  return 'Producción';
+  return fs[fs.length - 1] ?? '';
 }
 
 /** Pasos que están frenando al objeto: pendientes en su fase actual. */
-export function frenos(o: ObjetoFabrica): PasoCatalogo[] {
-  const f = faseActual(o);
-  return pasosDeFase(f).filter(p => {
+export function frenos(o: ObjetoFabrica, ps: PasoCatalogo[] = pasos()): PasoCatalogo[] {
+  const f = faseActual(o, ps);
+  return pasosDeFase(f, ps).filter(p => {
     const v = o.pasos?.[p.id];
     return v && v.estado !== 'ok' && v.estado !== 'na';
   });
@@ -139,4 +193,14 @@ export const K_FABRICA = 'timia_fabrica_objetos';
 export const fabricaStore = {
   objetos: (): ObjetoFabrica[] => persistGet<ObjetoFabrica[]>(K_FABRICA, []),
   guardar: (v: ObjetoFabrica[]) => persistSet(K_FABRICA, v),
+  pasos,
+  guardarPasos: (v: PasoCatalogo[]) => persistSet(K_PASOS, v),
 };
+
+/** Objeto nuevo: sin pasos marcados, que es justo lo que significa recién llegado. */
+export function objetoNuevo(proyecto = ''): ObjetoFabrica {
+  const hoy = new Date().toISOString().slice(0, 10);
+  return { id: `fab-${Date.now().toString(36)}`, proyecto, objetoInsumo: '', objeto: '',
+           responsable: '', contactoBanco: '', periodicidad: '', estado: 'Por iniciar',
+           comentarios: '', fechaRecepcion: hoy, pasos: {} };
+}

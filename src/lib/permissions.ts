@@ -73,7 +73,9 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     'tasks.view', 'tasks.manage', 'tasks.update_status', 'tasks.assign', 'tasks.comment', 'tasks.link',
     'bitacora.view', 'bitacora.write', 'circuitos.view', 'circuitos.edit',
     'inventario.view', 'inventario.edit', 'inventario.configure', 'links.edit', 'imputaciones.edit',
-    'fabrica.view', 'fabrica.edit',
+    // fabrica.view sí; fabrica.edit NO: el estatus de la fábrica lo lleva su dueño
+    // (hoy David) y se concede a mano desde Admin → Permisos, no por rol.
+    'fabrica.view',
     'tr.view', 'tr.load_own', 'tr.load_any', 'tr.manage_features',
     'bank_status.view', 'standup.generate',
   ],
