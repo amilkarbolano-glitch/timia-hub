@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
     "build": "tsx scripts/verif-tipos.ts && vite build",
-    "build:client": "vite build",
+    "build:client": "tsx scripts/verif-tipos.ts && vite build",
     "preview": "vite preview",
     "lint": "tsc --noEmit",
     "lint:real": "tsx scripts/lint-real.ts",
