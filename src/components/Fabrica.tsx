@@ -395,8 +395,12 @@ function Panel({ o, cat, puedeEditar, onCerrar, onGuardar, onEditar, onBorrar }:
       ese es el primer salto; la fecha se pone sola porque si no, nadie la pone. */
   function ciclar(pasoId: string) {
     if (!puedeEditar) return;
+    // 'otro' es una celda con texto libre del Excel, no un paso hecho: desde ahí
+    // el clic debe llevar a «hecho», igual que desde sin marcar. Tratarlo como
+    // si fuera 'ok' mandaba el primer clic a «pendiente», que no es lo que
+    // espera nadie que esté marcando avance.
     const actual = o.pasos?.[pasoId]?.estado;
-    const i = CICLO.indexOf(actual === 'otro' ? 'ok' : actual);
+    const i = CICLO.indexOf(actual === 'otro' ? undefined : actual);
     const sig = CICLO[(i + 1) % CICLO.length];
     const pasos = { ...o.pasos };
     if (!sig) delete pasos[pasoId];

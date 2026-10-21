@@ -117,4 +117,22 @@ ok(faseActual({ ...objetos.find(o => avance(o, undefined, PASOS).pct === 100)!, 
    conFase) === 'Soporte',
    'un objeto terminado pasa a la fase nueva cuando se le marca un paso ahí');
 
+
+console.log('\n── El ciclo al marcar un paso ──');
+// Replica de la función `ciclar` del panel. Si cambia allá, este test lo caza.
+const CICLO: (string | undefined)[] = [undefined, 'ok', 'pte', 'na'];
+const siguiente = (actual?: string) =>
+  CICLO[(CICLO.indexOf(actual === 'otro' ? undefined : actual) + 1) % CICLO.length];
+
+ok(siguiente(undefined) === 'ok', 'sin marcar → hecho');
+ok(siguiente('ok')  === 'pte',    'hecho → pendiente');
+ok(siguiente('pte') === 'na',     'pendiente → no aplica');
+ok(siguiente('na')  === undefined,'no aplica → sin marcar, y vuelve a empezar');
+// Las celdas con texto libre del Excel ('Atendido… Cambio Delimitador') no son
+// pasos hechos: el primer clic sobre ellas tiene que marcar hecho.
+ok(siguiente('otro') === 'ok',    'una celda con nota del Excel → hecho al primer clic');
+
+const conNota = objetos.flatMap(o => Object.values(o.pasos)).filter(p => p.estado === 'otro');
+ok(conNota.length > 0, `hay ${conNota.length} celdas con nota a las que aplica ese primer clic`);
+
 console.log(f ? `\n${f} fallas` : '\nfábrica OK');
