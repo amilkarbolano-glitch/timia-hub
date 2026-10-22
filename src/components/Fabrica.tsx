@@ -987,13 +987,11 @@ function FormObjeto({ o, proyectos, responsables, esNuevo, onCerrar, onGuardar }
   onCerrar: ()=>void; onGuardar: (o: ObjetoFabrica)=>void;
 }) {
   const [f, setF] = useState<ObjetoFabrica>(o);
-  // Un objeto puede llegar con un proyecto que todavía no está en la lista
-  // (importado, o escrito antes de que existiera el registro).
-  const [esNuevoProy, setEsNuevoProy] = useState(!!o.proyecto && !proyectos.includes(o.proyecto));
   // Aviso de dedazo: «SDATOOL-51117 SDM1» contra «SDATOOL-51117 SDM 1».
+  // No bloquea nada; si el proyecto es nuevo de verdad, se guarda igual.
   const limpio = (x: string) => x.toLowerCase().replace(/[^a-z0-9]/g, '');
-  const avisoParecido = esNuevoProy && f.proyecto.trim()
-    ? proyectos.find(p => p !== f.proyecto.trim() && limpio(p) === limpio(f.proyecto)) ?? null
+  const avisoParecido = f.proyecto.trim() && !proyectos.includes(f.proyecto.trim())
+    ? proyectos.find(p => limpio(p) === limpio(f.proyecto)) ?? null
     : null;
   const set = (k: keyof ObjetoFabrica) => (e: React.ChangeEvent<HTMLInputElement|HTMLSelectElement|HTMLTextAreaElement>) =>
     setF({ ...f, [k]: e.target.value });
@@ -1024,28 +1022,17 @@ function FormObjeto({ o, proyectos, responsables, esNuevo, onCerrar, onGuardar }
           {campo('Objeto insumo *', <input autoFocus value={f.objetoInsumo} onChange={set('objetoInsumo')}
             placeholder="t_kusu_user_err" style={{ ...inputS, ...mono }}/>, 2)}
 
+          {/* Un solo campo: escribís y autocompleta los que ya existen; si el
+              nombre es nuevo, el proyecto se crea al guardar. El desplegable
+              obligaba a un clic de más para el caso normal. */}
           {campo('Proyecto *', <>
-            <select value={esNuevoProy ? '__nuevo' : f.proyecto}
-              onChange={e => {
-                if (e.target.value === '__nuevo') { setEsNuevoProy(true); setF({ ...f, proyecto: '' }); }
-                else { setEsNuevoProy(false); setF({ ...f, proyecto: e.target.value }); }
-              }}
-              style={inputS}>
-              <option value="">— elegir proyecto —</option>
-              {proyectos.map(p => <option key={p} value={p}>{p}</option>)}
-              <option value="__nuevo">+ Registrar un proyecto nuevo…</option>
-            </select>
-            {esNuevoProy && (
-              <>
-                <input autoFocus value={f.proyecto} onChange={set('proyecto')}
-                  placeholder="SDATOOL-60001 Nombre del proyecto"
-                  style={{ ...inputS, marginTop:5 }}/>
-                {avisoParecido && (
-                  <div style={{ fontSize:10, color:'#b45309', marginTop:4 }}>
-                    Se parece mucho a «{avisoParecido}», que ya existe. ¿Quisiste decir ese?
-                  </div>
-                )}
-              </>
+            <input value={f.proyecto} onChange={set('proyecto')} list="fab-proyectos"
+              placeholder="SDATOOL-51117 SDM1" style={inputS}/>
+            <datalist id="fab-proyectos">{proyectos.map(p => <option key={p} value={p}/>)}</datalist>
+            {avisoParecido && (
+              <div style={{ fontSize:10, color:'#b45309', marginTop:4 }}>
+                Se parece mucho a «{avisoParecido}», que ya existe. ¿Quisiste decir ese?
+              </div>
             )}
           </>, 2)}
 
