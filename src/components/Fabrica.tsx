@@ -442,7 +442,36 @@ function PorProyecto({ objetos, cat, onAbrir, registrados = [], puedeEditar = fa
   }, [objetos, registrados]);
   const metaDe = (id: string) => registrados.find(p => p.id === id);
 
+  // Dos códigos que solo se diferencian en un guion o un espacio son el mismo
+  // proyecto partido en dos, y así nadie cuadra sus objetos. Se avisa en vez de
+  // unirlos solos: cuál es el bueno lo sabe David, no la herramienta.
+  const duplicados = useMemo(() => {
+    const norm = (x: string) => x.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const porClave = new Map<string, string[]>();
+    for (const [id] of grupos) porClave.set(norm(id), [...(porClave.get(norm(id)) ?? []), id]);
+    return [...porClave.values()].filter(v => v.length > 1);
+  }, [grupos]);
+
   return (
+    <>
+    {duplicados.length > 0 && (
+      <div style={{ ...card, padding:'11px 14px', marginBottom:10, background:'#fffbeb',
+                    border:'0.5px solid #fde68a' }}>
+        <div style={{ fontSize:10, fontWeight:700, color:'#92400e', textTransform:'uppercase',
+                      letterSpacing:'.05em', display:'flex', alignItems:'center', gap:5 }}>
+          <AlertTriangle size={11}/> El mismo proyecto aparece dos veces
+        </div>
+        {duplicados.map(par => (
+          <div key={par.join()} style={{ fontSize:11, color:'#78350f', marginTop:5 }}>
+            {par.map(x => <code key={x} style={{ ...mono, background:'#fef3c7', padding:'1px 5px',
+              borderRadius:4, marginRight:6 }}>{x}</code>)}
+            <span style={{ color:'#b45309' }}>
+              — difieren solo en un guion o un espacio. Edita los objetos de uno para pasarlos al otro.
+            </span>
+          </div>
+        ))}
+      </div>
+    )}
     <div style={{ display:'grid', gap:10, gridTemplateColumns:'repeat(auto-fill, minmax(330px, 1fr))' }}>
       {grupos.map(([proyecto, objs]) => {
         const pct = objs.length ? Math.round(objs.reduce((s,o) => s + avance(o, undefined, cat).pct, 0) / objs.length) : 0;
@@ -503,6 +532,7 @@ function PorProyecto({ objetos, cat, onAbrir, registrados = [], puedeEditar = fa
         );
       })}
     </div>
+    </>
   );
 }
 
