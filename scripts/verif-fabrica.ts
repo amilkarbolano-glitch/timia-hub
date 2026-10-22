@@ -3,7 +3,8 @@
 // Cifras de referencia leídas de "Status Fábrica - Interno.xlsx", hoja Estatus Global.
 
 import { PASOS_SEMILLA as PASOS, fases, pasosDeFase, avance, faseActual, frenos, nuevoId, mover,
-         duracion, fechaCol, codigoProyecto, nombreProyecto,
+         duracion, fechaCol, codigoProyecto, nombreProyecto, parecidoA, objetosDe,
+         type ProyectoFabrica,
          type ObjetoFabrica, type PasoCatalogo } from '../src/lib/fabrica';
 
 // El catálogo vive en la base; en pruebas se pasa explícito para no depender
@@ -214,5 +215,29 @@ ok(Math.round(objetos.reduce((s,o) => s + avance(o, undefined, PASOS).pct, 0) / 
    'el avance medio de los 55 sigue en 87%');
 ok(objetos.every(o => Object.keys(o.pasos).length === 26),
    'los 55 objetos tienen los 26 pasos resueltos, sin casillas en blanco');
+
+console.log('\n── Proyectos propios de la fábrica ──');
+// Son de David, no los de la plataforma: dar de alta uno aquí no le crea nada
+// al equipo. La lista mezcla los registrados a mano con los que solo existen
+// porque algún objeto los menciona — que es como llegaron los 14 del Excel.
+const delExcel = [...new Set(objetos.map(o => o.proyecto))];
+ok(delExcel.length === 14, `los 14 proyectos del Excel salen de los propios objetos (hay ${delExcel.length})`);
+
+const registrados: ProyectoFabrica[] = [{ id: 'SDATOOL-60001 SDM3', nombre: 'Nuevo' }];
+const lista = [...new Set([...registrados.map(p => p.id), ...objetos.map(o => o.proyecto)])];
+ok(lista.length === 15, 'un proyecto registrado a mano se suma a los que ya tienen objetos');
+ok(lista.includes('SDATOOL-60001 SDM3'), 'y aparece aunque no tenga ni un objeto todavía');
+ok(delExcel.every(p => lista.includes(p)), 'registrar uno nuevo no esconde ninguno de los que ya existían');
+
+ok(objetosDe(objetos, 'SDATOOL-60001 SDM3') === 0, 'el proyecto nuevo arranca sin objetos');
+ok(objetosDe(objetos, delExcel[0]) > 0, `y «${delExcel[0].slice(0,22)}» sí tiene objetos, así que no se puede borrar`);
+
+// El dedazo: un espacio de más parte el proyecto en dos sin que nadie lo note.
+const existentes: ProyectoFabrica[] = delExcel.map(id => ({ id, nombre: '' }));
+const dedazo = delExcel[0].replace(/ /, '  ');
+ok(parecidoA(dedazo, existentes)?.id === delExcel[0], 'un espacio de más se detecta como el mismo proyecto');
+ok(parecidoA(delExcel[0].toLowerCase(), existentes)?.id === delExcel[0], 'y un cambio de mayúsculas también');
+ok(parecidoA('SDATOOL-99999 OTRO', existentes) === null, 'un proyecto de verdad distinto no da falso aviso');
+ok(parecidoA('', existentes) === null, 'el campo vacío no avisa de nada');
 
 console.log(f ? `\n${f} fallas` : '\nfábrica OK');

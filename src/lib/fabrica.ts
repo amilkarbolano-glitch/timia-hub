@@ -225,6 +225,52 @@ export function nombreProyecto(p: string): string {
   return p.replace(/SDATOOL\s*-?\s*\d+\s*/i, '').replace(/^[-–\s]+/, '').trim();
 }
 
+// ─── Proyectos de la fábrica ─────────────────────────────────────────────────
+// Son suyos, no los de la plataforma. Un objeto de la fábrica puede pertenecer
+// a un SDATOOL que nadie dio de alta en Proyectos, y al revés: dar de alta algo
+// aquí no debe aparecerle al resto del equipo en su tablero ni en sus planes.
+// Por eso viven en su propia clave y no tocan PROJECTS.
+
+export interface ProyectoFabrica {
+  /** Código corto; es la identidad y lo que se guarda en cada objeto. */
+  id: string;
+  nombre: string;
+  responsable?: string;
+  nota?: string;
+}
+
+export const K_PROYECTOS = 'timia_fabrica_proyectos';
+
+/**
+ * Los proyectos registrados, más los que solo existen porque algún objeto los
+ * menciona. Así la lista nunca pierde un proyecto que sí tiene trabajo, aunque
+ * nadie lo haya dado de alta — que es como llegaron los 14 del Excel.
+ */
+export function proyectos(objs: ObjetoFabrica[] = []): ProyectoFabrica[] {
+  const guardados = persistGet<ProyectoFabrica[]>(K_PROYECTOS, []);
+  const porId = new Map(guardados.map(p => [p.id, p]));
+  for (const o of objs) {
+    const id = (o.proyecto ?? '').trim();
+    if (id && !porId.has(id)) porId.set(id, { id, nombre: nombreProyecto(id) });
+  }
+  return [...porId.values()].sort((a, b) => a.id.localeCompare(b.id));
+}
+
+/** Cuántos objetos cuelgan de un proyecto; cero significa que se puede borrar. */
+export const objetosDe = (objs: ObjetoFabrica[], id: string) =>
+  objs.filter(o => (o.proyecto ?? '').trim() === id).length;
+
+/**
+ * ¿Se parece demasiado a uno que ya existe? Pensado para el dedazo clásico:
+ * sobra un espacio, falta un guion, cambia una mayúscula.
+ */
+export function parecidoA(nombre: string, existentes: ProyectoFabrica[]): ProyectoFabrica | null {
+  const limpio = (x: string) => x.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const n = limpio(nombre);
+  if (!n) return null;
+  return existentes.find(p => p.id !== nombre && limpio(p.id) === n) ?? null;
+}
+
 // ─── Persistencia ────────────────────────────────────────────────────────────
 export const K_FABRICA = 'timia_fabrica_objetos';
 
@@ -233,6 +279,8 @@ export const fabricaStore = {
   guardar: (v: ObjetoFabrica[]) => persistSet(K_FABRICA, v),
   pasos,
   guardarPasos: (v: PasoCatalogo[]) => persistSet(K_PASOS, v),
+  proyectos,
+  guardarProyectos: (v: ProyectoFabrica[]) => persistSet(K_PROYECTOS, v),
 };
 
 /** Objeto nuevo: sin pasos marcados, que es justo lo que significa recién llegado. */

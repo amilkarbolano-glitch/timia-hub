@@ -10,7 +10,7 @@ import { Factory, Search, ExternalLink, AlertTriangle, Copy, Check, Plus, Settin
 import {
   fabricaStore, pasosDeFase, avance, faseActual, frenos, objetoNuevo, nuevoId, mover,
   colorEstado, codigoProyecto, nombreProyecto, ESTADOS, fases as fasesDe, duracion, fechaCol,
-  type ObjetoFabrica, type PasoCatalogo, type PasoObjeto,
+  type ObjetoFabrica, type PasoCatalogo, type PasoObjeto, type ProyectoFabrica,
 } from '../lib/fabrica';
 import { useAuth, canAccess } from '../contexts/AuthContext';
 
@@ -137,13 +137,28 @@ export default function Fabrica() {
     guardar(objetos.filter(x => x.id !== id));
     setAbierto(null);
   }
+  const [proys, setProys] = useState<ProyectoFabrica[]>(() => fabricaStore.proyectos(fabricaStore.objetos()));
+  const [editProy, setEditProy] = useState<ProyectoFabrica | null>(null);
+
+  function guardarProys(v: ProyectoFabrica[]) {
+    if (!puedeEditar) return;
+    setProys(v);
+    // Solo se guardan los dados de alta a mano; los que vienen de un objeto se
+    // derivan al leer, así que no hace falta duplicarlos en la base.
+    fabricaStore.guardarProyectos(v);
+  }
+
   function guardarCat(ps: PasoCatalogo[]) {
     if (!puedeEditar) return;
     setCat(ps);
     fabricaStore.guardarPasos(ps);
   }
 
-  const proyectos = useMemo(() => [...new Set(objetos.map(o => o.proyecto))].sort(), [objetos]);
+  // Registro propio de la fábrica, más los que solo existen porque un objeto
+  // los menciona: así ninguno con trabajo se pierde de la lista.
+  const proyectos = useMemo(
+    () => [...new Set([...proys.map(p => p.id), ...objetos.map(o => o.proyecto)])].filter(Boolean).sort(),
+    [proys, objetos]);
   const responsables = useMemo(() => [...new Set(objetos.map(o => o.responsable).filter(Boolean))].sort(), [objetos]);
 
   const vis = objetos.filter(o =>
@@ -245,7 +260,27 @@ export default function Fabrica() {
 
       {vista === 'tuberia'   && <Tuberia objetos={vis} cat={cat} onAbrir={setAbierto}/>}
       {vista === 'objetos'   && <Tabla objetos={vis} cat={cat} onAbrir={setAbierto}/>}
-      {vista === 'proyectos' && <PorProyecto objetos={vis} cat={cat} onAbrir={setDetalle}/>}
+      {vista === 'proyectos' && (
+        <>
+          {puedeEditar && (
+            <div style={{ display:'flex', justifyContent:'flex-end', marginBottom:10 }}>
+              <button onClick={()=>setEditProy({ id:'', nombre:'' })} style={botonS}>
+                <Plus size={12} style={{ verticalAlign:-2, marginRight:4 }}/>Proyecto</button>
+            </div>
+          )}
+          <PorProyecto objetos={vis} cat={cat} onAbrir={setDetalle}
+            registrados={proys} puedeEditar={puedeEditar}
+            onEditar={p => setEditProy(p)}
+            onBorrar={p => {
+              if (objetos.some(o => o.proyecto === p.id)) {
+                alert(`«${p.id}» tiene objetos: muévelos o bórralos antes de quitar el proyecto.`);
+                return;
+              }
+              if (confirm(`¿Quitar «${p.id}» de la lista de proyectos de la fábrica?`))
+                guardarProys(proys.filter(x => x.id !== p.id));
+            }}/>
+        </>
+      )}
 
       {abierto && objetos.some(x=>x.id===abierto) && (
         <Panel o={objetos.find(x => x.id === abierto)!} cat={cat} puedeEditar={puedeEditar}
@@ -260,6 +295,16 @@ export default function Fabrica() {
           onGuardar={o => { guardarUno(o); setEditando(null); setAbierto(o.id); }}/>
       )}
       {configPasos && <ConfigPasos cat={cat} objetos={objetos} onCerrar={()=>setConfigPasos(false)} onGuardar={guardarCat}/>}
+      {editProy && (
+        <FormProyecto p={editProy} existentes={proyectos}
+          esNuevo={!proys.some(x => x.id === editProy.id)}
+          onCerrar={()=>setEditProy(null)}
+          onGuardar={np => {
+            const sinEl = proys.filter(x => x.id !== editProy.id);
+            guardarProys([...sinEl, np]);
+            setEditProy(null);
+          }}/>
+      )}
     </div>
   );
 }
@@ -382,24 +427,52 @@ function Tabla({ objetos, cat, onAbrir }: { objetos: ObjetoFabrica[]; cat: PasoC
 }
 
 // ═══ Por proyecto — lo que se reporta hacia afuera ═══════════════════════════
-function PorProyecto({ objetos, cat, onAbrir }: { objetos: ObjetoFabrica[]; cat: PasoCatalogo[]; onAbrir: (p:string)=>void }) {
+function PorProyecto({ objetos, cat, onAbrir, registrados = [], puedeEditar = false, onEditar, onBorrar }: {
+  objetos: ObjetoFabrica[]; cat: PasoCatalogo[]; onAbrir: (p:string)=>void;
+  registrados?: ProyectoFabrica[]; puedeEditar?: boolean;
+  onEditar?: (p: ProyectoFabrica)=>void; onBorrar?: (p: ProyectoFabrica)=>void;
+}) {
   const grupos = useMemo(() => {
     const m = new Map<string, ObjetoFabrica[]>();
+    // Los registrados entran aunque no tengan objetos: eso es justamente lo
+    // que permite dar de alta un proyecto antes de cargarle el primero.
+    registrados.forEach(p => m.set(p.id, []));
     objetos.forEach(o => m.set(o.proyecto, [...(m.get(o.proyecto) ?? []), o]));
     return [...m.entries()].sort((a,b) => b[1].length - a[1].length);
-  }, [objetos]);
+  }, [objetos, registrados]);
+  const metaDe = (id: string) => registrados.find(p => p.id === id);
 
   return (
     <div style={{ display:'grid', gap:10, gridTemplateColumns:'repeat(auto-fill, minmax(330px, 1fr))' }}>
       {grupos.map(([proyecto, objs]) => {
-        const pct = Math.round(objs.reduce((s,o) => s + avance(o, undefined, cat).pct, 0) / objs.length);
+        const pct = objs.length ? Math.round(objs.reduce((s,o) => s + avance(o, undefined, cat).pct, 0) / objs.length) : 0;
+        const meta = metaDe(proyecto);
         const bloq = objs.filter(o => o.estado === 'Bloqueado').length;
         const fin = objs.filter(o => o.estado === 'Finalizado').length;
         return (
           <div key={proyecto} onClick={()=>onAbrir(proyecto)} title="Abrir la ficha del proyecto"
                style={{ ...card, padding:'14px 16px', cursor:'pointer' }}>
-            <div style={{ fontSize:12.5, fontWeight:700 }}>{codigoProyecto(proyecto)}</div>
-            <div style={{ fontSize:10.5, color:'#94a3b8', marginTop:1, marginBottom:10 }}>{nombreProyecto(proyecto) || '—'}</div>
+            <div style={{ display:'flex', alignItems:'flex-start', gap:6 }}>
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ fontSize:12.5, fontWeight:700 }}>{codigoProyecto(proyecto)}</div>
+                <div style={{ fontSize:10.5, color:'#94a3b8', marginTop:1 }}>
+                  {meta?.nombre || nombreProyecto(proyecto) || '—'}</div>
+                {meta?.responsable && (
+                  <div style={{ fontSize:9.5, color:'#64748b', marginTop:1 }}>{meta.responsable}</div>
+                )}
+              </div>
+              {puedeEditar && meta && (
+                <div style={{ display:'flex', gap:2, flexShrink:0 }} onClick={e=>e.stopPropagation()}>
+                  <button title="Editar el proyecto" onClick={()=>onEditar?.(meta)}
+                    style={{ border:'none', background:'none', cursor:'pointer', color:'#94a3b8', padding:2, display:'flex' }}>
+                    <Pencil size={11}/></button>
+                  <button title="Quitar el proyecto" onClick={()=>onBorrar?.(meta)}
+                    style={{ border:'none', background:'none', cursor:'pointer', color:'#fca5a5', padding:2, display:'flex' }}>
+                    <Trash2 size={11}/></button>
+                </div>
+              )}
+            </div>
+            <div style={{ height:10 }}/>
             <div style={{ display:'flex', alignItems:'center', gap:9, marginBottom:10 }}>
               <div style={{ flex:1, height:6, background:'#f1f5f9', borderRadius:3, overflow:'hidden' }}>
                 <div style={{ width:`${pct}%`, height:'100%', background: pct===100?'#059669':'#6d28d9' }}/>
@@ -407,8 +480,9 @@ function PorProyecto({ objetos, cat, onAbrir }: { objetos: ObjetoFabrica[]; cat:
               <span style={{ fontSize:11.5, fontWeight:700, color:'#64748b' }}>{pct}%</span>
             </div>
             <div style={{ display:'flex', gap:5, flexWrap:'wrap', marginBottom:10 }}>
-              <span style={{ fontSize:9.5, padding:'2px 7px', borderRadius:5, background:'#f1f5f9', color:'#64748b' }}>
-                {objs.length} objeto{objs.length!==1?'s':''}</span>
+              <span style={{ fontSize:9.5, padding:'2px 7px', borderRadius:5,
+                background: objs.length ? '#f1f5f9' : '#fffbeb', color: objs.length ? '#64748b' : '#b45309' }}>
+                {objs.length ? `${objs.length} objeto${objs.length!==1?'s':''}` : 'sin objetos aún'}</span>
               {fin > 0 && <span style={{ fontSize:9.5, padding:'2px 7px', borderRadius:5, background:'#ecfdf5', color:'#047857' }}>{fin} finalizado{fin!==1?'s':''}</span>}
               {bloq > 0 && <span style={{ fontSize:9.5, padding:'2px 7px', borderRadius:5, background:'#fef2f2', color:'#b91c1c' }}>{bloq} bloqueado{bloq!==1?'s':''}</span>}
             </div>
@@ -883,6 +957,14 @@ function FormObjeto({ o, proyectos, responsables, esNuevo, onCerrar, onGuardar }
   onCerrar: ()=>void; onGuardar: (o: ObjetoFabrica)=>void;
 }) {
   const [f, setF] = useState<ObjetoFabrica>(o);
+  // Un objeto puede llegar con un proyecto que todavía no está en la lista
+  // (importado, o escrito antes de que existiera el registro).
+  const [esNuevoProy, setEsNuevoProy] = useState(!!o.proyecto && !proyectos.includes(o.proyecto));
+  // Aviso de dedazo: «SDATOOL-51117 SDM1» contra «SDATOOL-51117 SDM 1».
+  const limpio = (x: string) => x.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const avisoParecido = esNuevoProy && f.proyecto.trim()
+    ? proyectos.find(p => p !== f.proyecto.trim() && limpio(p) === limpio(f.proyecto)) ?? null
+    : null;
   const set = (k: keyof ObjetoFabrica) => (e: React.ChangeEvent<HTMLInputElement|HTMLSelectElement|HTMLTextAreaElement>) =>
     setF({ ...f, [k]: e.target.value });
 
@@ -913,9 +995,28 @@ function FormObjeto({ o, proyectos, responsables, esNuevo, onCerrar, onGuardar }
             placeholder="t_kusu_user_err" style={{ ...inputS, ...mono }}/>, 2)}
 
           {campo('Proyecto *', <>
-            <input value={f.proyecto} onChange={set('proyecto')} list="fab-proyectos"
-              placeholder="SDATOOL-51117 SDM1" style={inputS}/>
-            <datalist id="fab-proyectos">{proyectos.map(p => <option key={p} value={p}/>)}</datalist>
+            <select value={esNuevoProy ? '__nuevo' : f.proyecto}
+              onChange={e => {
+                if (e.target.value === '__nuevo') { setEsNuevoProy(true); setF({ ...f, proyecto: '' }); }
+                else { setEsNuevoProy(false); setF({ ...f, proyecto: e.target.value }); }
+              }}
+              style={inputS}>
+              <option value="">— elegir proyecto —</option>
+              {proyectos.map(p => <option key={p} value={p}>{p}</option>)}
+              <option value="__nuevo">+ Registrar un proyecto nuevo…</option>
+            </select>
+            {esNuevoProy && (
+              <>
+                <input autoFocus value={f.proyecto} onChange={set('proyecto')}
+                  placeholder="SDATOOL-60001 Nombre del proyecto"
+                  style={{ ...inputS, marginTop:5 }}/>
+                {avisoParecido && (
+                  <div style={{ fontSize:10, color:'#b45309', marginTop:4 }}>
+                    Se parece mucho a «{avisoParecido}», que ya existe. ¿Quisiste decir ese?
+                  </div>
+                )}
+              </>
+            )}
           </>, 2)}
 
           {campo('Objeto destino', <input value={f.objeto} onChange={set('objeto')} style={{ ...inputS, ...mono }}/>, 2)}
@@ -1066,6 +1167,98 @@ function ConfigPasos({ cat, objetos, onCerrar, onGuardar }: {
           <button onClick={()=>{ onGuardar(ps); onCerrar(); }} disabled={!cambiado}
             style={{ ...botonS, border:'none', background: cambiado ? '#6d28d9' : '#e2e8f0',
                      color: cambiado ? '#fff' : '#94a3b8', cursor: cambiado ? 'pointer' : 'default' }}>Guardar pasos</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══ Alta y edición de un proyecto de la fábrica ═════════════════════════════
+// Estos proyectos son de David, no los de la plataforma: no salen en el tablero
+// del equipo ni en los planes de trabajo, y dar de alta uno aquí no le crea
+// nada a nadie. El código es la identidad, así que cambiarlo en un proyecto
+// que ya tiene objetos los dejaría huérfanos: por eso se bloquea.
+function FormProyecto({ p, existentes, esNuevo, onCerrar, onGuardar }: {
+  p: ProyectoFabrica; existentes: string[]; esNuevo: boolean;
+  onCerrar: ()=>void; onGuardar: (p: ProyectoFabrica)=>void;
+}) {
+  const [f, setF] = useState<ProyectoFabrica>(p);
+  const id = f.id.trim();
+
+  const limpio = (x: string) => x.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const duplicado = esNuevo && existentes.some(x => x === id);
+  const parecido  = !duplicado && id
+    ? existentes.find(x => x !== id && limpio(x) === limpio(id)) ?? null
+    : null;
+  const falta = !id || duplicado;
+
+  return (
+    <div onClick={onCerrar} style={{ position:'fixed', inset:0, background:'rgba(15,23,42,.4)', zIndex:110,
+                                     display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
+      <div onClick={e=>e.stopPropagation()} style={{ width:480, maxWidth:'100%', background:'#fff',
+             borderRadius:14, boxShadow:'0 20px 60px rgba(0,0,0,.25)' }}>
+        <div style={{ padding:'18px 22px 14px', borderBottom:'0.5px solid #f1f5f9' }}>
+          <h3 style={{ margin:0, fontSize:15, fontWeight:700 }}>
+            {esNuevo ? 'Nuevo proyecto de la fábrica' : 'Editar proyecto'}</h3>
+          <p style={{ margin:'3px 0 0', fontSize:11, color:'#94a3b8', lineHeight:1.5 }}>
+            Vive solo aquí: no aparece en Proyectos de la plataforma, ni en el tablero,
+            ni en los planes de trabajo del equipo.
+          </p>
+        </div>
+
+        <div style={{ padding:'16px 22px', display:'grid', gap:11 }}>
+          <label>
+            <div style={{ fontSize:9.5, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'.04em', marginBottom:3 }}>
+              Código *</div>
+            <input autoFocus={esNuevo} value={f.id} disabled={!esNuevo}
+              onChange={e=>setF({ ...f, id: e.target.value })}
+              placeholder="SDATOOL-60001 SDM3"
+              style={{ ...inputS, ...mono, background: esNuevo ? '#fff' : '#f8fafc', color: esNuevo ? '#111' : '#64748b' }}/>
+            {!esNuevo && (
+              <div style={{ fontSize:9.5, color:'#94a3b8', marginTop:3 }}>
+                El código no se cambia: es lo que guarda cada objeto para saber a qué proyecto pertenece.
+              </div>
+            )}
+            {duplicado && (
+              <div style={{ fontSize:10, color:'#b91c1c', marginTop:4 }}>Ya existe un proyecto con ese código.</div>
+            )}
+            {parecido && (
+              <div style={{ fontSize:10, color:'#b45309', marginTop:4 }}>
+                Se parece mucho a «{parecido}». Si es el mismo, usa ese para no partir el proyecto en dos.
+              </div>
+            )}
+          </label>
+
+          <label>
+            <div style={{ fontSize:9.5, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'.04em', marginBottom:3 }}>
+              Nombre</div>
+            <input value={f.nombre} onChange={e=>setF({ ...f, nombre: e.target.value })}
+              placeholder="Migración de Capital" style={inputS}/>
+          </label>
+
+          <label>
+            <div style={{ fontSize:9.5, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'.04em', marginBottom:3 }}>
+              Responsable</div>
+            <input value={f.responsable ?? ''} onChange={e=>setF({ ...f, responsable: e.target.value })}
+              placeholder="David Huaman" style={inputS}/>
+          </label>
+
+          <label>
+            <div style={{ fontSize:9.5, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'.04em', marginBottom:3 }}>
+              Nota</div>
+            <textarea value={f.nota ?? ''} onChange={e=>setF({ ...f, nota: e.target.value })} rows={2}
+              style={{ ...inputS, resize:'vertical', fontFamily:'inherit' }}/>
+          </label>
+        </div>
+
+        <div style={{ padding:'12px 22px 18px', display:'flex', gap:8, justifyContent:'flex-end',
+                      borderTop:'0.5px solid #f1f5f9' }}>
+          <button onClick={onCerrar} style={botonS}>Cancelar</button>
+          <button disabled={falta}
+            onClick={()=>onGuardar({ ...f, id, nombre: f.nombre.trim() || nombreProyecto(id) })}
+            style={{ ...botonS, border:'none', background: falta ? '#e2e8f0' : '#6d28d9',
+                     color: falta ? '#94a3b8' : '#fff', cursor: falta ? 'not-allowed' : 'pointer' }}>
+            {esNuevo ? 'Crear proyecto' : 'Guardar'}</button>
         </div>
       </div>
     </div>
