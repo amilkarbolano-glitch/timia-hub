@@ -8,7 +8,7 @@ import { PROJECTS, useAuth, canAccess, canInProject } from '../contexts/AuthCont
 import { FlowStepper } from './SetupProject';
 import ImpactPicker, { ImpactChips, impactLabel, type PlanOutline } from './ImpactPicker';
 import { persistSet } from '../lib/persist';
-import { snapToBusinessDay, addBusinessDays, computeBusinessWeekIdx, dateToBusinessWeekIdx, businessDaysBetween } from '../lib/businessDays';
+import { snapToBusinessDay, addBusinessDays, computeBusinessWeekIdx, dateToBusinessWeekIdx, businessDaysBetween, diaHabilDeSemana } from '../lib/businessDays';
 import { sincronizarAsignados, reconciliarTablero, type MetaActividad } from '../lib/planTablero';
 import {
   adminStore,
@@ -18,7 +18,7 @@ import {
 } from '../lib/adminStore';
 import {
   type PesoModo, PESO_MODO_DEFAULT, seriePlanConsolidada, seriePlanFase, marcasDe,
-  enSemana, realPlan, type AvanceFase,
+  enSemana, enDia, realPlan, type AvanceFase,
 } from '../lib/avance';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -597,7 +597,7 @@ function ActivityDrawer({ projectId, entregableId, actIdx, act, effectivePct, et
 
 // ─── EntregableSection ────────────────────────────────────────────────────────
 
-function EntregableSection({ block, projectId, sectionIdx, getActivityPct, setActivityPct, esPctManual, onActivityClick, onGoEstimaciones, todayWeekIdx, getDoneDate, planStartDate, holidays, weekLabels, issues, changes, planKey, pesoModo = PESO_MODO_DEFAULT, planWeeks }: {
+function EntregableSection({ block, projectId, sectionIdx, getActivityPct, setActivityPct, esPctManual, onActivityClick, onGoEstimaciones, todayWeekIdx, diaHabil = 5, getDoneDate, planStartDate, holidays, weekLabels, issues, changes, planKey, pesoModo = PESO_MODO_DEFAULT, planWeeks }: {
   block: PlanEntregable; projectId: string; sectionIdx: number;
   getActivityPct: (i: number) => number;
   setActivityPct: (i: number, pct: number) => void;
@@ -607,6 +607,8 @@ function EntregableSection({ block, projectId, sectionIdx, getActivityPct, setAc
   onActivityClick: (i: number, act: PlanActivity) => void;
   onGoEstimaciones?: () => void;
   todayWeekIdx?: number;
+  /** Día hábil dentro de la semana en curso (1..5). */
+  diaHabil?: number;
   getDoneDate?: (i: number) => string | undefined;
   planStartDate?: string;
   holidays?: Set<string>;
@@ -658,9 +660,11 @@ function EntregableSection({ block, projectId, sectionIdx, getActivityPct, setAc
     activities: block.activities.map(a => ({ weeks: a.weeks, startWeek: a.startWeek, endWeek: a.endWeek })),
   };
   const semanasFase = planWeeks ?? Math.max(1, ...block.activities.map(a => a.endWeek));
+  // Interpolado al día hábil en curso, igual que el general: un jueves no puede
+  // exigir el trabajo que toca entregar el viernes.
   const esperadoPorCasillas = (fase: AvanceFase) =>
     todayWeekIdx === undefined ? block.pctExp
-      : parseFloat(enSemana(seriePlanFase(fase, semanasFase), todayWeekIdx + 1).toFixed(1));
+      : parseFloat(enDia(seriePlanFase(fase, semanasFase), todayWeekIdx + 1, diaHabil).toFixed(1));
 
   const basePctExp = block.activities.length === 0 || todayWeekIdx === undefined
     ? block.pctExp
@@ -1035,6 +1039,10 @@ function PlanDetail({ plan, getActivityPct, setActivityPct, esPctManual, onActiv
   }
   // todayWeekIdx disponible en todo PlanDetail para cálculos de esperado
   const todayWeekIdx = computeCurrentWeekIdx(plan.startDate, holidays);
+  // Semana 1-indexada y día hábil dentro de ella: todayWeekIdx viene en base 0,
+  // y el esperado se lee sobre la columna de la semana, que empieza en 1.
+  const semanaHoy = todayWeekIdx + 1;
+  const diaHoy = diaHabilDeSemana(plan.startDate, holidays);
 
   // ── Ponderación ──────────────────────────────────────────────────────────
   // 'actividad'       → cada actividad pesa igual (comportamiento histórico).
@@ -1070,15 +1078,19 @@ function PlanDetail({ plan, getActivityPct, setActivityPct, esPctManual, onActiv
         : e.pctReal).reduce((s,v)=>s+v,0) / plan.entregables.length).toFixed(1));
 
   // overallExp dinámico: acumulado planificado a hoy (por semana) o promedio binario (por actividad)
+  // Dos arreglos aquí. (1) Iba una semana atrasado: enSemana espera la semana
+  // en base 1 y recibía todayWeekIdx, que es base 0 — por eso el general
+  // mostraba el cierre de la semana pasada mientras cada fase, que sí sumaba 1,
+  // mostraba la actual. (2) Ahora interpola al día hábil en curso.
   const overallExp = porSemana
-    ? parseFloat(enSemana(seriePlanConsolidada(fasesAvanceExt, Math.max(planWeeks, todayWeekIdx)), todayWeekIdx).toFixed(1))
+    ? parseFloat(enDia(seriePlanConsolidada(fasesAvanceExt, Math.max(planWeeks, semanaHoy)), semanaHoy, diaHoy).toFixed(1))
     : parseFloat((plan.entregables.map(e => {
         if (!e.activities.length) return e.pctExp;
         return e.activities.reduce((s, a, i) => s + computeActExpPct(a.startWeek, extensionFor(changes, plan.planKey, e.id, i, a.endWeek, issues, holidays).effEndWeek, todayWeekIdx), 0) / e.activities.length;
       }).reduce((s,v)=>s+v,0) / plan.entregables.length).toFixed(1));
   // Esperado sobre la línea base (sin extensión por cambios)
   const overallExpBase = porSemana
-    ? parseFloat(enSemana(seriePlanConsolidada(fasesAvance, Math.max(planWeeks, todayWeekIdx)), todayWeekIdx).toFixed(1))
+    ? parseFloat(enDia(seriePlanConsolidada(fasesAvance, Math.max(planWeeks, semanaHoy)), semanaHoy, diaHoy).toFixed(1))
     : parseFloat((plan.entregables.map(e => {
         if (!e.activities.length) return e.pctExp;
         return e.activities.reduce((s, a) => s + computeActExpPct(a.startWeek, a.endWeek, todayWeekIdx), 0) / e.activities.length;
@@ -1258,7 +1270,7 @@ function PlanDetail({ plan, getActivityPct, setActivityPct, esPctManual, onActiv
             getActivityPct={i => getActivityPct(e.id,i,e.activities[i])}
             setActivityPct={(i,pct) => setActivityPct(e.id,i,pct)}
             esPctManual={i => esPctManual?.(e.id,i) ?? false}
-            pesoModo={pesoModo} planWeeks={planWeeks}
+            pesoModo={pesoModo} planWeeks={planWeeks} diaHabil={diaHoy}
             onActivityClick={(i,a) => onActivityClick(e.id,i,a)}
             onGoEstimaciones={onGoEstimaciones}
             todayWeekIdx={todayWeekIdx}

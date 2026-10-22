@@ -110,13 +110,38 @@ export function marcasReales(act: AvanceActividad): number[] {
   return marcas.slice(0, n);
 }
 
+/**
+ * Lo mismo que marcasReales, pero sin redondear: cada casilla recibe la
+ * fracción que le toca. Es la regla de tres que usa el PM — una actividad de
+ * 2 casillas al 70% aporta 1.4, no 1 — y es como están escritas a mano las
+ * celdas del cuadro «Real» del Excel (0.6, 0.9, 0.4).
+ *
+ * marcasReales redondeaba a casilla entera, así que la curva S y las barras
+ * decían una cosa y el KPI de arriba otra: ese 0.4 se perdía.
+ */
+export function pesoRealPorSemana(act: AvanceActividad): Map<number, number> {
+  const marcas = marcasDe(act);
+  const pct = Math.max(0, Math.min(100, act.pct ?? 0));
+  const casillas = (pct / 100) * marcas.length;   // 70% de 2 casillas = 1.4
+  const m = new Map<number, number>();
+  let resto = casillas;
+  // Se consume en orden cronológico: las semanas ya trabajadas se llenan
+  // primero y la última recibe lo que sobra.
+  for (const w of marcas) {
+    if (resto <= 0) break;
+    m.set(w, Math.min(1, resto));
+    resto -= 1;
+  }
+  return m;
+}
+
 /** Serie real de una fase, usando el mismo factor que el plan. */
 export function serieRealFase(fase: AvanceFase, totalWeeks: number): Serie {
   const factor = factorFase(fase);
   const semanal = Array(totalWeeks).fill(0);
   for (const act of fase.activities) {
-    for (const w of marcasReales(act)) {
-      if (w >= 1 && w <= totalWeeks) semanal[w - 1] += factor;
+    for (const [w, peso] of pesoRealPorSemana(act)) {
+      if (w >= 1 && w <= totalWeeks) semanal[w - 1] += factor * peso;
     }
   }
   return { semanal, acumulado: acumular(semanal) };
@@ -129,8 +154,8 @@ export function serieRealConsolidada(fases: AvanceFase[], totalWeeks: number): S
   const semanal = Array(totalWeeks).fill(0);
   for (const fase of fases) {
     for (const act of fase.activities) {
-      for (const w of marcasReales(act)) {
-        if (w >= 1 && w <= totalWeeks) semanal[w - 1] += factor;
+      for (const [w, peso] of pesoRealPorSemana(act)) {
+        if (w >= 1 && w <= totalWeeks) semanal[w - 1] += factor * peso;
       }
     }
   }
@@ -145,12 +170,33 @@ export function enSemana(serie: Serie, week: number): number {
 }
 
 /**
+ * Acumulado a mitad de semana, repartiendo el salto de la semana en curso
+ * entre sus 5 días hábiles.
+ *
+ * El Excel del PM solo da el valor al cierre de cada semana, así que el
+ * esperado se quedaba plano toda la semana y saltaba de golpe el lunes: un
+ * jueves exigía trabajo que no tocaba hasta el viernes. `diaDeSemana` va de 1
+ * (primer día hábil) a 5; con 5 el resultado es exactamente el cierre de la
+ * semana, así que esto no cambia lo que se reporta los viernes.
+ */
+export function enDia(serie: Serie, week: number, diaDeSemana: number): number {
+  if (!serie.acumulado.length) return 0;
+  const cierre = enSemana(serie, week);
+  const anterior = week <= 1 ? 0 : enSemana(serie, week - 1);
+  const frac = Math.max(0, Math.min(5, diaDeSemana)) / 5;
+  return anterior + (cierre - anterior) * frac;
+}
+
+/**
  * % esperado del plan a día de hoy.
- * - 'actividad-semana': acumulado planificado en la semana actual.
+ * - 'actividad-semana': acumulado planificado, interpolado al día si se pasa `dia`.
  * - 'actividad': binario por actividad (100 si su semana de fin ya pasó), promediado.
  */
-export function esperadoHoy(fases: AvanceFase[], totalWeeks: number, todayWeek: number, modo: PesoModo): number {
-  if (modo === 'actividad-semana') return enSemana(seriePlanConsolidada(fases, totalWeeks), todayWeek);
+export function esperadoHoy(fases: AvanceFase[], totalWeeks: number, todayWeek: number, modo: PesoModo, dia?: number): number {
+  if (modo === 'actividad-semana') {
+    const serie = seriePlanConsolidada(fases, totalWeeks);
+    return dia === undefined ? enSemana(serie, todayWeek) : enDia(serie, todayWeek, dia);
+  }
   const acts = fases.flatMap(f => f.activities);
   if (!acts.length) return 0;
   return acts.reduce((s, a) => s + (todayWeek >= a.endWeek ? 100 : 0), 0) / acts.length;

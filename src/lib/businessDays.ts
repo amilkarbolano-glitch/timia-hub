@@ -48,6 +48,31 @@ export function weekStartDate(
  * Cada sprint = 5 días hábiles. Devuelve -1 si startDate no está definida
  * o si aún no ha llegado.
  */
+/**
+ * Día hábil dentro de la semana en curso, de 1 a 5. El lunes de la semana
+ * devuelve 1 y el viernes 5, saltando festivos igual que el resto del módulo.
+ * Sirve para situar «hoy» dentro de la columna de la semana en vez de dejarlo
+ * siempre en el borde.
+ */
+export function diaHabilDeSemana(
+  startDate: string | undefined,
+  holidays: Set<string>,
+): number {
+  if (!startDate) return 5;
+  const s1 = snapToBusinessDay(new Date(startDate + 'T12:00:00'), holidays);
+  const today = new Date();
+  today.setHours(12, 0, 0, 0);
+  if (today < s1) return 0;
+  const d = new Date(s1);
+  let count = 0;
+  while (d < today) {
+    if (!isBusyDay(d, holidays)) count++;
+    d.setDate(d.getDate() + 1);
+  }
+  // count = días hábiles cerrados antes de hoy. Hoy es el siguiente.
+  return (count % 5) + 1;
+}
+
 export function computeBusinessWeekIdx(
   startDate: string | undefined,
   holidays: Set<string>,
