@@ -28,30 +28,79 @@ interface LayoutProps {
   userRole: string;
 }
 
+/**
+ * El menú, agrupado por lo que uno viene a hacer. Antes eran nueve ítems
+ * sueltos arriba y a 1366 ya no entraban: el nav se desbordaba y en 13" había
+ * que arrastrarlo de lado para llegar a Admin.
+ *
+ * La lista es declarativa a propósito: agregar una pantalla es una línea aquí,
+ * no otro bloque de JSX copiado con su propio useState y su propio ref.
+ */
+export interface ItemMenu { view: View; label: string; icon?: React.ReactNode; perm?: string }
+export interface GrupoMenu { label: string; titulo: string; items: ItemMenu[] }
+
+export function menuDe(rol: string): (ItemMenu | GrupoMenu)[] {
+  const puede = (p?: string) => !p || canAccess(rol as UserRole, p);
+  const grupo = (label: string, titulo: string, items: ItemMenu[]): GrupoMenu | null => {
+    const visibles = items.filter(i => puede(i.perm));
+    return visibles.length ? { label, titulo, items: visibles } : null;
+  };
+
+  const todo: (ItemMenu | GrupoMenu | null)[] = [
+    // Las dos pantallas de inicio quedan a un clic: es donde más se entra.
+    rol !== 'pm' ? { view: 'dashboard' as View, label: 'Tablero' } : null,
+    puede('view_analytics') ? { view: 'analytics' as View, label: 'Dashboard' } : null,
+
+    grupo('Planeación', 'Cómo va el trabajo', [
+      { view: 'proyectos',    label: 'Proyectos',       icon: <Activity size={13}/>,      perm: 'view_analytics' },
+      { view: 'plan-trabajo', label: 'Plan de Trabajo', icon: <CalendarRange size={13}/>, perm: 'view_plan_trabajo' },
+      { view: 'estimaciones', label: 'Estimaciones',    icon: <BarChart3 size={13}/>,     perm: 'view_estimaciones' },
+    ]),
+
+    grupo('Seguimiento', 'El día a día', [
+      { view: 'bitacora',        label: 'Tareas',             icon: <Layers size={13}/> },
+      { view: 'imputaciones',    label: 'Imputaciones Jira',  icon: <Layers size={13}/> },
+      { view: 'activity-report', label: 'Activity Report (TR)', icon: <Layers size={13}/> },
+    ]),
+
+    grupo('Recursos', 'Recursos del equipo', [
+      { view: 'inventario', label: 'Inventario',        icon: <Package size={13}/> },
+      { view: 'fabrica',    label: 'Fábrica · estatus', icon: <Factory size={13}/>, perm: 'fabrica.view' },
+      { view: 'links',      label: 'Links importantes', icon: <Link2 size={13}/> },
+    ]),
+
+    grupo('Admin', 'Administración', [
+      { view: 'admin',             label: 'Equipo y proyectos', icon: <Building2 size={13}/>, perm: 'view_admin' },
+      { view: 'roles-permissions', label: 'Roles y Permisos',   icon: <Shield size={13}/>,    perm: 'u_roles' },
+      { view: 'audit',             label: 'Auditoría',          icon: <Shield size={13}/>,    perm: 's_audit' },
+      { view: 'project-templates', label: 'Plantillas',         icon: <GitBranch size={13}/>, perm: 'create_projects' },
+    ]),
+  ];
+  return todo.filter(Boolean) as (ItemMenu | GrupoMenu)[];
+}
+
+export const esGrupo = (x: ItemMenu | GrupoMenu): x is GrupoMenu => 'items' in x;
+
 export default function Layout({ children, currentView, onViewChange, userRole }: LayoutProps) {
   const { user, logout } = useAuth();
   const [showUserMenu,      setShowUserMenu]      = useState(false);
-  const [showHerramientas,  setShowHerramientas]  = useState(false);
-  const [showRepo,          setShowRepo]          = useState(false);
   const [showProfile,       setShowProfile]       = useState(false);
-  const herramRef = useRef<HTMLDivElement>(null);
-  const repoRef   = useRef<HTMLDivElement>(null);
+  // Un solo desplegable abierto a la vez, identificado por su etiqueta.
+  const [abierto, setAbierto] = useState<string | null>(null);
+  const navRef = useRef<HTMLElement>(null);
 
-  // Close dropdowns on outside click
+  const menu = menuDe(userRole);
+
   useEffect(() => {
     function handleClick(e: MouseEvent) {
-      if (herramRef.current && !herramRef.current.contains(e.target as Node)) setShowHerramientas(false);
-      if (repoRef.current   && !repoRef.current.contains(e.target as Node))   setShowRepo(false);
+      if (navRef.current && !navRef.current.contains(e.target as Node)) setAbierto(null);
     }
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
   }, []);
 
-  const herramientasViews: View[] = ['roles-permissions','audit','project-templates'];
-  const herramientasActive = herramientasViews.includes(currentView);
-
-  const repoViews: View[] = ['imputaciones','activity-report','inventario','links','fabrica'];
-  const repoActive = repoViews.includes(currentView);
+  // Cerrar al cambiar de pantalla: si no, el menú queda abierto encima.
+  useEffect(() => { setAbierto(null); }, [currentView]);
 
   return (
     <div className="flex flex-col min-h-screen bg-slate-50">
@@ -70,139 +119,51 @@ export default function Layout({ children, currentView, onViewChange, userRole }
             </div>
             
             <nav
-              className="hidden md:flex items-center gap-3 lg:gap-4 xl:gap-5 min-w-0 overflow-x-auto xl:overflow-visible"
-              // Debajo de 1280 los 9 ítems no entran. Antes empujaban y hacían que
-              // TODA la página tuviera scroll horizontal; ahora el desborde queda
-              // dentro del propio nav, que se desplaza sin barra visible.
-              style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' } as React.CSSProperties}
+              ref={navRef}
+              className="hidden md:flex items-center gap-3 lg:gap-4 xl:gap-5 min-w-0"
             >
-
-              {/* 1. Vista principal por rol */}
-              {userRole !== 'pm' && (
-                <button onClick={() => onViewChange('dashboard')}
-                  className={`text-sm font-medium transition-colors ${currentView==='dashboard'?'text-primary':'text-slate-600 hover:text-primary'}`}>
-                  Tablero
-                </button>
-              )}
-              {canAccess(userRole as UserRole,'view_analytics') && (
-                <button onClick={() => onViewChange('analytics')}
-                  className={`text-sm font-medium transition-colors ${currentView==='analytics'?'text-primary':'text-slate-600 hover:text-primary'}`}>
-                  Dashboard
-                </button>
-              )}
-
-              {/* 2. Proyectos — solo PM, vista independiente */}
-              {canAccess(userRole as UserRole,'view_analytics') && (
-                <button onClick={() => onViewChange('proyectos')}
-                  className={`text-sm font-medium transition-colors flex items-center gap-1 ${currentView==='proyectos'?'text-primary':'text-slate-600 hover:text-primary'}`}>
-                  <Activity size={13}/> Proyectos
-                </button>
-              )}
-
-              {/* 3. Plan de Trabajo */}
-              {canAccess(userRole as UserRole,'view_plan_trabajo') && (
-                <button onClick={() => onViewChange('plan-trabajo')}
-                  className={`text-sm font-medium transition-colors flex items-center gap-1 ${currentView==='plan-trabajo'?'text-primary':'text-slate-600 hover:text-primary'}`}>
-                  <CalendarRange size={13}/> Plan de Trabajo
-                </button>
-              )}
-
-              {/* 3. Estimaciones */}
-              {canAccess(userRole as UserRole,'view_estimaciones') && (
-                <button onClick={() => onViewChange('estimaciones')}
-                  className={`text-sm font-medium transition-colors flex items-center gap-1 ${currentView==='estimaciones'?'text-primary':'text-slate-600 hover:text-primary'}`}>
-                  <BarChart3 size={13}/> Estimaciones
-                </button>
-              )}
-
-              {/* 4. Tareas (cambios funcionales) */}
-              <button onClick={() => onViewChange('bitacora')}
-                className={`text-sm font-medium transition-colors ${currentView==='bitacora'?'text-primary':'text-slate-600 hover:text-primary'}`}>
-                Tareas
-              </button>
-
-              {/* 5. Recursos — Imputaciones · Inventario · Links */}
-              <div ref={repoRef} className="relative">
-                <button
-                  onClick={() => setShowRepo(v => !v)}
-                  className={`text-sm font-medium transition-colors flex items-center gap-1 ${repoActive ? 'text-primary' : 'text-slate-600 hover:text-primary'}`}
-                >
-                  Recursos
-                  <ChevronDown size={12} style={{ transition: 'transform .15s', transform: showRepo ? 'rotate(180deg)' : 'rotate(0deg)' }}/>
-                </button>
-                {showRepo && (
-                  <div className="absolute top-full left-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-50 overflow-hidden" style={{ minWidth: 196 }}>
-                    <div style={{ padding: '8px 14px 6px', borderBottom: '0.5px solid #f1f5f9' }}>
-                      <p style={{ margin: 0, fontSize: 9, color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em' }}>Recursos del equipo</p>
-                    </div>
-                    <button onClick={() => { setShowRepo(false); onViewChange('imputaciones'); }}
-                      className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm text-left transition-colors ${currentView==='imputaciones'?'bg-primary/10 text-primary font-semibold':'text-slate-600 hover:bg-slate-50'}`}>
-                      <Layers size={13}/> Imputaciones Jira
+              {menu.map(entrada => {
+                if (!esGrupo(entrada)) {
+                  const act = currentView === entrada.view;
+                  return (
+                    <button key={entrada.label} onClick={() => onViewChange(entrada.view)}
+                      className={`text-sm font-medium whitespace-nowrap transition-colors ${act?'text-primary':'text-slate-600 hover:text-primary'}`}>
+                      {entrada.label}
                     </button>
-                    <button onClick={() => { setShowRepo(false); onViewChange('activity-report'); }}
-                      className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm text-left transition-colors ${currentView==='activity-report'?'bg-primary/10 text-primary font-semibold':'text-slate-600 hover:bg-slate-50'}`}>
-                      <Layers size={13}/> Activity Report (TR)
+                  );
+                }
+                const activo = entrada.items.some(i => i.view === currentView);
+                const open = abierto === entrada.label;
+                return (
+                  <div key={entrada.label} className="relative">
+                    <button
+                      onClick={() => setAbierto(open ? null : entrada.label)}
+                      aria-expanded={open}
+                      className={`text-sm font-medium whitespace-nowrap transition-colors flex items-center gap-1 ${activo?'text-primary':'text-slate-600 hover:text-primary'}`}>
+                      {entrada.label}
+                      <ChevronDown size={12} style={{ transition:'transform .15s', transform: open?'rotate(180deg)':'rotate(0deg)' }}/>
                     </button>
-                    <button onClick={() => { setShowRepo(false); onViewChange('inventario'); }}
-                      className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm text-left transition-colors ${currentView==='inventario'?'bg-primary/10 text-primary font-semibold':'text-slate-600 hover:bg-slate-50'}`}>
-                      <Package size={13}/> Inventario
-                    </button>
-                    <button onClick={() => { setShowRepo(false); onViewChange('fabrica'); }}
-                      className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm text-left transition-colors ${currentView==='fabrica'?'bg-primary/10 text-primary font-semibold':'text-slate-600 hover:bg-slate-50'}`}>
-                      <Factory size={13}/> Fábrica · estatus
-                    </button>
-                    <button onClick={() => { setShowRepo(false); onViewChange('links'); }}
-                      className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm text-left transition-colors ${currentView==='links'?'bg-primary/10 text-primary font-semibold':'text-slate-600 hover:bg-slate-50'}`}>
-                      <Link2 size={13}/> Links importantes
-                    </button>
+                    {open && (
+                      <div className="absolute top-full left-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-50 overflow-hidden"
+                           style={{ minWidth: 206 }}>
+                        <div style={{ padding:'8px 14px 6px', borderBottom:'0.5px solid #f1f5f9' }}>
+                          <p style={{ margin:0, fontSize:9, color:'#94a3b8', fontWeight:700,
+                                      textTransform:'uppercase', letterSpacing:'.08em' }}>{entrada.titulo}</p>
+                        </div>
+                        {entrada.items.map(i => (
+                          <button key={i.view} onClick={() => { setAbierto(null); onViewChange(i.view); }}
+                            className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm text-left transition-colors ${
+                              currentView===i.view?'bg-primary/10 text-primary font-semibold':'text-slate-600 hover:bg-slate-50'}`}>
+                            {i.icon} {i.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-
-              {/* 6. Herramientas — solo si tiene al menos un ítem accesible */}
-              {(canAccess(userRole as UserRole,'u_roles')||canAccess(userRole as UserRole,'s_audit')||canAccess(userRole as UserRole,'create_projects')) && (
-                <div ref={herramRef} className="relative">
-                  <button
-                    onClick={() => setShowHerramientas(v=>!v)}
-                    className={`text-sm font-medium transition-colors flex items-center gap-1 ${herramientasActive?'text-primary':'text-slate-600 hover:text-primary'}`}
-                  >
-                    Herramientas <ChevronDown size={12} style={{transition:'transform .15s',transform:showHerramientas?'rotate(180deg)':'rotate(0deg)'}}/>
-                  </button>
-                  {showHerramientas && (
-                    <div className="absolute top-full left-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-50 overflow-hidden" style={{minWidth:170}}>
-                      {canAccess(userRole as UserRole,'u_roles') && (
-                        <button onClick={()=>{setShowHerramientas(false);onViewChange('roles-permissions');}}
-                          className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm text-left transition-colors ${currentView==='roles-permissions'?'bg-primary/10 text-primary font-medium':'text-slate-600 hover:bg-slate-50'}`}>
-                          <Shield size={13}/> Roles y Permisos
-                        </button>
-                      )}
-                      {canAccess(userRole as UserRole,'s_audit') && (
-                        <button onClick={()=>{setShowHerramientas(false);onViewChange('audit');}}
-                          className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm text-left transition-colors ${currentView==='audit'?'bg-primary/10 text-primary font-medium':'text-slate-600 hover:bg-slate-50'}`}>
-                          <Shield size={13}/> Auditoría
-                        </button>
-                      )}
-                      {canAccess(userRole as UserRole,'create_projects') && (
-                        <button onClick={()=>{setShowHerramientas(false);onViewChange('project-templates');}}
-                          className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm text-left transition-colors ${currentView==='project-templates'?'bg-primary/10 text-primary font-medium':'text-slate-600 hover:bg-slate-50'}`}>
-                          <GitBranch size={13}/> Plantillas
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* 7. Admin — PM (global) y tech_lead (solo sus proyectos) */}
-              {canAccess(userRole as UserRole, 'view_admin') && (
-                <button onClick={() => onViewChange('admin')}
-                  className={`text-sm font-medium transition-colors flex items-center gap-1 ${currentView==='admin'?'text-primary':'text-slate-600 hover:text-primary'}`}>
-                  <Building2 size={13}/> Admin
-                </button>
-              )}
+                );
+              })}
 
               {/* Circuitos BBVA — OCULTO TEMPORALMENTE (no borrar) */}
-              {/* {canAccess(userRole as UserRole, 'view_circuitos') && (...)} */}
             </nav>
         </div>
 
