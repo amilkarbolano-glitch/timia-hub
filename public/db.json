@@ -313,9 +313,6 @@
     "feature-hu": {
      "estado": "ok"
     },
-    "migration-tool": {
-     "estado": "na"
-    },
     "componentes-kirby": {
      "estado": "ok"
     },
@@ -349,9 +346,6 @@
     "certificaci-n-smartcleaner": {
      "estado": "ok"
     },
-    "certificaci-n-spark": {
-     "estado": "na"
-    },
     "creaci-n-job-kirby-live": {
      "estado": "ok"
     },
@@ -360,9 +354,6 @@
     },
     "creaci-n-job-smartcleaner-live": {
      "estado": "ok"
-    },
-    "creaci-n-job-spark-live": {
-     "estado": "na"
     },
     "certificaci-n-mallas-control-m": {
      "estado": "ok"
@@ -407,9 +398,6 @@
     "feature-hu": {
      "estado": "ok"
     },
-    "migration-tool": {
-     "estado": "na"
-    },
     "componentes-kirby": {
      "estado": "ok"
     },
@@ -443,9 +431,6 @@
     "certificaci-n-smartcleaner": {
      "estado": "ok"
     },
-    "certificaci-n-spark": {
-     "estado": "na"
-    },
     "creaci-n-job-kirby-live": {
      "estado": "ok"
     },
@@ -454,9 +439,6 @@
     },
     "creaci-n-job-smartcleaner-live": {
      "estado": "ok"
-    },
-    "creaci-n-job-spark-live": {
-     "estado": "na"
     },
     "certificaci-n-mallas-control-m": {
      "estado": "ok"
@@ -501,9 +483,6 @@
     "feature-hu": {
      "estado": "ok"
     },
-    "migration-tool": {
-     "estado": "na"
-    },
     "componentes-kirby": {
      "estado": "ok"
     },
@@ -537,9 +516,6 @@
     "certificaci-n-smartcleaner": {
      "estado": "ok"
     },
-    "certificaci-n-spark": {
-     "estado": "na"
-    },
     "creaci-n-job-kirby-live": {
      "estado": "ok"
     },
@@ -548,9 +524,6 @@
     },
     "creaci-n-job-smartcleaner-live": {
      "estado": "ok"
-    },
-    "creaci-n-job-spark-live": {
-     "estado": "na"
     },
     "certificaci-n-mallas-control-m": {
      "estado": "ok"
@@ -595,9 +568,6 @@
     "feature-hu": {
      "estado": "ok"
     },
-    "migration-tool": {
-     "estado": "na"
-    },
     "componentes-kirby": {
      "estado": "ok"
     },
@@ -631,9 +601,6 @@
     "certificaci-n-smartcleaner": {
      "estado": "ok"
     },
-    "certificaci-n-spark": {
-     "estado": "na"
-    },
     "creaci-n-job-kirby-live": {
      "estado": "ok"
     },
@@ -642,9 +609,6 @@
     },
     "creaci-n-job-smartcleaner-live": {
      "estado": "ok"
-    },
-    "creaci-n-job-spark-live": {
-     "estado": "na"
     },
     "certificaci-n-mallas-control-m": {
      "estado": "ok"
@@ -689,9 +653,6 @@
     "feature-hu": {
      "estado": "ok"
     },
-    "migration-tool": {
-     "estado": "na"
-    },
     "componentes-kirby": {
      "estado": "ok"
     },
@@ -725,9 +686,6 @@
     "certificaci-n-smartcleaner": {
      "estado": "ok"
     },
-    "certificaci-n-spark": {
-     "estado": "na"
-    },
     "creaci-n-job-kirby-live": {
      "estado": "ok"
     },
@@ -736,9 +694,6 @@
     },
     "creaci-n-job-smartcleaner-live": {
      "estado": "ok"
-    },
-    "creaci-n-job-spark-live": {
-     "estado": "na"
     },
     "certificaci-n-mallas-control-m": {
      "estado": "ok"
@@ -783,9 +738,6 @@
     "feature-hu": {
      "estado": "ok"
     },
-    "migration-tool": {
-     "estado": "na"
-    },
     "componentes-kirby": {
      "estado": "ok"
     },
@@ -819,9 +771,6 @@
     "certificaci-n-smartcleaner": {
      "estado": "ok"
     },
-    "certificaci-n-spark": {
-     "estado": "na"
-    },
     "creaci-n-job-kirby-live": {
      "estado": "ok"
     },
@@ -830,9 +779,6 @@
     },
     "creaci-n-job-smartcleaner-live": {
      "estado": "ok"
-    },
-    "creaci-n-job-spark-live": {
-     "estado": "na"
     },
     "certificaci-n-mallas-control-m": {
      "estado": "ok"
@@ -877,9 +823,6 @@
     "feature-hu": {
      "estado": "ok"
     },
-    "migration-tool": {
-     "estado": "na"
-    },
     "componentes-kirby": {
      "estado": "ok"
     },
@@ -913,9 +856,6 @@
     "certificaci-n-smartcleaner": {
      "estado": "ok"
     },
-    "certificaci-n-spark": {
-     "estado": "na"
-    },
     "creaci-n-job-kirby-live": {
      "estado": "ok"
     },
@@ -924,9 +864,6 @@
     },
     "creaci-n-job-smartcleaner-live": {
      "estado": "ok"
-    },
-    "creaci-n-job-spark-live": {
-     "estado": "na"
     },
     "certificaci-n-mallas-control-m": {
      "estado": "ok"
@@ -971,9 +908,6 @@
     "feature-hu": {
      "estado": "na"
     },
-    "migration-tool": {
-     "estado": "na"
-    },
     "componentes-kirby": {
      "estado": "na"
     },
@@ -1007,9 +941,6 @@
     "certificaci-n-smartcleaner": {
      "estado": "na"
     },
-    "certificaci-n-spark": {
-     "estado": "na"
-    },
     "creaci-n-job-kirby-live": {
      "estado": "na"
     },
@@ -1017,9 +948,6 @@
      "estado": "na"
     },
     "creaci-n-job-smartcleaner-live": {
-     "estado": "na"
-    },
-    "creaci-n-job-spark-live": {
      "estado": "na"
     },
     "certificaci-n-mallas-control-m": {
@@ -1065,9 +993,6 @@
     "feature-hu": {
      "estado": "ok"
     },
-    "migration-tool": {
-     "estado": "na"
-    },
     "componentes-kirby": {
      "estado": "ok"
     },
@@ -1104,9 +1029,6 @@
      "estado": "ok",
      "link": "https://bitbucket.globaldevtools.bbva.com/bitbucket/projects/CO_CSAN_APP-ID-20585_DSG/repos/co-dh-sm2-dhc-smc-csansmartcleaner/pull-requests/3/overview WO0000102306990 OK"
     },
-    "certificaci-n-spark": {
-     "estado": "na"
-    },
     "creaci-n-job-kirby-live": {
      "estado": "ok"
     },
@@ -1115,9 +1037,6 @@
     },
     "creaci-n-job-smartcleaner-live": {
      "estado": "ok"
-    },
-    "creaci-n-job-spark-live": {
-     "estado": "na"
     },
     "certificaci-n-mallas-control-m": {
      "estado": "na"
@@ -1162,9 +1081,6 @@
     "feature-hu": {
      "estado": "ok"
     },
-    "migration-tool": {
-     "estado": "na"
-    },
     "componentes-kirby": {
      "estado": "ok"
     },
@@ -1202,9 +1118,6 @@
      "estado": "ok",
      "link": "https://bitbucket.globaldevtools.bbva.com/bitbucket/projects/CO_CSTR_APP-ID-2183515_DSG/repos/co-dh-nga-dhc-smc-cstrctrllrview/pull-requests/3/overview WO0000102372913 OK"
     },
-    "certificaci-n-spark": {
-     "estado": "na"
-    },
     "creaci-n-job-kirby-live": {
      "estado": "ok"
     },
@@ -1213,9 +1126,6 @@
     },
     "creaci-n-job-smartcleaner-live": {
      "estado": "ok"
-    },
-    "creaci-n-job-spark-live": {
-     "estado": "na"
     },
     "certificaci-n-mallas-control-m": {
      "estado": "ok",
@@ -1261,9 +1171,6 @@
     },
     "feature-hu": {
      "estado": "ok"
-    },
-    "migration-tool": {
-     "estado": "na"
     },
     "componentes-kirby": {
      "estado": "ok",
@@ -1313,9 +1220,6 @@
      "fecha": "19/05/2026",
      "nota": "WO0000102441867 (Teminada) 19/05/2026 WO0000102458206 (Formato de Partición) https://bitbu"
     },
-    "certificaci-n-spark": {
-     "estado": "na"
-    },
     "creaci-n-job-kirby-live": {
      "estado": "ok",
      "fecha": "18/06/2026",
@@ -1329,9 +1233,6 @@
     "creaci-n-job-smartcleaner-live": {
      "estado": "ok",
      "fecha": "19/05/2026"
-    },
-    "creaci-n-job-spark-live": {
-     "estado": "na"
     },
     "certificaci-n-mallas-control-m": {
      "estado": "ok",
@@ -1377,9 +1278,6 @@
     },
     "feature-hu": {
      "estado": "ok"
-    },
-    "migration-tool": {
-     "estado": "na"
     },
     "componentes-kirby": {
      "estado": "ok",
@@ -1430,9 +1328,6 @@
      "fecha": "20/05/2026",
      "nota": "WO0000102442231 (Terminada) 20/05/2026 WO0000102460824 (Formato de Partición) https://bitb"
     },
-    "certificaci-n-spark": {
-     "estado": "na"
-    },
     "creaci-n-job-kirby-live": {
      "estado": "ok",
      "fecha": "03/06/2026",
@@ -1445,9 +1340,6 @@
     "creaci-n-job-smartcleaner-live": {
      "estado": "ok",
      "fecha": "20/05/2026"
-    },
-    "creaci-n-job-spark-live": {
-     "estado": "na"
     },
     "certificaci-n-mallas-control-m": {
      "estado": "ok",
@@ -1496,9 +1388,6 @@
      "estado": "ok",
      "fecha": "25/05/2026"
     },
-    "migration-tool": {
-     "estado": "na"
-    },
     "componentes-kirby": {
      "estado": "ok",
      "fecha": "29/05/2026",
@@ -1542,9 +1431,6 @@
     "certificaci-n-smartcleaner": {
      "estado": "na"
     },
-    "certificaci-n-spark": {
-     "estado": "na"
-    },
     "creaci-n-job-kirby-live": {
      "estado": "ok",
      "fecha": "29/05/2026"
@@ -1554,9 +1440,6 @@
      "fecha": "04/06/2026"
     },
     "creaci-n-job-smartcleaner-live": {
-     "estado": "na"
-    },
-    "creaci-n-job-spark-live": {
      "estado": "na"
     },
     "certificaci-n-mallas-control-m": {
@@ -1605,9 +1488,6 @@
      "estado": "ok",
      "fecha": "25/05/2026"
     },
-    "migration-tool": {
-     "estado": "na"
-    },
     "componentes-kirby": {
      "estado": "ok",
      "fecha": "29/05/2026",
@@ -1651,9 +1531,6 @@
     "certificaci-n-smartcleaner": {
      "estado": "na"
     },
-    "certificaci-n-spark": {
-     "estado": "na"
-    },
     "creaci-n-job-kirby-live": {
      "estado": "ok",
      "fecha": "29/05/2026"
@@ -1663,9 +1540,6 @@
      "fecha": "04/06/2026"
     },
     "creaci-n-job-smartcleaner-live": {
-     "estado": "na"
-    },
-    "creaci-n-job-spark-live": {
      "estado": "na"
     },
     "certificaci-n-mallas-control-m": {
@@ -1717,9 +1591,6 @@
      "estado": "ok",
      "fecha": "10/06/2026"
     },
-    "migration-tool": {
-     "estado": "ok"
-    },
     "componentes-kirby": {
      "estado": "ok",
      "fecha": "17/06/2026"
@@ -1761,9 +1632,6 @@
     "certificaci-n-smartcleaner": {
      "estado": "na"
     },
-    "certificaci-n-spark": {
-     "estado": "na"
-    },
     "creaci-n-job-kirby-live": {
      "estado": "ok",
      "fecha": "25/06/2026"
@@ -1772,9 +1640,6 @@
      "estado": "na"
     },
     "creaci-n-job-smartcleaner-live": {
-     "estado": "na"
-    },
-    "creaci-n-job-spark-live": {
      "estado": "na"
     },
     "certificaci-n-mallas-control-m": {
@@ -1825,9 +1690,6 @@
      "estado": "ok",
      "fecha": "10/06/2026"
     },
-    "migration-tool": {
-     "estado": "ok"
-    },
     "componentes-kirby": {
      "estado": "ok",
      "fecha": "18/06/2026"
@@ -1865,11 +1727,6 @@
     "certificaci-n-smartcleaner": {
      "estado": "na"
     },
-    "certificaci-n-spark": {
-     "estado": "ok",
-     "fecha": "19/06/2026",
-     "nota": "WO0000102542265"
-    },
     "creaci-n-job-kirby-live": {
      "estado": "na"
     },
@@ -1878,10 +1735,6 @@
     },
     "creaci-n-job-smartcleaner-live": {
      "estado": "na"
-    },
-    "creaci-n-job-spark-live": {
-     "estado": "ok",
-     "fecha": "2/7/2026"
     },
     "certificaci-n-mallas-control-m": {
      "estado": "na"
@@ -1931,9 +1784,6 @@
      "estado": "ok",
      "fecha": "10/06/2026"
     },
-    "migration-tool": {
-     "estado": "ok"
-    },
     "componentes-kirby": {
      "estado": "ok",
      "fecha": "17/06/2026"
@@ -1976,9 +1826,6 @@
     "certificaci-n-smartcleaner": {
      "estado": "na"
     },
-    "certificaci-n-spark": {
-     "estado": "na"
-    },
     "creaci-n-job-kirby-live": {
      "estado": "ok",
      "fecha": "25/06/2026"
@@ -1988,9 +1835,6 @@
      "fecha": "02/07/2026"
     },
     "creaci-n-job-smartcleaner-live": {
-     "estado": "na"
-    },
-    "creaci-n-job-spark-live": {
      "estado": "na"
     },
     "certificaci-n-mallas-control-m": {
@@ -2044,9 +1888,6 @@
      "estado": "ok",
      "fecha": "15/07/2026"
     },
-    "migration-tool": {
-     "estado": "na"
-    },
     "componentes-kirby": {
      "estado": "ok",
      "fecha": "22/07/2026"
@@ -2095,9 +1936,6 @@
      "fecha": "17/09/2026",
      "nota": "WO0000102686447"
     },
-    "certificaci-n-spark": {
-     "estado": "na"
-    },
     "creaci-n-job-kirby-live": {
      "estado": "ok"
     },
@@ -2106,9 +1944,6 @@
     },
     "creaci-n-job-smartcleaner-live": {
      "estado": "ok"
-    },
-    "creaci-n-job-spark-live": {
-     "estado": "na"
     },
     "certificaci-n-mallas-control-m": {
      "estado": "ok",
@@ -2163,9 +1998,6 @@
      "fecha": "15/07/2026",
      "nota": "Ok 15/07/2026"
     },
-    "migration-tool": {
-     "estado": "na"
-    },
     "componentes-kirby": {
      "estado": "ok",
      "fecha": "22/07/2026"
@@ -2214,9 +2046,6 @@
      "fecha": "17/09/2026",
      "nota": "WO0000102686447"
     },
-    "certificaci-n-spark": {
-     "estado": "na"
-    },
     "creaci-n-job-kirby-live": {
      "estado": "ok"
     },
@@ -2225,9 +2054,6 @@
     },
     "creaci-n-job-smartcleaner-live": {
      "estado": "ok"
-    },
-    "creaci-n-job-spark-live": {
-     "estado": "na"
     },
     "certificaci-n-mallas-control-m": {
      "estado": "ok",
@@ -2279,9 +2105,6 @@
      "fecha": "15/07/2026",
      "nota": "ADA - DECLIENTS4-5004 CTM - DECLIENTS4-5020"
     },
-    "migration-tool": {
-     "estado": "na"
-    },
     "componentes-kirby": {
      "estado": "ok",
      "fecha": "16/07/2026"
@@ -2330,9 +2153,6 @@
      "fecha": "22/07/2026",
      "nota": "WO0000102597516"
     },
-    "certificaci-n-spark": {
-     "estado": "na"
-    },
     "creaci-n-job-kirby-live": {
      "estado": "ok",
      "fecha": "22/07/2026"
@@ -2344,9 +2164,6 @@
     "creaci-n-job-smartcleaner-live": {
      "estado": "ok",
      "fecha": "22/07/2026"
-    },
-    "creaci-n-job-spark-live": {
-     "estado": "na"
     },
     "certificaci-n-mallas-control-m": {
      "estado": "ok",
@@ -2400,9 +2217,6 @@
      "estado": "ok",
      "fecha": "16/07/2026"
     },
-    "migration-tool": {
-     "estado": "na"
-    },
     "componentes-kirby": {
      "estado": "ok",
      "fecha": "30/07/2026"
@@ -2451,9 +2265,6 @@
      "fecha": "06/08/2026",
      "nota": "WO0000102633524"
     },
-    "certificaci-n-spark": {
-     "estado": "na"
-    },
     "creaci-n-job-kirby-live": {
      "estado": "ok",
      "fecha": "11/08/2026"
@@ -2465,9 +2276,6 @@
     "creaci-n-job-smartcleaner-live": {
      "estado": "ok",
      "fecha": "06/08/2026"
-    },
-    "creaci-n-job-spark-live": {
-     "estado": "na"
     },
     "certificaci-n-mallas-control-m": {
      "estado": "ok",
@@ -2518,9 +2326,6 @@
     "feature-hu": {
      "estado": "ok",
      "fecha": "26/08/2026"
-    },
-    "migration-tool": {
-     "estado": "na"
     },
     "componentes-kirby": {
      "estado": "ok",
@@ -2587,14 +2392,6 @@
      "estado": "na",
      "nota": "sin registro en el Excel"
     },
-    "certificaci-n-spark": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
-    "creaci-n-job-spark-live": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
     "post-prod": {
      "estado": "na",
      "nota": "sin registro en el Excel"
@@ -2636,9 +2433,6 @@
     "feature-hu": {
      "estado": "ok",
      "fecha": "26/08/2026"
-    },
-    "migration-tool": {
-     "estado": "na"
     },
     "componentes-kirby": {
      "estado": "ok",
@@ -2705,14 +2499,6 @@
      "estado": "na",
      "nota": "sin registro en el Excel"
     },
-    "certificaci-n-spark": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
-    "creaci-n-job-spark-live": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
     "post-prod": {
      "estado": "na",
      "nota": "sin registro en el Excel"
@@ -2754,9 +2540,6 @@
     "feature-hu": {
      "estado": "ok",
      "fecha": "26/08/2026"
-    },
-    "migration-tool": {
-     "estado": "na"
     },
     "componentes-kirby": {
      "estado": "ok",
@@ -2823,14 +2606,6 @@
      "estado": "na",
      "nota": "sin registro en el Excel"
     },
-    "certificaci-n-spark": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
-    "creaci-n-job-spark-live": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
     "post-prod": {
      "estado": "na",
      "nota": "sin registro en el Excel"
@@ -2873,9 +2648,6 @@
     "feature-hu": {
      "estado": "ok",
      "fecha": "26/08/2026"
-    },
-    "migration-tool": {
-     "estado": "na"
     },
     "componentes-kirby": {
      "estado": "ok",
@@ -2942,14 +2714,6 @@
      "estado": "na",
      "nota": "sin registro en el Excel"
     },
-    "certificaci-n-spark": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
-    "creaci-n-job-spark-live": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
     "post-prod": {
      "estado": "na",
      "nota": "sin registro en el Excel"
@@ -2991,9 +2755,6 @@
     "feature-hu": {
      "estado": "ok",
      "fecha": "26/08/2026"
-    },
-    "migration-tool": {
-     "estado": "na"
     },
     "componentes-kirby": {
      "estado": "ok",
@@ -3060,14 +2821,6 @@
      "estado": "na",
      "nota": "sin registro en el Excel"
     },
-    "certificaci-n-spark": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
-    "creaci-n-job-spark-live": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
     "post-prod": {
      "estado": "na",
      "nota": "sin registro en el Excel"
@@ -3109,9 +2862,6 @@
     "feature-hu": {
      "estado": "ok",
      "fecha": "28/07/2026"
-    },
-    "migration-tool": {
-     "estado": "na"
     },
     "componentes-kirby": {
      "estado": "ok",
@@ -3155,9 +2905,6 @@
     "certificaci-n-smartcleaner": {
      "estado": "na"
     },
-    "certificaci-n-spark": {
-     "estado": "na"
-    },
     "creaci-n-job-kirby-live": {
      "estado": "ok",
      "fecha": "07/09/2026"
@@ -3167,9 +2914,6 @@
      "fecha": "07/09/2026"
     },
     "creaci-n-job-smartcleaner-live": {
-     "estado": "na"
-    },
-    "creaci-n-job-spark-live": {
      "estado": "na"
     },
     "certificaci-n-mallas-control-m": {
@@ -3225,9 +2969,6 @@
      "estado": "ok",
      "fecha": "05/08/2026"
     },
-    "migration-tool": {
-     "estado": "na"
-    },
     "componentes-kirby": {
      "estado": "ok",
      "fecha": "25/08/2026"
@@ -3276,9 +3017,6 @@
      "fecha": "04/09/2026",
      "nota": "WO0000102671674"
     },
-    "certificaci-n-spark": {
-     "estado": "na"
-    },
     "creaci-n-job-kirby-live": {
      "estado": "ok",
      "fecha": "07/09/2026"
@@ -3290,9 +3028,6 @@
     "creaci-n-job-smartcleaner-live": {
      "estado": "ok",
      "fecha": "07/09/2026"
-    },
-    "creaci-n-job-spark-live": {
-     "estado": "na"
     },
     "certificaci-n-mallas-control-m": {
      "estado": "ok",
@@ -3347,9 +3082,6 @@
      "estado": "ok",
      "fecha": "05/08/2026"
     },
-    "migration-tool": {
-     "estado": "na"
-    },
     "componentes-kirby": {
      "estado": "ok",
      "fecha": "14/09/2026"
@@ -3397,9 +3129,6 @@
      "fecha": "09/10/2026",
      "nota": "WO0000102718672"
     },
-    "certificaci-n-spark": {
-     "estado": "na"
-    },
     "creaci-n-job-kirby-live": {
      "estado": "ok"
     },
@@ -3409,9 +3138,6 @@
     "creaci-n-job-smartcleaner-live": {
      "estado": "ok",
      "fecha": "09/10/2026"
-    },
-    "creaci-n-job-spark-live": {
-     "estado": "na"
     },
     "certificaci-n-mallas-control-m": {
      "estado": "ok",
@@ -3465,9 +3191,6 @@
     "feature-hu": {
      "estado": "ok"
     },
-    "migration-tool": {
-     "estado": "na"
-    },
     "componentes-kirby": {
      "estado": "ok",
      "fecha": "26/08/2026"
@@ -3514,9 +3237,6 @@
      "fecha": "11/09/2026",
      "nota": "WO0000102695471"
     },
-    "certificaci-n-spark": {
-     "estado": "na"
-    },
     "creaci-n-job-kirby-live": {
      "estado": "ok",
      "fecha": "08/09/2026"
@@ -3527,9 +3247,6 @@
     },
     "creaci-n-job-smartcleaner-live": {
      "estado": "ok"
-    },
-    "creaci-n-job-spark-live": {
-     "estado": "na"
     },
     "certificaci-n-mallas-control-m": {
      "estado": "ok",
@@ -3582,9 +3299,6 @@
     "feature-hu": {
      "estado": "ok"
     },
-    "migration-tool": {
-     "estado": "na"
-    },
     "componentes-kirby": {
      "estado": "ok",
      "fecha": "25/08/2026"
@@ -3631,9 +3345,6 @@
      "fecha": "11/09/2026",
      "nota": "WO0000102695471"
     },
-    "certificaci-n-spark": {
-     "estado": "na"
-    },
     "creaci-n-job-kirby-live": {
      "estado": "ok",
      "fecha": "08/09/2026"
@@ -3644,9 +3355,6 @@
     },
     "creaci-n-job-smartcleaner-live": {
      "estado": "ok"
-    },
-    "creaci-n-job-spark-live": {
-     "estado": "na"
     },
     "certificaci-n-mallas-control-m": {
      "estado": "ok",
@@ -3720,10 +3428,6 @@
     "documentaci-n-control-m": {
      "estado": "pte"
     },
-    "migration-tool": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
     "despliegue-a-work": {
      "estado": "na",
      "nota": "sin registro en el Excel"
@@ -3744,10 +3448,6 @@
      "estado": "na",
      "nota": "sin registro en el Excel"
     },
-    "certificaci-n-spark": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
     "creaci-n-job-kirby-live": {
      "estado": "na",
      "nota": "sin registro en el Excel"
@@ -3757,10 +3457,6 @@
      "nota": "sin registro en el Excel"
     },
     "creaci-n-job-smartcleaner-live": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
-    "creaci-n-job-spark-live": {
      "estado": "na",
      "nota": "sin registro en el Excel"
     },
@@ -3832,10 +3528,6 @@
     "documentaci-n-control-m": {
      "estado": "pte"
     },
-    "migration-tool": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
     "despliegue-a-work": {
      "estado": "na",
      "nota": "sin registro en el Excel"
@@ -3856,10 +3548,6 @@
      "estado": "na",
      "nota": "sin registro en el Excel"
     },
-    "certificaci-n-spark": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
     "creaci-n-job-kirby-live": {
      "estado": "na",
      "nota": "sin registro en el Excel"
@@ -3869,10 +3557,6 @@
      "nota": "sin registro en el Excel"
     },
     "creaci-n-job-smartcleaner-live": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
-    "creaci-n-job-spark-live": {
      "estado": "na",
      "nota": "sin registro en el Excel"
     },
@@ -3942,10 +3626,6 @@
     "documentaci-n-control-m": {
      "estado": "pte"
     },
-    "migration-tool": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
     "despliegue-a-work": {
      "estado": "na",
      "nota": "sin registro en el Excel"
@@ -3966,10 +3646,6 @@
      "estado": "na",
      "nota": "sin registro en el Excel"
     },
-    "certificaci-n-spark": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
     "creaci-n-job-kirby-live": {
      "estado": "na",
      "nota": "sin registro en el Excel"
@@ -3979,10 +3655,6 @@
      "nota": "sin registro en el Excel"
     },
     "creaci-n-job-smartcleaner-live": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
-    "creaci-n-job-spark-live": {
      "estado": "na",
      "nota": "sin registro en el Excel"
     },
@@ -4052,10 +3724,6 @@
     "documentaci-n-control-m": {
      "estado": "pte"
     },
-    "migration-tool": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
     "despliegue-a-work": {
      "estado": "na",
      "nota": "sin registro en el Excel"
@@ -4076,10 +3744,6 @@
      "estado": "na",
      "nota": "sin registro en el Excel"
     },
-    "certificaci-n-spark": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
     "creaci-n-job-kirby-live": {
      "estado": "na",
      "nota": "sin registro en el Excel"
@@ -4089,10 +3753,6 @@
      "nota": "sin registro en el Excel"
     },
     "creaci-n-job-smartcleaner-live": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
-    "creaci-n-job-spark-live": {
      "estado": "na",
      "nota": "sin registro en el Excel"
     },
@@ -4165,10 +3825,6 @@
     "documentaci-n-control-m": {
      "estado": "pte"
     },
-    "migration-tool": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
     "despliegue-a-work": {
      "estado": "na",
      "nota": "sin registro en el Excel"
@@ -4189,10 +3845,6 @@
      "estado": "na",
      "nota": "sin registro en el Excel"
     },
-    "certificaci-n-spark": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
     "creaci-n-job-kirby-live": {
      "estado": "na",
      "nota": "sin registro en el Excel"
@@ -4202,10 +3854,6 @@
      "nota": "sin registro en el Excel"
     },
     "creaci-n-job-smartcleaner-live": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
-    "creaci-n-job-spark-live": {
      "estado": "na",
      "nota": "sin registro en el Excel"
     },
@@ -4319,19 +3967,7 @@
      "estado": "otro",
      "nota": "En curso 07/10: Revision Changelog CHGL-1652 15/10: Vo.Bo. RA Malla CR-COFANDIA-T02 - REQ0"
     },
-    "migration-tool": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
     "despliegue-a-work": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
-    "certificaci-n-spark": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
-    "creaci-n-job-spark-live": {
      "estado": "na",
      "nota": "sin registro en el Excel"
     },
@@ -4433,10 +4069,6 @@
      "estado": "otro",
      "nota": "DataX"
     },
-    "migration-tool": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
     "despliegue-a-work": {
      "estado": "na",
      "nota": "sin registro en el Excel"
@@ -4446,14 +4078,6 @@
      "nota": "sin registro en el Excel"
     },
     "documentaci-n-control-m": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
-    "certificaci-n-spark": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
-    "creaci-n-job-spark-live": {
      "estado": "na",
      "nota": "sin registro en el Excel"
     },
@@ -4554,10 +4178,6 @@
      "estado": "otro",
      "nota": "DATAX CTA 16 Y 13 BBVA Valores datax-agent --transferId ccmol_udafictas_ctas_13_16_19_0 --"
     },
-    "migration-tool": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
     "despliegue-a-work": {
      "estado": "na",
      "nota": "sin registro en el Excel"
@@ -4567,14 +4187,6 @@
      "nota": "sin registro en el Excel"
     },
     "documentaci-n-control-m": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
-    "certificaci-n-spark": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
-    "creaci-n-job-spark-live": {
      "estado": "na",
      "nota": "sin registro en el Excel"
     },
@@ -4673,10 +4285,6 @@
      "estado": "otro",
      "nota": "Transfer: datax-agent --transferId ccrei_udafipacon_parrilla_conta_0 --namespace co.crei.a"
     },
-    "migration-tool": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
     "despliegue-a-work": {
      "estado": "na",
      "nota": "sin registro en el Excel"
@@ -4686,14 +4294,6 @@
      "nota": "sin registro en el Excel"
     },
     "documentaci-n-control-m": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
-    "certificaci-n-spark": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
-    "creaci-n-job-spark-live": {
      "estado": "na",
      "nota": "sin registro en el Excel"
     },
@@ -4793,10 +4393,6 @@
      "estado": "otro",
      "nota": "DataX datax-agent --transferId ccrei_udafineoc_ries_tip_cambio_0 --namespace co.crei.app-i"
     },
-    "migration-tool": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
     "despliegue-a-work": {
      "estado": "na",
      "nota": "sin registro en el Excel"
@@ -4806,14 +4402,6 @@
      "nota": "sin registro en el Excel"
     },
     "documentaci-n-control-m": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
-    "certificaci-n-spark": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
-    "creaci-n-job-spark-live": {
      "estado": "na",
      "nota": "sin registro en el Excel"
     },
@@ -4856,10 +4444,6 @@
      "nota": "sin registro en el Excel"
     },
     "feature-hu": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
-    "migration-tool": {
      "estado": "na",
      "nota": "sin registro en el Excel"
     },
@@ -4911,10 +4495,6 @@
      "estado": "na",
      "nota": "sin registro en el Excel"
     },
-    "certificaci-n-spark": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
     "creaci-n-job-kirby-live": {
      "estado": "na",
      "nota": "sin registro en el Excel"
@@ -4924,10 +4504,6 @@
      "nota": "sin registro en el Excel"
     },
     "creaci-n-job-smartcleaner-live": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
-    "creaci-n-job-spark-live": {
      "estado": "na",
      "nota": "sin registro en el Excel"
     },
@@ -5033,10 +4609,6 @@
      "estado": "otro",
      "nota": "Nombre de DataX y su configuración horaria: Transfer: datax-agent --transferId cctk_ddadgr"
     },
-    "migration-tool": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
     "despliegue-a-work": {
      "estado": "na",
      "nota": "sin registro en el Excel"
@@ -5046,14 +4618,6 @@
      "nota": "sin registro en el Excel"
     },
     "documentaci-n-control-m": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
-    "certificaci-n-spark": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
-    "creaci-n-job-spark-live": {
      "estado": "na",
      "nota": "sin registro en el Excel"
     },
@@ -5119,10 +4683,6 @@
      "estado": "otro",
      "nota": "Nombre de DataX y su configuración horaria: Transfer: datax-agent --transferId cmol_udafio"
     },
-    "migration-tool": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
     "despliegue-a-work": {
      "estado": "na",
      "nota": "sin registro en el Excel"
@@ -5151,10 +4711,6 @@
      "estado": "na",
      "nota": "sin registro en el Excel"
     },
-    "certificaci-n-spark": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
     "creaci-n-job-kirby-live": {
      "estado": "na",
      "nota": "sin registro en el Excel"
@@ -5164,10 +4720,6 @@
      "nota": "sin registro en el Excel"
     },
     "creaci-n-job-smartcleaner-live": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
-    "creaci-n-job-spark-live": {
      "estado": "na",
      "nota": "sin registro en el Excel"
     },
@@ -5211,10 +4763,6 @@
      "nota": "sin registro en el Excel"
     },
     "feature-hu": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
-    "migration-tool": {
      "estado": "na",
      "nota": "sin registro en el Excel"
     },
@@ -5266,10 +4814,6 @@
      "estado": "na",
      "nota": "sin registro en el Excel"
     },
-    "certificaci-n-spark": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
     "creaci-n-job-kirby-live": {
      "estado": "na",
      "nota": "sin registro en el Excel"
@@ -5279,10 +4823,6 @@
      "nota": "sin registro en el Excel"
     },
     "creaci-n-job-smartcleaner-live": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
-    "creaci-n-job-spark-live": {
      "estado": "na",
      "nota": "sin registro en el Excel"
     },
@@ -5333,10 +4873,6 @@
      "estado": "na",
      "nota": "sin registro en el Excel"
     },
-    "migration-tool": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
     "componentes-kirby": {
      "estado": "na",
      "nota": "sin registro en el Excel"
@@ -5385,10 +4921,6 @@
      "estado": "na",
      "nota": "sin registro en el Excel"
     },
-    "certificaci-n-spark": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
     "creaci-n-job-kirby-live": {
      "estado": "na",
      "nota": "sin registro en el Excel"
@@ -5398,10 +4930,6 @@
      "nota": "sin registro en el Excel"
     },
     "creaci-n-job-smartcleaner-live": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
-    "creaci-n-job-spark-live": {
      "estado": "na",
      "nota": "sin registro en el Excel"
     },
@@ -5487,10 +5015,6 @@
     "certificaci-n-mallas-control-m": {
      "estado": "na"
     },
-    "migration-tool": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
     "despliegue-a-work": {
      "estado": "na",
      "nota": "sin registro en el Excel"
@@ -5507,19 +5031,11 @@
      "estado": "na",
      "nota": "sin registro en el Excel"
     },
-    "certificaci-n-spark": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
     "creaci-n-job-kirby-live": {
      "estado": "na",
      "nota": "sin registro en el Excel"
     },
     "creaci-n-job-hammurabi-live": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
-    "creaci-n-job-spark-live": {
      "estado": "na",
      "nota": "sin registro en el Excel"
     },
@@ -5601,10 +5117,6 @@
     "certificaci-n-mallas-control-m": {
      "estado": "na"
     },
-    "migration-tool": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
     "despliegue-a-work": {
      "estado": "na",
      "nota": "sin registro en el Excel"
@@ -5621,19 +5133,11 @@
      "estado": "na",
      "nota": "sin registro en el Excel"
     },
-    "certificaci-n-spark": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
     "creaci-n-job-kirby-live": {
      "estado": "na",
      "nota": "sin registro en el Excel"
     },
     "creaci-n-job-hammurabi-live": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
-    "creaci-n-job-spark-live": {
      "estado": "na",
      "nota": "sin registro en el Excel"
     },
@@ -5676,10 +5180,6 @@
      "nota": "sin registro en el Excel"
     },
     "feature-hu": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
-    "migration-tool": {
      "estado": "na",
      "nota": "sin registro en el Excel"
     },
@@ -5731,10 +5231,6 @@
      "estado": "na",
      "nota": "sin registro en el Excel"
     },
-    "certificaci-n-spark": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
     "creaci-n-job-kirby-live": {
      "estado": "na",
      "nota": "sin registro en el Excel"
@@ -5744,10 +5240,6 @@
      "nota": "sin registro en el Excel"
     },
     "creaci-n-job-smartcleaner-live": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
-    "creaci-n-job-spark-live": {
      "estado": "na",
      "nota": "sin registro en el Excel"
     },
@@ -5797,10 +5289,6 @@
      "estado": "na",
      "nota": "sin registro en el Excel"
     },
-    "migration-tool": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
     "componentes-kirby": {
      "estado": "na",
      "nota": "sin registro en el Excel"
@@ -5849,10 +5337,6 @@
      "estado": "na",
      "nota": "sin registro en el Excel"
     },
-    "certificaci-n-spark": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
     "creaci-n-job-kirby-live": {
      "estado": "na",
      "nota": "sin registro en el Excel"
@@ -5862,10 +5346,6 @@
      "nota": "sin registro en el Excel"
     },
     "creaci-n-job-smartcleaner-live": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
-    "creaci-n-job-spark-live": {
      "estado": "na",
      "nota": "sin registro en el Excel"
     },
@@ -5915,10 +5395,6 @@
      "estado": "na",
      "nota": "sin registro en el Excel"
     },
-    "migration-tool": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
     "componentes-kirby": {
      "estado": "na",
      "nota": "sin registro en el Excel"
@@ -5967,10 +5443,6 @@
      "estado": "na",
      "nota": "sin registro en el Excel"
     },
-    "certificaci-n-spark": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
     "creaci-n-job-kirby-live": {
      "estado": "na",
      "nota": "sin registro en el Excel"
@@ -5980,10 +5452,6 @@
      "nota": "sin registro en el Excel"
     },
     "creaci-n-job-smartcleaner-live": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
-    "creaci-n-job-spark-live": {
      "estado": "na",
      "nota": "sin registro en el Excel"
     },
@@ -6033,10 +5501,6 @@
      "estado": "na",
      "nota": "sin registro en el Excel"
     },
-    "migration-tool": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
     "componentes-kirby": {
      "estado": "na",
      "nota": "sin registro en el Excel"
@@ -6085,10 +5549,6 @@
      "estado": "na",
      "nota": "sin registro en el Excel"
     },
-    "certificaci-n-spark": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
     "creaci-n-job-kirby-live": {
      "estado": "na",
      "nota": "sin registro en el Excel"
@@ -6098,10 +5558,6 @@
      "nota": "sin registro en el Excel"
     },
     "creaci-n-job-smartcleaner-live": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
-    "creaci-n-job-spark-live": {
      "estado": "na",
      "nota": "sin registro en el Excel"
     },
@@ -6151,10 +5607,6 @@
      "estado": "na",
      "nota": "sin registro en el Excel"
     },
-    "migration-tool": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
     "componentes-kirby": {
      "estado": "na",
      "nota": "sin registro en el Excel"
@@ -6203,10 +5655,6 @@
      "estado": "na",
      "nota": "sin registro en el Excel"
     },
-    "certificaci-n-spark": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
     "creaci-n-job-kirby-live": {
      "estado": "na",
      "nota": "sin registro en el Excel"
@@ -6216,10 +5664,6 @@
      "nota": "sin registro en el Excel"
     },
     "creaci-n-job-smartcleaner-live": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
-    "creaci-n-job-spark-live": {
      "estado": "na",
      "nota": "sin registro en el Excel"
     },
@@ -6235,7 +5679,7 @@
   },
   {
    "id": "fab-55",
-   "proyecto": "SDATOOL-48750 - Gold Local",
+   "proyecto": "SDATOOL-48750 Gold Local",
    "objetoInsumo": "t_cctd_udafialadq_altas_adquiren",
    "responsable": "",
    "contactoBanco": "YHEYMY LIZETH MORA FIERRO",
@@ -6264,10 +5708,6 @@
      "estado": "na",
      "nota": "sin registro en el Excel"
     },
-    "migration-tool": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
     "componentes-kirby": {
      "estado": "na",
      "nota": "sin registro en el Excel"
@@ -6316,10 +5756,6 @@
      "estado": "na",
      "nota": "sin registro en el Excel"
     },
-    "certificaci-n-spark": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
     "creaci-n-job-kirby-live": {
      "estado": "na",
      "nota": "sin registro en el Excel"
@@ -6329,10 +5765,6 @@
      "nota": "sin registro en el Excel"
     },
     "creaci-n-job-smartcleaner-live": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
-    "creaci-n-job-spark-live": {
      "estado": "na",
      "nota": "sin registro en el Excel"
     },
@@ -6348,7 +5780,7 @@
   },
   {
    "id": "fab-56",
-   "proyecto": "SDATOOL-48750 - Gold Local",
+   "proyecto": "SDATOOL-48750 Gold Local",
    "objetoInsumo": "t_cctd_udafifacop_fact_open_pay",
    "responsable": "",
    "contactoBanco": "YHEYMY LIZETH MORA FIERRO",
@@ -6377,10 +5809,6 @@
      "estado": "na",
      "nota": "sin registro en el Excel"
     },
-    "migration-tool": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
     "componentes-kirby": {
      "estado": "na",
      "nota": "sin registro en el Excel"
@@ -6429,10 +5857,6 @@
      "estado": "na",
      "nota": "sin registro en el Excel"
     },
-    "certificaci-n-spark": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
     "creaci-n-job-kirby-live": {
      "estado": "na",
      "nota": "sin registro en el Excel"
@@ -6442,10 +5866,6 @@
      "nota": "sin registro en el Excel"
     },
     "creaci-n-job-smartcleaner-live": {
-     "estado": "na",
-     "nota": "sin registro en el Excel"
-    },
-    "creaci-n-job-spark-live": {
      "estado": "na",
      "nota": "sin registro en el Excel"
     },

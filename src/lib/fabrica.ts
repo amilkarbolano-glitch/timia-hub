@@ -31,8 +31,10 @@ export interface PasoObjeto {
 export function duracion(p: PasoObjeto | undefined): number | null {
   const a = fechaCol(p?.inicio), b = fechaCol(p?.fecha);
   if (!a || !b || b < a) return null;
+  // Empezar y terminar el mismo día son 0 días, no 1: lo que se mide es cuánto
+  // esperó el objeto, y si entró y salió el martes no esperó nada.
   let dias = 0;
-  for (const d = new Date(a); d <= b; d.setDate(d.getDate() + 1)) {
+  for (const d = new Date(a); d < b; d.setDate(d.getDate() + 1)) {
     const s = d.getDay();
     if (s !== 0 && s !== 6) dias++;
   }
@@ -59,6 +61,11 @@ export interface ObjetoFabrica {
   periodicidad: string;
   estado: string;
   comentarios: string;
+  /**
+   * Cuándo quedó registrado el objeto. En los 55 que vinieron del Excel es la
+   * fecha de recepción que anotó David; en los nuevos se pone sola al crear.
+   * No se edita a mano: es el «cuándo entró esto», no un campo de gestión.
+   */
   fechaRecepcion: string;
   pasos: Record<string, PasoObjeto>;
 }
@@ -89,7 +96,6 @@ export const PASOS_SEMILLA: PasoCatalogo[] = [
 
   { id: 'acceso-rw-repo',              label: 'Acceso RW Repo',              fase: 'Desarrollo' },
   { id: 'feature-hu',                  label: 'Feature + HU',                fase: 'Desarrollo' },
-  { id: 'migration-tool',              label: 'Migration Tool',              fase: 'Desarrollo' },
   { id: 'componentes-kirby',           label: 'Componentes Kirby',           fase: 'Desarrollo' },
   { id: 'componentes-hammurabi',       label: 'Componentes Hammurabi',       fase: 'Desarrollo' },
   { id: 'componentes-smartcleaner',    label: 'Componentes Smartcleaner',    fase: 'Desarrollo' },
@@ -104,12 +110,10 @@ export const PASOS_SEMILLA: PasoCatalogo[] = [
   { id: 'certificaci-n-kirby',         label: 'Certificación Kirby',         fase: 'Certificación' },
   { id: 'certificaci-n-hammurabi',     label: 'Certificación Hammurabi',     fase: 'Certificación' },
   { id: 'certificaci-n-smartcleaner',  label: 'Certificación Smartcleaner',  fase: 'Certificación' },
-  { id: 'certificaci-n-spark',         label: 'Certificación Spark',         fase: 'Certificación' },
 
   { id: 'creaci-n-job-kirby-live',       label: 'Job Kirby LIVE',            fase: 'Producción' },
   { id: 'creaci-n-job-hammurabi-live',   label: 'Job Hammurabi LIVE',        fase: 'Producción' },
   { id: 'creaci-n-job-smartcleaner-live',label: 'Job Smartcleaner LIVE',     fase: 'Producción' },
-  { id: 'creaci-n-job-spark-live',       label: 'Job Spark LIVE',            fase: 'Producción' },
   { id: 'certificaci-n-mallas-control-m',label: 'Certificación Mallas Control-M', fase: 'Producción' },
   { id: 'post-prod',                     label: 'POST PROD',                 fase: 'Producción' },
 ];
@@ -202,6 +206,20 @@ export function faseActual(o: ObjetoFabrica, ps: PasoCatalogo[] = pasos()): stri
   return fs[fs.length - 1] ?? '';
 }
 
+/**
+ * El estado que escribió el PM a mano ¿concuerda con lo que dicen las casillas?
+ * Si no, devuelve la fase que dicen las casillas, para avisarlo en la tarjeta.
+ * No se corrige solo: la herramienta no sabe cuál de los dos está al día.
+ */
+export function desacuerdoDeFase(o: ObjetoFabrica, ps: PasoCatalogo[] = pasos()): string | null {
+  const fs = fases(ps);
+  // Solo aplica si el estado del objeto es el nombre de una fase; «En curso»,
+  // «Bloqueado» o «Por iniciar» no dicen nada sobre en qué fase va.
+  if (!fs.includes(o.estado)) return null;
+  const real = faseActual(o, ps);
+  return real === o.estado ? null : real;
+}
+
 /** Pasos de una fase que siguen pendientes: sin marcar o marcados pendientes. */
 function pendientesDe(o: ObjetoFabrica, f: string, ps: PasoCatalogo[]): PasoCatalogo[] {
   return pasosDeFase(f, ps).filter(p => {
@@ -223,6 +241,34 @@ export function codigoProyecto(p: string): string {
 /** Nombre sin el código, para mostrarlo debajo. */
 export function nombreProyecto(p: string): string {
   return p.replace(/SDATOOL\s*-?\s*\d+\s*/i, '').replace(/^[-–\s]+/, '').trim();
+}
+
+/**
+ * Mueve un objeto a una fase: da por hechas las casillas de las fases
+ * anteriores y deja la de destino por empezar. Es lo que uno espera al
+ * arrastrar la tarjeta de una columna a otra.
+ *
+ * No toca los NA —si el objeto no pasa por Kirby, sigue sin pasar— ni las
+ * notas, ni las fechas que ya estuvieran puestas.
+ */
+export function moverAFase(o: ObjetoFabrica, destino: string, ps: PasoCatalogo[] = pasos()): ObjetoFabrica {
+  const fs = fases(ps);
+  const iDestino = fs.indexOf(destino);
+  if (iDestino < 0) return o;
+  const hoy = new Date().toLocaleDateString('es-CO');
+  const nuevos = { ...o.pasos };
+  for (const p of ps) {
+    const i = fs.indexOf(p.fase);
+    const v = nuevos[p.id];
+    if (v?.estado === 'na') continue;              // no aplica: se respeta
+    if (i < iDestino && v?.estado !== 'ok') {
+      nuevos[p.id] = { ...(v ?? {}), estado: 'ok', fecha: v?.fecha ?? hoy };
+    } else if (i >= iDestino && v?.estado === 'ok') {
+      // Arrastrar hacia atrás desmarca lo de la fase destino en adelante.
+      nuevos[p.id] = { ...v, estado: 'pte', fecha: undefined };
+    }
+  }
+  return { ...o, pasos: nuevos };
 }
 
 // ─── Proyectos de la fábrica ─────────────────────────────────────────────────

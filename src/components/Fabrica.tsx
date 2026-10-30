@@ -10,6 +10,7 @@ import { Factory, Search, ExternalLink, AlertTriangle, Copy, Check, Plus, Settin
 import {
   fabricaStore, pasosDeFase, avance, faseActual, frenos, objetoNuevo, nuevoId, mover,
   colorEstado, codigoProyecto, nombreProyecto, ESTADOS, fases as fasesDe, duracion, fechaCol,
+  desacuerdoDeFase, moverAFase,
   type ObjetoFabrica, type PasoCatalogo, type PasoObjeto, type ProyectoFabrica,
 } from '../lib/fabrica';
 import { useAuth, canAccess } from '../contexts/AuthContext';
@@ -160,6 +161,7 @@ export default function Fabrica() {
     () => [...new Set([...proys.map(p => p.id), ...objetos.map(o => o.proyecto)])].filter(Boolean).sort(),
     [proys, objetos]);
   const responsables = useMemo(() => [...new Set(objetos.map(o => o.responsable).filter(Boolean))].sort(), [objetos]);
+  const contactos    = useMemo(() => [...new Set(objetos.map(o => o.contactoBanco).filter(Boolean))].sort(), [objetos]);
 
   const vis = objetos.filter(o =>
     (!proy || o.proyecto === proy) && (!resp || o.responsable === resp) &&
@@ -258,7 +260,10 @@ export default function Fabrica() {
         <span style={{ marginLeft:'auto', fontSize:11, color:'#94a3b8' }}>{vis.length} objeto{vis.length!==1?'s':''}</span>
       </div>
 
-      {vista === 'tuberia'   && <Tuberia objetos={vis} cat={cat} onAbrir={setAbierto}/>}
+      {vista === 'tuberia'   && (
+        <Tuberia objetos={vis} cat={cat} onAbrir={setAbierto} puedeEditar={puedeEditar}
+          onMover={(o, fase) => guardarUno(moverAFase(o, fase, cat))}/>
+      )}
       {vista === 'objetos'   && <Tabla objetos={vis} cat={cat} onAbrir={setAbierto}/>}
       {vista === 'proyectos' && (
         <>
@@ -289,7 +294,7 @@ export default function Fabrica() {
                onBorrar={()=>borrar(abierto)}/>
       )}
       {editando && (
-        <FormObjeto o={editando} proyectos={proyectos} responsables={responsables}
+        <FormObjeto o={editando} proyectos={proyectos} responsables={responsables} contactos={contactos}
           esNuevo={!objetos.some(x => x.id === editando.id)}
           onCerrar={()=>setEditando(null)}
           onGuardar={o => { guardarUno(o); setEditando(null); setAbierto(o.id); }}/>
@@ -310,7 +315,13 @@ export default function Fabrica() {
 }
 
 // ═══ Tubería — dónde está atascado el trabajo ════════════════════════════════
-function Tuberia({ objetos, cat, onAbrir }: { objetos: ObjetoFabrica[]; cat: PasoCatalogo[]; onAbrir: (id:string)=>void }) {
+function Tuberia({ objetos, cat, onAbrir, puedeEditar = false, onMover }: {
+  objetos: ObjetoFabrica[]; cat: PasoCatalogo[]; onAbrir: (id:string)=>void;
+  puedeEditar?: boolean; onMover?: (o: ObjetoFabrica, fase: string)=>void;
+}) {
+  // Arrastrar una tarjeta a otra columna da por hechas las fases que quedan
+  // atrás. Es el gesto natural del tablero y evita marcar 12 casillas a mano.
+  const [sobre, setSobre] = useState<string | null>(null);
   const vivos = objetos.filter(o => !['Finalizado','Desestimado'].includes(o.estado));
   const terminados = objetos.filter(o => o.estado === 'Finalizado');
   const FS = fasesDe(cat);
@@ -321,7 +332,20 @@ function Tuberia({ objetos, cat, onAbrir }: { objetos: ObjetoFabrica[]; cat: Pas
       <div style={{ display:'grid', gap:10, gridTemplateColumns:`repeat(${FS.length}, minmax(170px, 1fr))`,
                     overflowX:'auto', paddingBottom:4 }}>
         {porFase.map(({ fase, objs }, i) => (
-          <div key={fase} style={{ ...card, display:'flex', flexDirection:'column', minHeight:120 }}>
+          <div key={fase}
+            onDragOver={e => { if (puedeEditar) { e.preventDefault(); setSobre(fase); } }}
+            onDragLeave={() => setSobre(s => s === fase ? null : s)}
+            onDrop={e => {
+              setSobre(null);
+              if (!puedeEditar) return;
+              const id = e.dataTransfer.getData('text/plain');
+              const obj = objetos.find(x => x.id === id);
+              if (obj && faseActual(obj, cat) !== fase) onMover?.(obj, fase);
+            }}
+            style={{ ...card, display:'flex', flexDirection:'column', minHeight:120,
+                     background: sobre === fase ? '#faf5ff' : '#fff',
+                     borderColor: sobre === fase ? '#ddd6fe' : '#e2e8f0',
+                     transition:'background .12s, border-color .12s' }}>
             <div style={{ padding:'9px 12px', borderBottom:'0.5px solid #f1f5f9', display:'flex',
                           alignItems:'center', gap:7 }}>
               <i style={{ width:17, height:17, borderRadius:'50%', display:'flex', alignItems:'center',
@@ -337,13 +361,22 @@ function Tuberia({ objetos, cat, onAbrir }: { objetos: ObjetoFabrica[]; cat: Pas
                 // El nombre de lo que falta ya está en la barra de abajo y en la
                 // ficha; aquí la pregunta es cuánto lleva, que es lo comparable
                 // entre objetos de una misma fase.
+                const desacuerdo = desacuerdoDeFase(o, cat);
                 return (
                   <button key={o.id} onClick={()=>onAbrir(o.id)} title={frenos(o, cat).map(x=>x.label).join(' · ')}
+                    draggable={puedeEditar}
+                    onDragStart={e => e.dataTransfer.setData('text/plain', o.id)}
                     style={{ textAlign:'left', border:`0.5px solid ${c.borde}`, background:c.bg, borderRadius:8,
-                             padding:'7px 9px', cursor:'pointer' }}>
+                             padding:'7px 9px', cursor: puedeEditar ? 'grab' : 'pointer' }}>
                     <div style={{ ...mono, fontSize:10, fontWeight:600, color:'#111', overflow:'hidden',
                                   textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{o.objetoInsumo || o.objeto}</div>
                     <div style={{ fontSize:9, color:c.text, marginTop:2 }}>{codigoProyecto(o.proyecto)} · {o.estado}</div>
+                    {desacuerdo && (
+                      <div title={`El campo Estado dice «${o.estado}», pero las casillas marcadas ya pasaron esa fase.`}
+                        style={{ fontSize:8.5, color:'#b45309', marginTop:3, display:'flex', alignItems:'center', gap:3 }}>
+                        <AlertTriangle size={8}/> el estado dice {o.estado}, las casillas ya pasaron
+                      </div>
+                    )}
                     <div style={{ display:'flex', alignItems:'center', gap:6, marginTop:5 }}>
                       <div style={{ flex:1 }}><Tira o={o} cat={cat} alto={5}/></div>
                       <span style={{ fontSize:9.5, fontWeight:700, flexShrink:0,
@@ -618,7 +651,19 @@ function Panel({ o, cat, puedeEditar, onCerrar, onGuardar, onEditar, onBorrar }:
             <div style={{ minWidth:0 }}>
               <div style={{ fontSize:9.5, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'.06em' }}>Objeto insumo</div>
               <div style={{ display:'flex', alignItems:'center', gap:5, marginTop:2 }}>
-                <span style={{ ...mono, fontSize:13.5, fontWeight:700, wordBreak:'break-all' }}>{o.objetoInsumo || '—'}</span>
+                {puedeEditar ? (
+                  // Editable en sitio: renombrar es lo más común y abrir el
+                  // formulario entero solo para eso era un rodeo.
+                  <input defaultValue={o.objetoInsumo} key={o.id} title="Clic para renombrar"
+                    onBlur={e => { const v = e.target.value.trim();
+                                   if (v && v !== o.objetoInsumo) onGuardar({ ...o, objetoInsumo: v }); }}
+                    onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                    style={{ ...mono, fontSize:13.5, fontWeight:700, border:'0.5px solid #f1f5f9',
+                             borderRadius:6, padding:'3px 6px', margin:'-3px -6px', width:'100%',
+                             background:'transparent', outline:'none' }}/>
+                ) : (
+                  <span style={{ ...mono, fontSize:13.5, fontWeight:700, wordBreak:'break-all' }}>{o.objetoInsumo || '—'}</span>
+                )}
                 <Copiar texto={o.objetoInsumo}/>
               </div>
               <div style={{ display:'flex', gap:5, flexWrap:'wrap', marginTop:9 }}>
@@ -672,7 +717,7 @@ function Panel({ o, cat, puedeEditar, onCerrar, onGuardar, onEditar, onBorrar }:
             {dato('Objeto destino', o.objeto, true)}
             {dato('Responsable', o.responsable)}
             {dato('Contacto banco', o.contactoBanco)}
-            {dato('Recepción', o.fechaRecepcion)}
+            {dato('Registrado', o.fechaRecepcion)}
           </dl>
 
           {puedeEditar && (
@@ -737,8 +782,12 @@ function Panel({ o, cat, puedeEditar, onCerrar, onGuardar, onEditar, onBorrar }:
 
                           {puedeEditar ? (
                             <div style={{ display:'flex', gap:3, flexShrink:0 }} onClick={e=>e.stopPropagation()}>
-                              <Marca activo={!!v?.inicio} color="#b45309" fondo="#fef3c7" borde="#fde68a"
-                                titulo={v?.inicio ? `Iniciado el ${v.inicio} — pulsa para quitarlo` : 'Marcar como iniciado hoy'}
+                              {/* Encendido solo mientras está en curso: una vez finalizado,
+                                  «Iniciado» deja de pintarse porque ya no dice dónde está. */}
+                              <Marca activo={!!v?.inicio && !ok} color="#b45309" fondo="#fef3c7" borde="#fde68a"
+                                titulo={v?.inicio
+                                  ? `Iniciado el ${v.inicio}${ok ? ' · ya finalizado' : ' — pulsa para quitarlo'}`
+                                  : 'Marcar como iniciado hoy'}
                                 onClick={()=>marcarInicio(p.id)}>Iniciado</Marca>
                               <Marca activo={ok} color="#047857" fondo="#d1fae5" borde="#a7f3d0"
                                 titulo={ok ? `Finalizado el ${v?.fecha} — pulsa para quitarlo` : 'Marcar como finalizado hoy'}
@@ -762,9 +811,11 @@ function Panel({ o, cat, puedeEditar, onCerrar, onGuardar, onEditar, onBorrar }:
                               <>
                                 <Fecha etiqueta="Inicio" valor={v?.inicio} onCambio={x=>editarPaso(p.id, 'inicio', x)}/>
                                 <Fecha etiqueta="Fin"    valor={v?.fecha}  onCambio={x=>editarPaso(p.id, 'fecha',  x)}/>
-                                <input defaultValue={v?.nota ?? ''} placeholder="Nota (p. ej. qué lo trabó)"
+                                <textarea defaultValue={v?.nota ?? ''} rows={2}
+                                  placeholder="Nota (p. ej. qué lo trabó)"
                                   onBlur={e=>editarPaso(p.id, 'nota', e.target.value.trim())}
-                                  style={{ ...inputS, fontSize:10.5, gridColumn:'1 / -1' }}/>
+                                  style={{ ...inputS, fontSize:10.5, gridColumn:'1 / -1',
+                                           resize:'vertical', fontFamily:'inherit', lineHeight:1.5 }}/>
                                 <input defaultValue={v?.link ?? ''} placeholder="Enlace (repo, documento, WO…)"
                                   onBlur={e=>editarPaso(p.id, 'link', e.target.value.trim())}
                                   style={{ ...inputS, fontSize:10.5, gridColumn:'1 / -1' }}/>
@@ -982,8 +1033,8 @@ function FichaProyecto({ proyecto, objetos, cat, onVolver, onAbrir, panel }: {
 // ═══ Alta y edición de un objeto ═════════════════════════════════════════════
 // Los pasos no se tocan aquí: se marcan en el panel, uno por uno, que es como
 // ocurre en la realidad. Este formulario es solo la ficha del objeto.
-function FormObjeto({ o, proyectos, responsables, esNuevo, onCerrar, onGuardar }: {
-  o: ObjetoFabrica; proyectos: string[]; responsables: string[]; esNuevo: boolean;
+function FormObjeto({ o, proyectos, responsables, contactos, esNuevo, onCerrar, onGuardar }: {
+  o: ObjetoFabrica; proyectos: string[]; responsables: string[]; contactos: string[]; esNuevo: boolean;
   onCerrar: ()=>void; onGuardar: (o: ObjetoFabrica)=>void;
 }) {
   const [f, setF] = useState<ObjetoFabrica>(o);
@@ -1014,7 +1065,9 @@ function FormObjeto({ o, proyectos, responsables, esNuevo, onCerrar, onGuardar }
         <div style={{ padding:'18px 22px 14px', borderBottom:'0.5px solid #f1f5f9' }}>
           <h3 style={{ margin:0, fontSize:15, fontWeight:700 }}>{esNuevo ? 'Nuevo objeto' : 'Editar objeto'}</h3>
           <p style={{ margin:'3px 0 0', fontSize:11, color:'#94a3b8' }}>
-            {esNuevo ? 'Entra sin pasos marcados; se van marcando en su ficha.' : 'Los pasos se marcan en la ficha del objeto.'}
+            {esNuevo
+              ? 'Entra sin pasos marcados; se van marcando en su ficha. La fecha de registro se pone sola.'
+              : 'Los pasos se marcan en la ficha del objeto.'}
           </p>
         </div>
 
@@ -1042,16 +1095,16 @@ function FormObjeto({ o, proyectos, responsables, esNuevo, onCerrar, onGuardar }
             <input value={f.responsable} onChange={set('responsable')} list="fab-resp" style={inputS}/>
             <datalist id="fab-resp">{responsables.map(r => <option key={r} value={r}/>)}</datalist>
           </>)}
-          {campo('Contacto banco', <input value={f.contactoBanco} onChange={set('contactoBanco')} style={inputS}/>)}
+          {campo('Contacto banco', <>
+            <input value={f.contactoBanco} onChange={set('contactoBanco')} list="fab-contactos" style={inputS}/>
+            <datalist id="fab-contactos">{contactos.map(c => <option key={c} value={c}/>)}</datalist>
+          </>)}
 
           {campo('Estado', <select value={f.estado} onChange={set('estado')} style={inputS}>
             {Object.keys(ESTADOS).map(e => <option key={e} value={e}>{e}</option>)}
           </select>)}
           {campo('Periodicidad', <input value={f.periodicidad} onChange={set('periodicidad')}
             placeholder="Diario, Mensual, Eventual…" style={inputS}/>)}
-
-          {campo('Fecha de recepción', <input type="date" value={f.fechaRecepcion?.slice(0,10) ?? ''}
-            onChange={set('fechaRecepcion')} style={inputS}/>, 2)}
 
           {campo('Comentarios', <textarea value={f.comentarios} onChange={set('comentarios')} rows={3}
             style={{ ...inputS, resize:'vertical', fontFamily:'inherit' }}/>, 2)}

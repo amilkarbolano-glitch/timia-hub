@@ -4,6 +4,7 @@
 
 import { PASOS_SEMILLA as PASOS, fases, pasosDeFase, avance, faseActual, frenos, nuevoId, mover,
          duracion, fechaCol, codigoProyecto, nombreProyecto, parecidoA, objetosDe,
+         desacuerdoDeFase, moverAFase,
          type ProyectoFabrica,
          type ObjetoFabrica, type PasoCatalogo } from '../src/lib/fabrica';
 
@@ -19,15 +20,15 @@ const objetos: ObjetoFabrica[] = JSON.parse(readFileSync('public/db.json','utf8'
 
 console.log('── Los datos del Excel ──');
 ok(objetos.length === 55, `55 objetos (hay ${objetos.length})`);
-ok(PASOS.length === 26, `26 pasos en el catálogo (hay ${PASOS.length})`);
+ok(PASOS.length === 23, `23 pasos en el catálogo (hay ${PASOS.length})`);
 ok(pasosDeFase('Gobierno', PASOS)[0].id === 'generaci-n-diccionario',
    'Gobierno arranca en Generación Diccionario, no en lo que pasa antes de la fábrica');
 ok(PASOS.some(p => p.id === 'despliegue-a-work'), 'existe el paso Despliegue a Work');
 ok(PASOS.findIndex(p => p.id === 'despliegue-a-work') < PASOS.findIndex(p => p.id === 'pruebas-en-work'),
    'y va antes de Pruebas en Work: primero se despliega, luego se prueba');
-ok(new Set(objetos.map(o => o.proyecto)).size === 14, '14 proyectos distintos');
-ok(FASES.reduce((s, x) => s + pasosDeFase(x, PASOS).length, 0) === 26, 'las 5 fases cubren los 26 pasos, sin solapes');
-ok(new Set(PASOS.map(p => p.id)).size === 26, 'los ids de paso no se repiten');
+ok(new Set(objetos.map(o => o.proyecto)).size === 13, '13 proyectos distintos (eran 14 antes de unificar SDATOOL-48750)');
+ok(FASES.reduce((s, x) => s + pasosDeFase(x, PASOS).length, 0) === 23, 'las 5 fases cubren los 23 pasos, sin solapes');
+ok(new Set(PASOS.map(p => p.id)).size === 23, 'los ids de paso no se repiten');
 
 const pasosUsados = new Set(objetos.flatMap(o => Object.keys(o.pasos)));
 const catalogo = new Set(PASOS.map(p => p.id));
@@ -59,7 +60,7 @@ const conNA = objetos.filter(o => Object.values(o.pasos).some(p => p.estado === 
 ok(conNA.length > 0, `${conNA.length} objetos tienen pasos que no les aplican`);
 const ej = conNA[0];
 const a = avance(ej, undefined, PASOS);
-ok(a.aplican < 26, `ejemplo: a «${ej.objetoInsumo.slice(0,28)}» le aplican ${a.aplican} de 26 pasos`);
+ok(a.aplican < 23, `ejemplo: a «${ej.objetoInsumo.slice(0,28)}» le aplican ${a.aplican} de 23 pasos`);
 
 console.log('\n── Fase actual y frenos ──');
 for (const o of objetos.filter(x => !['Finalizado','Desestimado'].includes(x.estado)).slice(0,4)) {
@@ -89,7 +90,7 @@ ok(conMsd.every(o => avance(o, undefined, renombrado).pct === avance(o, undefine
 
 // Agregar un paso al final: nadie lo tiene marcado, así que nadie cambia.
 const conNuevo: PasoCatalogo[] = [...PASOS, { id: nuevoId('Cierre formal', PASOS), label:'Cierre formal', fase:'Producción' }];
-ok(conNuevo.length === 27 && conNuevo[26].id === 'cierre-formal', 'se agrega un paso con id derivado del nombre');
+ok(conNuevo.length === 24 && conNuevo[23].id === 'cierre-formal', 'se agrega un paso con id derivado del nombre');
 // Consecuencia de que un paso sin marcar cuente como pendiente: agregar un
 // paso al catálogo baja el % de todos, porque es trabajo que nadie ha hecho.
 // Es correcto, pero conviene saberlo antes de agregar uno con los 55 cargados.
@@ -104,9 +105,9 @@ ok(nuevoId('Certificación Spark', PASOS) === 'certificacion-spark',
    'el id nuevo normaliza acentos (y no choca con el id viejo del Excel)');
 
 // Quitar un paso descuenta solo ese.
-const sinSpark = PASOS.filter(p => p.id !== 'certificaci-n-spark');
-const conSpark = objetos.filter(o => o.pasos['certificaci-n-spark'] &&
-                                     o.pasos['certificaci-n-spark'].estado !== 'na');
+const sinSpark = PASOS.filter(p => p.id !== 'certificaci-n-kirby');
+const conSpark = objetos.filter(o => o.pasos['certificaci-n-kirby'] &&
+                                     o.pasos['certificaci-n-kirby'].estado !== 'na');
 ok(conSpark.length > 0 && conSpark.every(o =>
      avance(o, undefined, sinSpark).aplican === avance(o, undefined, PASOS).aplican - 1),
    `quitar un paso descuenta exactamente uno en los ${conSpark.length} objetos que lo tenían`);
@@ -189,14 +190,15 @@ function nuevo(): ObjetoFabrica {
 }
 ok(faseActual(nuevo(), PASOS) === 'Gobierno', 'un objeto recién creado está en Gobierno, no en Producción');
 ok(avance(nuevo(), undefined, PASOS).pct === 0, 'y va en 0%');
-ok(avance(nuevo(), undefined, PASOS).aplican === 26, 'con los 26 pasos por delante, no con cero');
+ok(avance(nuevo(), undefined, PASOS).aplican === 23, 'con los 23 pasos por delante, no con cero');
 
 const conGobierno = nuevo();
 for (const p of pasosDeFase('Gobierno', PASOS)) conGobierno.pasos[p.id] = { estado: 'ok' };
 ok(faseActual(conGobierno, PASOS) === 'Desarrollo', 'terminar Gobierno lleva a Desarrollo, no a Producción');
 const aG = avance(conGobierno, undefined, PASOS);
-ok(aG.pct === 15, `con Gobierno hecho va en ${aG.pct}%, no en 100% (4 de 26)`);
-ok(frenos(conGobierno, PASOS).length === 6, 'y los frenos son los 6 pasos de Desarrollo, aunque nadie los haya tocado');
+ok(aG.pct === 17, `con Gobierno hecho va en ${aG.pct}%, no en 100% (4 de 26)`);
+ok(frenos(conGobierno, PASOS).length === pasosDeFase('Desarrollo', PASOS).length,
+   `y los frenos son los ${pasosDeFase('Desarrollo', PASOS).length} pasos de Desarrollo, aunque nadie los haya tocado`);
 
 // Una fase entera en NA sí se salta: ese objeto no pasa por ahí.
 const saltaDesarrollo = nuevo();
@@ -213,19 +215,19 @@ ok(finali.filter(o => avance(o, undefined, PASOS).pct === 100).length === 23,
    '23 de 25 finalizados siguen al 100%, igual que antes del cambio');
 ok(Math.round(objetos.reduce((s,o) => s + avance(o, undefined, PASOS).pct, 0) / objetos.length) === 87,
    'el avance medio de los 55 sigue en 87%');
-ok(objetos.every(o => Object.keys(o.pasos).length === 26),
-   'los 55 objetos tienen los 26 pasos resueltos, sin casillas en blanco');
+ok(objetos.every(o => Object.keys(o.pasos).length === 23),
+   'los 55 objetos tienen los 23 pasos resueltos, sin casillas en blanco');
 
 console.log('\n── Proyectos propios de la fábrica ──');
 // Son de David, no los de la plataforma: dar de alta uno aquí no le crea nada
 // al equipo. La lista mezcla los registrados a mano con los que solo existen
 // porque algún objeto los menciona — que es como llegaron los 14 del Excel.
 const delExcel = [...new Set(objetos.map(o => o.proyecto))];
-ok(delExcel.length === 14, `los 14 proyectos del Excel salen de los propios objetos (hay ${delExcel.length})`);
+ok(delExcel.length === 13, `los 13 proyectos del Excel salen de los propios objetos (hay ${delExcel.length})`);
 
 const registrados: ProyectoFabrica[] = [{ id: 'SDATOOL-60001 SDM3', nombre: 'Nuevo' }];
 const lista = [...new Set([...registrados.map(p => p.id), ...objetos.map(o => o.proyecto)])];
-ok(lista.length === 15, 'un proyecto registrado a mano se suma a los que ya tienen objetos');
+ok(lista.length === 14, 'un proyecto registrado a mano se suma a los que ya tienen objetos');
 ok(lista.includes('SDATOOL-60001 SDM3'), 'y aparece aunque no tenga ni un objeto todavía');
 ok(delExcel.every(p => lista.includes(p)), 'registrar uno nuevo no esconde ninguno de los que ya existían');
 
@@ -239,5 +241,54 @@ ok(parecidoA(dedazo, existentes)?.id === delExcel[0], 'un espacio de más se det
 ok(parecidoA(delExcel[0].toLowerCase(), existentes)?.id === delExcel[0], 'y un cambio de mayúsculas también');
 ok(parecidoA('SDATOOL-99999 OTRO', existentes) === null, 'un proyecto de verdad distinto no da falso aviso');
 ok(parecidoA('', existentes) === null, 'el campo vacío no avisa de nada');
+
+console.log('\n── El catálogo recortado ──');
+ok(!PASOS.some(p => p.id === 'migration-tool'),          'Migration Tool fuera del catálogo');
+ok(!PASOS.some(p => p.id === 'certificaci-n-spark'),     'Certificación Spark fuera');
+ok(!PASOS.some(p => p.id === 'creaci-n-job-spark-live'), 'Job Spark LIVE fuera');
+const idsFuera = ['migration-tool','certificaci-n-spark','creaci-n-job-spark-live'];
+ok(objetos.every(o => idsFuera.every(i => !(i in o.pasos))),
+   'y ninguno de los 55 objetos conserva marcas de esos pasos');
+ok([...new Set(objetos.map(o => o.proyecto))].filter(p => p.includes('48750')).length === 1,
+   'SDATOOL-48750 quedó como un solo proyecto');
+ok(objetos.filter(o => o.proyecto.includes('48750')).length === 3,
+   'con sus 3 objetos juntos');
+
+console.log('\n── Duración: mismo día son 0 ──');
+ok(duracion({ estado:'ok', inicio:'01/06/2026', fecha:'01/06/2026' }) === 0, 'empezar y terminar el mismo día es 0 días');
+ok(duracion({ estado:'ok', inicio:'01/06/2026', fecha:'02/06/2026' }) === 1, 'de un día al siguiente es 1');
+ok(duracion({ estado:'ok', inicio:'01/06/2026', fecha:'05/06/2026' }) === 4, 'de lunes a viernes son 4');
+ok(duracion({ estado:'ok', inicio:'05/06/2026', fecha:'08/06/2026' }) === 1, 'de viernes a lunes es 1: el fin de semana no cuenta');
+
+console.log('\n── Cuando el Estado del Excel no concuerda con las casillas ──');
+const enCert = objetos.filter(o => o.estado === 'Certificación');
+ok(enCert.length > 0, `${enCert.length} objetos dicen «Certificación» en el Excel`);
+ok(enCert.every(o => desacuerdoDeFase(o, PASOS) !== null),
+   'y en todos las casillas dicen que ya pasaron esa fase: se avisa en la tarjeta');
+ok(desacuerdoDeFase({ ...objetos[0], estado: 'En curso' }, PASOS) === null,
+   '«En curso» no es una fase, así que no se compara ni se avisa');
+const coherente = objetos.find(o => o.estado === faseActual(o, PASOS));
+if (coherente) ok(desacuerdoDeFase(coherente, PASOS) === null, 'y si concuerdan, no avisa nada');
+
+console.log('\n── Arrastrar una tarjeta a otra fase ──');
+const base = nuevo();
+const aPruebas = moverAFase(base, 'Pruebas', PASOS);
+ok(faseActual(aPruebas, PASOS) === 'Pruebas', 'soltarlo en Pruebas lo deja en Pruebas');
+ok(avance(aPruebas, 'Gobierno', PASOS).pct === 100 && avance(aPruebas, 'Desarrollo', PASOS).pct === 100,
+   'y da por hechas Gobierno y Desarrollo, que quedan atrás');
+ok(avance(aPruebas, 'Pruebas', PASOS).ok === 0, 'la fase de destino queda por empezar, no completa');
+ok(pasosDeFase('Gobierno', PASOS).every(p => aPruebas.pasos[p.id]?.fecha),
+   'los pasos que se dan por hechos reciben fecha de cierre');
+
+// Los NA se respetan: si el objeto no pasa por un paso, arrastrar no lo inventa.
+const objConNA = { ...nuevo(), pasos: { [pasosDeFase('Desarrollo', PASOS)[0].id]: { estado: 'na' as const } } };
+ok(moverAFase(objConNA, 'Pruebas', PASOS).pasos[pasosDeFase('Desarrollo', PASOS)[0].id].estado === 'na',
+   'un paso marcado «no aplica» sigue sin aplicar después de arrastrar');
+
+// Hacia atrás: desmarca lo de la fase destino en adelante.
+const vuelta = moverAFase(aPruebas, 'Desarrollo', PASOS);
+ok(avance(vuelta, 'Desarrollo', PASOS).ok === 0, 'arrastrar hacia atrás desmarca la fase a la que se vuelve');
+ok(avance(vuelta, 'Gobierno', PASOS).pct === 100, 'pero lo anterior se queda hecho');
+ok(moverAFase(base, 'Fase inventada', PASOS) === base, 'soltar en una fase que no existe no hace nada');
 
 console.log(f ? `\n${f} fallas` : '\nfábrica OK');
