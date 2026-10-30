@@ -10,7 +10,7 @@ import { Factory, Search, ExternalLink, AlertTriangle, Copy, Check, Plus, Settin
 import {
   fabricaStore, pasosDeFase, avance, faseActual, frenos, objetoNuevo, nuevoId, mover,
   colorEstado, codigoProyecto, nombreProyecto, ESTADOS, fases as fasesDe, duracion, fechaCol,
-  desacuerdoDeFase, moverAFase,
+  desacuerdoDeFase, moverAFase, normalizaUrl, ETIQUETAS_ENLACE,
   type ObjetoFabrica, type PasoCatalogo, type PasoObjeto, type ProyectoFabrica,
 } from '../lib/fabrica';
 import { useAuth, canAccess } from '../contexts/AuthContext';
@@ -165,7 +165,10 @@ export default function Fabrica() {
 
   const vis = objetos.filter(o =>
     (!proy || o.proyecto === proy) && (!resp || o.responsable === resp) &&
-    (!busca || `${o.objetoInsumo} ${o.objeto} ${o.proyecto} ${o.contactoBanco}`.toLowerCase().includes(busca.toLowerCase())));
+    // Buscar por persona era lo primero que uno intenta y no encontraba nada:
+    // Carolina lleva 24 objetos y escribir su nombre devolvía cero.
+    (!busca || `${o.objetoInsumo} ${o.objeto} ${o.proyecto} ${o.contactoBanco} ${o.responsable} ${o.comentarios}`
+                 .toLowerCase().includes(busca.toLowerCase())));
 
   const bloqueados = vis.filter(o => o.estado === 'Bloqueado');
   const activos = vis.filter(o => !['Finalizado','Desestimado'].includes(o.estado));
@@ -243,7 +246,7 @@ export default function Fabrica() {
         </div>
         <div style={{ position:'relative', flex:'1 1 180px', maxWidth:250 }}>
           <Search size={12} style={{ position:'absolute', left:9, top:'50%', transform:'translateY(-50%)', color:'#94a3b8', pointerEvents:'none' }}/>
-          <input value={busca} onChange={e=>setBusca(e.target.value)} placeholder="Buscar objeto, proyecto, contacto…"
+          <input value={busca} onChange={e=>setBusca(e.target.value)} placeholder="Buscar objeto, proyecto, persona…"
             style={{ width:'100%', padding:'7px 10px 7px 28px', fontSize:12, border:'0.5px solid #e2e8f0',
                      borderRadius:7, outline:'none', boxSizing:'border-box' }}/>
         </div>
@@ -262,6 +265,7 @@ export default function Fabrica() {
 
       {vista === 'tuberia'   && (
         <Tuberia objetos={vis} cat={cat} onAbrir={setAbierto} puedeEditar={puedeEditar}
+          filtrando={!!(busca.trim() || proy || resp)}
           onMover={(o, fase) => guardarUno(moverAFase(o, fase, cat))}/>
       )}
       {vista === 'objetos'   && <Tabla objetos={vis} cat={cat} onAbrir={setAbierto}/>}
@@ -315,21 +319,30 @@ export default function Fabrica() {
 }
 
 // ═══ Tubería — dónde está atascado el trabajo ════════════════════════════════
-function Tuberia({ objetos, cat, onAbrir, puedeEditar = false, onMover }: {
+function Tuberia({ objetos, cat, onAbrir, puedeEditar = false, onMover, filtrando = false }: {
   objetos: ObjetoFabrica[]; cat: PasoCatalogo[]; onAbrir: (id:string)=>void;
   puedeEditar?: boolean; onMover?: (o: ObjetoFabrica, fase: string)=>void;
+  /** Hay búsqueda o filtro activo: entonces también se muestran los terminados. */
+  filtrando?: boolean;
 }) {
   // Arrastrar una tarjeta a otra columna da por hechas las fases que quedan
   // atrás. Es el gesto natural del tablero y evita marcar 12 casillas a mano.
   const [sobre, setSobre] = useState<string | null>(null);
   const vivos = objetos.filter(o => !['Finalizado','Desestimado'].includes(o.estado));
-  const terminados = objetos.filter(o => o.estado === 'Finalizado');
+  const terminados = objetos.filter(o => ['Finalizado','Desestimado'].includes(o.estado));
   const FS = fasesDe(cat);
   const porFase = FS.map(f => ({ fase: f, objs: vivos.filter(o => faseActual(o, cat) === f) }));
 
+  // Sin filtro, la tubería enseña solo lo que sigue en curso: es su razón de
+  // ser. Pero buscando un objeto concreto esconder los 26 finalizados hacía
+  // que la búsqueda pareciera rota — encontraba cero y el contador decía 55.
+  // Con filtro activo aparecen en una columna aparte, al final.
+  const mostrarTerminados = filtrando && terminados.length > 0;
+  const columnas = mostrarTerminados ? FS.length + 1 : FS.length;
+
   return (
     <>
-      <div style={{ display:'grid', gap:10, gridTemplateColumns:`repeat(${FS.length}, minmax(170px, 1fr))`,
+      <div style={{ display:'grid', gap:10, gridTemplateColumns:`repeat(${columnas}, minmax(170px, 1fr))`,
                     overflowX:'auto', paddingBottom:4 }}>
         {porFase.map(({ fase, objs }, i) => (
           <div key={fase}
@@ -389,11 +402,44 @@ function Tuberia({ objetos, cat, onAbrir, puedeEditar = false, onMover }: {
             </div>
           </div>
         ))}
+
+        {mostrarTerminados && (
+          <div style={{ ...card, display:'flex', flexDirection:'column', minHeight:120,
+                        background:'#f8fafc', borderStyle:'dashed' }}>
+            <div style={{ padding:'9px 12px', borderBottom:'0.5px solid #f1f5f9', display:'flex',
+                          alignItems:'center', gap:7 }}>
+              <i style={{ width:17, height:17, borderRadius:'50%', display:'flex', alignItems:'center',
+                          justifyContent:'center', fontSize:10, fontWeight:700, flexShrink:0,
+                          background:'#059669', color:'#fff' }}>✓</i>
+              <span style={{ fontSize:11.5, fontWeight:650, color:'#374151', flex:1 }}>Terminados</span>
+              <span style={{ fontSize:11, fontWeight:700, color:'#047857' }}>{terminados.length}</span>
+            </div>
+            <div style={{ padding:7, display:'flex', flexDirection:'column', gap:5, flex:1 }}>
+              {terminados.map(o => {
+                const c = colorEstado(o.estado), a = avance(o, undefined, cat);
+                return (
+                  <button key={o.id} onClick={()=>onAbrir(o.id)}
+                    style={{ textAlign:'left', border:`0.5px solid ${c.borde}`, background:c.bg,
+                             borderRadius:8, padding:'7px 9px', cursor:'pointer' }}>
+                    <div style={{ ...mono, fontSize:10, fontWeight:600, color:'#111', overflow:'hidden',
+                                  textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{o.objetoInsumo || o.objeto}</div>
+                    <div style={{ fontSize:9, color:c.text, marginTop:2 }}>{codigoProyecto(o.proyecto)} · {o.estado}</div>
+                    <div style={{ display:'flex', alignItems:'center', gap:6, marginTop:5 }}>
+                      <div style={{ flex:1 }}><Tira o={o} cat={cat} alto={5}/></div>
+                      <span style={{ fontSize:9.5, fontWeight:700, flexShrink:0,
+                        color: a.pct===100 ? '#047857' : '#b45309' }}>{a.pct}%</span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
-      {terminados.length > 0 && (
+      {terminados.length > 0 && !mostrarTerminados && (
         <p style={{ margin:'12px 0 0', fontSize:11, color:'#94a3b8' }}>
-          <b style={{ color:'#047857' }}>{terminados.length} finalizados</b> no se muestran aquí ·
-          la tubería solo lleva lo que sigue en curso
+          <b style={{ color:'#047857' }}>{terminados.length} terminados</b> no se muestran aquí ·
+          la tubería solo lleva lo que sigue en curso. Busca o filtra para verlos.
         </p>
       )}
     </>
@@ -628,6 +674,24 @@ function Panel({ o, cat, puedeEditar, onCerrar, onGuardar, onEditar, onBorrar }:
                    : { estado: 'na', nota: v?.nota, link: v?.link });
   }
 
+  function agregarEnlace() {
+    if (!puedeEditar) return;
+    const nuevo = { id: `e-${Date.now().toString(36)}`, etiqueta: '', url: '' };
+    onGuardar({ ...o, enlaces: [...(o.enlaces ?? []), nuevo] });
+  }
+  function editarEnlace(id: string, campo: 'etiqueta'|'url', valor: string) {
+    if (!puedeEditar) return;
+    onGuardar({ ...o, enlaces: (o.enlaces ?? []).map(e => e.id === id ? { ...e, [campo]: valor } : e) });
+  }
+  function borrarEnlace(id: string) {
+    if (!puedeEditar) return;
+    const e = (o.enlaces ?? []).find(x => x.id === id);
+    // Solo se pregunta si hay algo que perder: un enlace recién creado y vacío
+    // se quita sin ceremonia.
+    if ((e?.etiqueta || e?.url) && !confirm(`¿Quitar «${e?.etiqueta || e?.url}»?`)) return;
+    onGuardar({ ...o, enlaces: (o.enlaces ?? []).filter(x => x.id !== id) });
+  }
+
   function editarPaso(pasoId: string, campo: 'fecha'|'inicio'|'nota'|'link', valor: string) {
     if (!puedeEditar) return;
     const prev: PasoObjeto = o.pasos?.[pasoId] ?? { estado: 'pte' };
@@ -842,6 +906,69 @@ function Panel({ o, cat, puedeEditar, onCerrar, onGuardar, onEditar, onBorrar }:
               </div>
             );
           })}
+
+          {/* ─── Enlaces ─── */}
+          <div style={{ marginTop:18 }}>
+            <div style={{ display:'flex', alignItems:'center', gap:7, marginBottom:7 }}>
+              <span style={{ fontSize:10, fontWeight:700, color:'#64748b', textTransform:'uppercase',
+                             letterSpacing:'.05em' }}>Enlaces</span>
+              <span style={{ fontSize:10, color:'#94a3b8', flex:1 }}>
+                {o.enlaces?.length ? `${o.enlaces.length}` : 'feature, repo, HU, documentos…'}
+              </span>
+              {puedeEditar && (
+                <button onClick={()=>agregarEnlace()} style={{ border:'none', background:'none', cursor:'pointer',
+                  color:'#6d28d9', fontSize:10.5, display:'flex', alignItems:'center', gap:3, padding:0 }}>
+                  <Plus size={11}/>Enlace</button>
+              )}
+            </div>
+
+            {!o.enlaces?.length && (
+              <p style={{ margin:0, fontSize:11, color:'#94a3b8' }}>
+                Sin enlaces todavía.{puedeEditar && ' Agrega la feature o el repo para tenerlos a mano.'}
+              </p>
+            )}
+
+            <div style={{ display:'flex', flexDirection:'column', gap:5 }}>
+              {(o.enlaces ?? []).map(e => (
+                <div key={e.id} style={{ border:'0.5px solid #f1f5f9', borderRadius:9, padding:'7px 10px',
+                                         background:'#fcfcfd' }}>
+                  {puedeEditar ? (
+                    <div style={{ display:'grid', gap:4, gridTemplateColumns:'110px 1fr auto auto auto',
+                                  alignItems:'center' }}>
+                      <input defaultValue={e.etiqueta} list="fab-etiq-enlace" placeholder="Etiqueta"
+                        onBlur={ev=>editarEnlace(e.id, 'etiqueta', ev.target.value.trim())}
+                        style={{ ...inputS, fontSize:10.5, fontWeight:600 }}/>
+                      <input defaultValue={e.url} placeholder="https://…"
+                        onBlur={ev=>editarEnlace(e.id, 'url', normalizaUrl(ev.target.value))}
+                        style={{ ...inputS, ...mono, fontSize:10 }}/>
+                      {/* Copiar es lo que más se usa: estos enlaces son del banco
+                          y no abren desde la cuenta de Timia. */}
+                      <Copiar texto={e.url}/>
+                      <a href={e.url || '#'} target="_blank" rel="noopener"
+                        title={e.url ? 'Abrir en otra pestaña' : 'Sin dirección'}
+                        style={{ color: e.url ? '#0e7490' : '#e2e8f0', display:'inline-flex', padding:2 }}>
+                        <ExternalLink size={11}/></a>
+                      <button title="Quitar este enlace" onClick={()=>borrarEnlace(e.id)}
+                        style={{ border:'none', background:'none', cursor:'pointer', color:'#fca5a5',
+                                 padding:2, display:'flex' }}><Trash2 size={11}/></button>
+                    </div>
+                  ) : (
+                    <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                      <span style={{ fontSize:10.5, fontWeight:600, color:'#475569', minWidth:88 }}>{e.etiqueta}</span>
+                      <span style={{ ...mono, fontSize:10, color:'#64748b', flex:1, overflow:'hidden',
+                                     textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{e.url}</span>
+                      <Copiar texto={e.url}/>
+                      <a href={e.url || '#'} target="_blank" rel="noopener"
+                        style={{ color:'#0e7490', display:'inline-flex' }}><ExternalLink size={11}/></a>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+            <datalist id="fab-etiq-enlace">
+              {ETIQUETAS_ENLACE.map(x => <option key={x} value={x}/>)}
+            </datalist>
+          </div>
 
           {o.comentarios && (
             <>

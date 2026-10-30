@@ -4,7 +4,7 @@
 
 import { PASOS_SEMILLA as PASOS, fases, pasosDeFase, avance, faseActual, frenos, nuevoId, mover,
          duracion, fechaCol, codigoProyecto, nombreProyecto, parecidoA, objetosDe,
-         desacuerdoDeFase, moverAFase,
+         desacuerdoDeFase, moverAFase, normalizaUrl, ETIQUETAS_ENLACE,
          type ProyectoFabrica,
          type ObjetoFabrica, type PasoCatalogo } from '../src/lib/fabrica';
 
@@ -290,5 +290,37 @@ const vuelta = moverAFase(aPruebas, 'Desarrollo', PASOS);
 ok(avance(vuelta, 'Desarrollo', PASOS).ok === 0, 'arrastrar hacia atrás desmarca la fase a la que se vuelve');
 ok(avance(vuelta, 'Gobierno', PASOS).pct === 100, 'pero lo anterior se queda hecho');
 ok(moverAFase(base, 'Fase inventada', PASOS) === base, 'soltar en una fase que no existe no hace nada');
+
+console.log('\n── La búsqueda de la tubería ──');
+// Lo que reportó Amilkar: buscaba un objeto, existía, y la tubería no devolvía
+// nada. Descartaba los terminados ANTES de buscar, y son 26 de 55.
+const terminados = objetos.filter(o => ['Finalizado','Desestimado'].includes(o.estado));
+const vivos = objetos.filter(o => !['Finalizado','Desestimado'].includes(o.estado));
+ok(terminados.length === 26, `${terminados.length} objetos terminados quedaban fuera de la tubería`);
+ok(vivos.length + terminados.length === objetos.length, 'entre vivos y terminados están los 55');
+
+// Réplica del filtro: ahora mira también responsable y comentarios.
+const coincide = (o: ObjetoFabrica, q: string) =>
+  `${o.objetoInsumo} ${o.objeto} ${o.proyecto} ${o.contactoBanco} ${o.responsable} ${o.comentarios}`
+    .toLowerCase().includes(q.toLowerCase());
+
+const porPersona = objetos.filter(o => coincide(o, 'carolina'));
+ok(porPersona.length > 0, `buscar «carolina» encuentra ${porPersona.length} objetos (antes ninguno)`);
+const unTerminado = terminados[0];
+ok(coincide(unTerminado, unTerminado.objetoInsumo.slice(0, 12)),
+   `«${unTerminado.objetoInsumo.slice(0,22)}» está terminado pero el filtro lo encuentra`);
+ok(objetos.filter(o => coincide(o, 'SDATOOL-51117')).length === 9, 'buscar por proyecto sigue dando sus 9');
+ok(objetos.filter(o => coincide(o, 'zzzz')).length === 0, 'una búsqueda sin coincidencias da cero');
+
+console.log('\n── Enlaces del objeto ──');
+ok(normalizaUrl('confluence.bbva.com/x') === 'https://confluence.bbva.com/x',
+   'una dirección pegada sin esquema recibe https://');
+ok(normalizaUrl('https://ya.tiene/esquema') === 'https://ya.tiene/esquema', 'la que ya lo trae no se toca');
+ok(normalizaUrl('http://interno') === 'http://interno', 'ni se fuerza https sobre http');
+ok(normalizaUrl('  espacios.com  ') === 'https://espacios.com', 'se recortan los espacios de los lados');
+ok(normalizaUrl('') === '' && normalizaUrl('   ') === '', 'vacío sigue vacío, no «https://»');
+ok(ETIQUETAS_ENLACE.includes('Feature') && ETIQUETAS_ENLACE.includes('Repositorio'),
+   'las etiquetas sugeridas cubren feature y repo');
+ok(new Set(ETIQUETAS_ENLACE).size === ETIQUETAS_ENLACE.length, 'y no se repiten');
 
 console.log(f ? `\n${f} fallas` : '\nfábrica OK');

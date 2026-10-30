@@ -51,6 +51,25 @@ export function fechaCol(s?: string): Date | null {
   return isNaN(d.getTime()) ? null : d;
 }
 
+/**
+ * Un enlace del objeto: la feature, el repo, la HU, el documento. Se guarda
+ * con etiqueta porque una lista de URLs sueltas no le dice nada a nadie.
+ *
+ * Estos apuntan a sistemas del banco y no abren desde la cuenta de Timia, así
+ * que lo que más se usa es copiarlos, no pulsarlos.
+ */
+export interface EnlaceObjeto {
+  id: string;
+  etiqueta: string;
+  url: string;
+}
+
+/** Etiquetas que se repiten; se ofrecen para no escribirlas cada vez. */
+export const ETIQUETAS_ENLACE = [
+  'Feature', 'Repositorio', 'HU', 'Pull Request', 'Diccionario', 'MSD',
+  'Malla Control-M', 'Jira', 'Documento',
+];
+
 export interface ObjetoFabrica {
   id: string;
   proyecto: string;
@@ -68,6 +87,8 @@ export interface ObjetoFabrica {
    */
   fechaRecepcion: string;
   pasos: Record<string, PasoObjeto>;
+  /** Enlaces del objeto: feature, repo, HU, documentos. */
+  enlaces?: EnlaceObjeto[];
 }
 
 export interface PasoCatalogo { id: string; label: string; fase: string; }
@@ -328,6 +349,16 @@ export const fabricaStore = {
   proyectos,
   guardarProyectos: (v: ProyectoFabrica[]) => persistSet(K_PROYECTOS, v),
 };
+
+/**
+ * Completa el esquema a una URL pegada a medias. La gente copia
+ * «confluence.bbva.com/x» del navegador y sin esto el enlace no abre.
+ */
+export function normalizaUrl(u: string): string {
+  const t = u.trim();
+  if (!t) return '';
+  return /^[a-z][a-z0-9+.-]*:/i.test(t) ? t : `https://${t}`;
+}
 
 /** Objeto nuevo: sin pasos marcados, que es justo lo que significa recién llegado. */
 export function objetoNuevo(proyecto = ''): ObjetoFabrica {
