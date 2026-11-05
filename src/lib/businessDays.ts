@@ -57,10 +57,12 @@ export function weekStartDate(
 export function diaHabilDeSemana(
   startDate: string | undefined,
   holidays: Set<string>,
+  /** Fecha a evaluar. Por defecto hoy; se pasa otra para simular un corte. */
+  corte?: Date,
 ): number {
   if (!startDate) return 5;
   const s1 = snapToBusinessDay(new Date(startDate + 'T12:00:00'), holidays);
-  const today = new Date();
+  const today = corte ? new Date(corte) : new Date();
   today.setHours(12, 0, 0, 0);
   if (today < s1) return 0;
   const d = new Date(s1);
@@ -76,10 +78,12 @@ export function diaHabilDeSemana(
 export function computeBusinessWeekIdx(
   startDate: string | undefined,
   holidays: Set<string>,
+  /** Fecha a evaluar. Por defecto hoy; se pasa otra para simular un corte. */
+  corte?: Date,
 ): number {
   if (!startDate) return -1;
   const s1 = snapToBusinessDay(new Date(startDate + 'T12:00:00'), holidays);
-  const today = new Date();
+  const today = corte ? new Date(corte) : new Date();
   today.setHours(12, 0, 0, 0);
   if (today < s1) return -1;
   const d = new Date(s1);

@@ -69,9 +69,9 @@ function fmt1(n: number)     { const d = parseFloat(n.toFixed(1)); return `${d >
 // computeCurrentWeekIdx ahora delega en computeBusinessWeekIdx (días hábiles)
 // para que los festivos de timia_holidays sean tenidos en cuenta.
 // Se llama con el Set de festivos del plan activo.
-function computeCurrentWeekIdx(startDate: string | undefined, holidays: Set<string>): number {
+function computeCurrentWeekIdx(startDate: string | undefined, holidays: Set<string>, corte?: Date): number {
   if (!startDate) return -1;
-  return computeBusinessWeekIdx(startDate, holidays);
+  return computeBusinessWeekIdx(startDate, holidays, corte);
 }
 function getWeekDate(weekLabels: string[] | undefined, weekIdx: number, weeks: typeof WEEKS): string {
   if (weekLabels && weekLabels[weekIdx - 1]) {
@@ -1038,11 +1038,22 @@ function PlanDetail({ plan, getActivityPct, setActivityPct, esPctManual, onActiv
     saveExtra(next);
   }
   // todayWeekIdx disponible en todo PlanDetail para cálculos de esperado
-  const todayWeekIdx = computeCurrentWeekIdx(plan.startDate, holidays);
+  /**
+   * Fecha de corte simulada. El seguimiento se arma dos o tres días antes de
+   * la reunión, así que hace falta ver contra qué esperado te van a comparar
+   * ese día. Es temporal a propósito: no se guarda en ningún lado, se pierde
+   * al salir, y mientras está puesta la pantalla lo avisa — si no, alguien
+   * reporta cifras de otro día sin enterarse.
+   */
+  const [fechaCorte, setFechaCorte] = useState<string>('');
+  const corte = fechaCorte ? new Date(fechaCorte + 'T12:00:00') : undefined;
+  const simulando = !!corte && !isNaN(corte.getTime());
+
+  const todayWeekIdx = computeCurrentWeekIdx(plan.startDate, holidays, corte);
   // Semana 1-indexada y día hábil dentro de ella: todayWeekIdx viene en base 0,
   // y el esperado se lee sobre la columna de la semana, que empieza en 1.
   const semanaHoy = todayWeekIdx + 1;
-  const diaHoy = diaHabilDeSemana(plan.startDate, holidays);
+  const diaHoy = diaHabilDeSemana(plan.startDate, holidays, corte);
 
   // ── Ponderación ──────────────────────────────────────────────────────────
   // 'actividad'       → cada actividad pesa igual (comportamiento histórico).
@@ -1136,12 +1147,33 @@ function PlanDetail({ plan, getActivityPct, setActivityPct, esPctManual, onActiv
             </p>
           </div>
         </div>
-        <div style={{ display:'flex', gap:8, flexShrink:0 }}>
+        <div style={{ display:'flex', gap:8, flexShrink:0, alignItems:'center' }}>
+          {/* Simular el esperado a otra fecha. El seguimiento se arma dos o tres
+              días antes, y hay que saber contra qué número te van a comparar. */}
+          <label title="Ver el esperado a otra fecha, sin guardar nada"
+            style={{ display:'flex', flexDirection:'column', gap:2 }}>
+            <span style={{ fontSize:8, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'.04em' }}>
+              Esperado al día</span>
+            <input type="date" value={fechaCorte}
+              onChange={e => setFechaCorte(e.target.value)}
+              style={{ padding:'4px 7px', fontSize:11, borderRadius:7, outline:'none',
+                       border: simulando ? '1px solid #a78bfa' : '0.5px solid #e2e8f0',
+                       background: simulando ? '#faf5ff' : '#fff',
+                       color: simulando ? '#6d28d9' : '#64748b', fontWeight: simulando ? 600 : 400 }}/>
+          </label>
+          {simulando && (
+            <button onClick={() => setFechaCorte('')} title="Volver al día de hoy"
+              style={{ alignSelf:'flex-end', padding:'5px 10px', fontSize:10.5, fontWeight:600,
+                       border:'0.5px solid #ddd6fe', background:'#f5f3ff', color:'#6d28d9',
+                       borderRadius:7, cursor:'pointer' }}>Volver a hoy</button>
+          )}
           {[
             { label:'AVANCE REAL', val:`${overallReal}%`, bg:'#374151', c:'#fff', sc:'#9ca3af' },
-            { label: planHasExt ? 'ESPERADO · LÍNEA BASE' : 'AVANCE ESPERADO', val:`${overallExpBase}%`, bg:'#4b5563', c:'#fff', sc:'#9ca3af' },
+            { label: simulando ? 'ESPERADO · SIMULADO' : planHasExt ? 'ESPERADO · LÍNEA BASE' : 'AVANCE ESPERADO',
+              val:`${overallExpBase}%`, bg: simulando ? '#6d28d9' : '#4b5563', c:'#fff', sc: simulando ? '#ddd6fe' : '#9ca3af' },
             ...(planHasExt ? [{ label:'ESPERADO · REPLAN. Δ⛔', val:`${overallExp}%`, bg:'#5b21b6', c:'#fff', sc:'#c4b5fd' }] : []),
-            { label:'DIFERENCIA', val:fmt1(overallDif), bg:difBg(overallDif), c:difColor(overallDif), sc:difColor(overallDif) },
+            { label: simulando ? 'DIF. CONTRA ESE DÍA' : 'DIFERENCIA',
+              val:fmt1(overallDif), bg:difBg(overallDif), c:difColor(overallDif), sc:difColor(overallDif) },
           ].map(b => (
             <div key={b.label} style={{ textAlign:'center', padding:'6px 16px', background:b.bg, borderRadius:8 }}>
               <div style={{ fontSize:8, color:b.sc, marginBottom:2, textTransform:'uppercase', letterSpacing:'.04em' }}>{b.label}</div>
@@ -1150,6 +1182,23 @@ function PlanDetail({ plan, getActivityPct, setActivityPct, esPctManual, onActiv
           ))}
         </div>
       </div>
+
+      {simulando && (
+        <div style={{ display:'flex', alignItems:'center', gap:9, padding:'9px 14px', marginBottom:12,
+                      background:'#f5f3ff', border:'0.5px solid #ddd6fe', borderRadius:10 }}>
+          <span style={{ fontSize:10, fontWeight:700, color:'#6d28d9', textTransform:'uppercase',
+                         letterSpacing:'.05em', flexShrink:0 }}>Simulación</span>
+          <span style={{ fontSize:11.5, color:'#5b21b6', lineHeight:1.5 }}>
+            Estás viendo el <b>esperado al {corte!.toLocaleDateString('es-CO', { weekday:'long', day:'numeric', month:'long' })}</b>
+            {' '}(semana {semanaHoy}, día {diaHoy} de 5).
+            El avance real sigue siendo el de hoy: el que no cambia es el de la gente, no el del plan.
+          </span>
+          <button onClick={() => setFechaCorte('')}
+            style={{ marginLeft:'auto', flexShrink:0, padding:'5px 11px', fontSize:10.5, fontWeight:600,
+                     border:'none', background:'#6d28d9', color:'#fff', borderRadius:7, cursor:'pointer' }}>
+            Volver a hoy</button>
+        </div>
+      )}
 
       <div style={{ display:'grid', gridTemplateColumns:`repeat(${plan.entregables.length},1fr)`, gap:8, marginBottom:14 }}>
         {plan.entregables.map(e => {
