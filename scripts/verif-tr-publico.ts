@@ -78,4 +78,17 @@ ok(carga.includes('<details'), 'los avisos y los cambios van plegados, no estorb
 ok(carga.includes('guardarAlias'), 'lo confirmado se recuerda para la próxima carga');
 ok(carga.includes('sin cambiarle nada'), 'y se usa el mismo Excel que manejan hoy');
 
+console.log('\n── Pero se ve lo que se va a guardar antes de guardarlo ──');
+// Es un trimestre entero de horas: los contadores no bastan para confiar.
+ok(carga.includes('Vista previa'), 'hay vista previa del archivo leído');
+ok(carga.includes('horasPorDia[d]'), 'muestra las horas día a día, no solo totales');
+ok(carga.includes('mesesDe'), 'con los meses en la cabecera para no perderse entre 61 columnas');
+ok(carga.includes('position:\'sticky\'') || carga.includes("position:'sticky'"),
+   'la columna del puesto queda fija al desplazarse de lado');
+ok(carga.includes('c.dias.includes(d)'), 'y se ven los días de cada cobertura');
+ok(carga.includes('sin días marcados'), 'incluida la advertencia de las coberturas sin días');
+ok(carga.includes('Total del trimestre'), 'con el total de horas, que es lo que se revisa de un vistazo');
+ok(carga.indexOf('Vista previa') < carga.indexOf('Cargar {leido.trimestre.label}'),
+   'y va antes del botón de cargar, no después');
+
 console.log(f ? `\n${f} fallas` : '\nvista pública OK');

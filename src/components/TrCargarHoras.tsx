@@ -17,6 +17,28 @@ const card: React.CSSProperties = { background:'#fff', border:'0.5px solid #e2e8
 const chip = (bg: string, c: string): React.CSSProperties => ({
   fontSize:10.5, fontWeight:600, padding:'2px 8px', borderRadius:6, background:bg, color:c });
 
+const thFijo: React.CSSProperties = { padding:'4px 8px', fontSize:9, color:'#94a3b8', textAlign:'left',
+  position:'sticky', left:0, background:'#fafafa', zIndex:1, minWidth:150,
+  borderBottom:'0.5px solid #e2e8f0', borderRight:'0.5px solid #e2e8f0' };
+const tdFijo: React.CSSProperties = { padding:'4px 8px', fontSize:10, textAlign:'left', whiteSpace:'nowrap',
+  position:'sticky', left:0, background:'#fff', zIndex:1,
+  borderBottom:'0.5px solid #f1f5f9', borderRight:'0.5px solid #e2e8f0' };
+
+const MESES = ['enero','febrero','marzo','abril','mayo','junio',
+               'julio','agosto','septiembre','octubre','noviembre','diciembre'];
+
+/** Agrupa los días por mes para la cabecera de la vista previa. */
+function mesesDe(dias: string[]): { nombre: string; cuantos: number }[] {
+  const out: { nombre: string; cuantos: number }[] = [];
+  for (const d of dias) {
+    const nombre = MESES[Number(d.slice(5, 7)) - 1];
+    const ultimo = out[out.length - 1];
+    if (ultimo?.nombre === nombre) ultimo.cuantos++;
+    else out.push({ nombre, cuantos: 1 });
+  }
+  return out;
+}
+
 /** El trimestre que cubre un conjunto de días. Se deduce; no se pregunta. */
 function trimestreDe(dias: string[]): TrimestreHoras {
   const inicio = dias[0], fin = dias[dias.length - 1];
@@ -150,6 +172,90 @@ export default function TrCargarHoras({ equipo, puedeEditar }: {
               {[...new Set(leido.puestos.map(p => p.sda))].length} SDA</span>
             {!!cambios.length && <span style={chip('#fffbeb','#92400e')}>{cambios.length} cambios</span>}
             <span style={{ marginLeft:'auto', fontSize:10.5, color:'#94a3b8' }}>{leido.archivo}</span>
+          </div>
+
+          {/* Vista previa: lo que se va a guardar, antes de guardarlo.
+              Es un trimestre entero de horas; ver solo contadores no basta
+              para confiar en que se leyó bien. */}
+          <div style={{ border:'0.5px solid #f1f5f9', borderRadius:10, overflow:'hidden', marginBottom:12 }}>
+            <div style={{ overflowX:'auto' }}>
+              <table style={{ borderCollapse:'collapse', fontSize:10 }}>
+                <thead>
+                  {/* Meses, para no perderse entre 61 columnas */}
+                  <tr style={{ background:'#fafafa' }}>
+                    <th style={{ ...thFijo, borderBottom:'none' }}/>
+                    {mesesDe(leido.dias).map(m => (
+                      <th key={m.nombre} colSpan={m.cuantos}
+                        style={{ padding:'4px 0', fontSize:9, fontWeight:700, color:'#64748b',
+                                 textTransform:'uppercase', letterSpacing:'.05em',
+                                 borderBottom:'0.5px solid #f1f5f9',
+                                 borderLeft:'0.5px solid #f1f5f9' }}>{m.nombre}</th>
+                    ))}
+                  </tr>
+                  <tr style={{ background:'#fafafa' }}>
+                    <th style={thFijo}>Puesto</th>
+                    {leido.dias.map(d => (
+                      <th key={d} title={d}
+                        style={{ padding:'3px 0', minWidth:17, fontSize:8, fontWeight:600,
+                                 color:'#94a3b8', borderBottom:'0.5px solid #e2e8f0' }}>
+                        {d.slice(8)}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {leido.puestos.map(p => (
+                    <React.Fragment key={p.id}>
+                      <tr>
+                        <td style={tdFijo}>
+                          <div style={{ fontWeight:700, color:'#111' }}>{p.sda} #{p.numero}</div>
+                          <div style={{ fontSize:8.5, color:'#94a3b8' }}>{p.rol}</div>
+                          <div style={{ fontSize:8.5, color: elegido[p.persona ?? ''] ? '#047857' : '#b45309' }}>
+                            {elegido[p.persona ?? ''] ?? p.persona ?? 'sin asignar'}</div>
+                        </td>
+                        {leido.dias.map(d => {
+                          const h = p.horasPorDia[d];
+                          return (
+                            <td key={d} title={`${d}: ${h ?? 0} h`}
+                              style={{ textAlign:'center', padding:'2px 0',
+                                       borderBottom:'0.5px solid #f8fafc',
+                                       background: h ? '#eef2ff' : '#fff',
+                                       color: h ? '#4338ca' : '#e2e8f0',
+                                       fontWeight: h ? 600 : 400 }}>{h ?? '·'}</td>
+                          );
+                        })}
+                      </tr>
+                      {(p.coberturas ?? []).map((c, i) => (
+                        <tr key={`${p.id}-c${i}`}>
+                          <td style={{ ...tdFijo, paddingLeft:16 }}>
+                            <div style={{ fontSize:9, color:'#92400e' }}>
+                              cubre: {elegido[c.persona] ?? c.persona}</div>
+                            {!c.dias.length && (
+                              <div style={{ fontSize:8, color:'#b45309' }}>sin días marcados</div>
+                            )}
+                          </td>
+                          {leido.dias.map(d => (
+                            <td key={d} style={{ textAlign:'center', padding:'2px 0',
+                                   borderBottom:'0.5px solid #f8fafc',
+                                   background: c.dias.includes(d) ? '#fef3c7' : '#fff',
+                                   color:'#b45309', fontSize:8 }}>
+                              {c.dias.includes(d) ? '●' : ''}</td>
+                          ))}
+                        </tr>
+                      ))}
+                    </React.Fragment>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div style={{ padding:'5px 10px', fontSize:9.5, color:'#94a3b8',
+                          borderTop:'0.5px solid #f1f5f9', background:'#fcfcfd' }}>
+              Horas contratadas por día. Total del trimestre:{' '}
+              <b style={{ color:'#475569' }}>
+                {leido.puestos.reduce((s, p) => s + Object.values(p.horasPorDia).reduce((a: number, b: number) => a + b, 0), 0)} h
+              </b>
+              {leido.puestos.some(p => (p.coberturas ?? []).some(c => !c.dias.length)) &&
+                ' · las coberturas sin días marcados quedan como suplentes'}
+            </div>
           </div>
 
           {/* Solo se pregunta lo que no se pudo resolver */}
