@@ -43,7 +43,9 @@ export default function TrPublico() {
   const [persona, setPersona] = useState<string | null>(null);
   const [errorCorreo, setErrorCorreo] = useState('');
   const [comprobando, setComprobando] = useState(false);
-  const [fecha, setFecha] = useState(hoy());
+  // El día lo saca el lector de la propia captura. Solo se pide a mano si no
+  // lo consigue, y entonces se pregunta por la captura concreta que falló.
+  const [fecha, setFecha] = useState('');
   const [capturas, setCapturas] = useState<Captura[]>([]);
   const [enviando, setEnviando] = useState(false);
   const [resultados, setResultados] = useState<Resultado[] | null>(null);
@@ -90,7 +92,8 @@ export default function TrPublico() {
     try {
       const r = await fetch('/api/tr/registro', {
         method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ correo: correo.trim().toLowerCase(), fecha,
+        body: JSON.stringify({ correo: correo.trim().toLowerCase(),
+          ...(fecha ? { fecha } : {}),
           capturas: capturas.map(c => ({ nombre: c.nombre, contenido: c.contenido })) }),
       });
       const cuerpo = await r.json().catch(() => ({}));
@@ -102,7 +105,7 @@ export default function TrPublico() {
     } finally { setEnviando(false); }
   }
 
-  const listo = !!persona && !!fecha && capturas.length > 0 && !enviando;
+  const listo = !!persona && capturas.length > 0 && !enviando;
 
   return (
     <div style={{ minHeight:'100vh', background:'#f8fafc', padding:'28px 16px 60px' }}>
@@ -115,8 +118,8 @@ export default function TrPublico() {
         <div style={{ ...card, padding:'22px 22px 24px' }}>
           <h1 style={{ margin:0, fontSize:19, fontWeight:700, letterSpacing:'-.3px' }}>Registrar mi TR</h1>
           <p style={{ margin:'5px 0 20px', fontSize:12.5, color:'#64748b', lineHeight:1.6 }}>
-            Sube la captura de tu Time Report. Se lee sola y se guarda con tu nombre.
-            No hace falta iniciar sesión.
+            Sube las capturas de tu Time Report. El día se lee de la propia imagen,
+            así que puedes mandar varios días de una vez. No hace falta iniciar sesión.
           </p>
 
           {/* Correo */}
@@ -143,13 +146,6 @@ export default function TrPublico() {
             )}
           </label>
 
-          {/* Fecha */}
-          <label style={{ display:'block', marginBottom:14 }}>
-            <span style={{ fontSize:11, fontWeight:600, color:'#475569' }}>Día que estás reportando</span>
-            <input type="date" value={fecha} max={hoy()}
-              onChange={e => setFecha(e.target.value)} style={{ ...input, marginTop:5 }}/>
-          </label>
-
           {/* Capturas */}
           <div style={{ marginBottom:16 }}>
             <span style={{ fontSize:11, fontWeight:600, color:'#475569' }}>
@@ -161,7 +157,7 @@ export default function TrPublico() {
                        flexDirection:'column', alignItems:'center', gap:6 }}>
               <Camera size={20} color="#94a3b8"/>
               <span style={{ fontSize:12.5, color:'#475569', fontWeight:600 }}>Tomar foto o elegir imágenes</span>
-              <span style={{ fontSize:11, color:'#94a3b8' }}>Puedes subir varias de un mismo día</span>
+              <span style={{ fontSize:11, color:'#94a3b8' }}>Varias a la vez, de días distintos si hace falta</span>
             </button>
             {/* capture permite abrir la cámara directamente en el celular */}
             <input ref={fileRef} type="file" accept="image/*" multiple hidden
@@ -229,10 +225,10 @@ export default function TrPublico() {
                 </div>
               );
             })}
-            <button type="button" onClick={() => { setResultados(null); setFecha(hoy()); }}
+            <button type="button" onClick={() => { setResultados(null); setFecha(''); }}
               style={{ marginTop:8, padding:'8px 14px', fontSize:12, fontWeight:600, borderRadius:8,
                        border:'0.5px solid #e2e8f0', background:'#fff', color:'#475569', cursor:'pointer' }}>
-              Registrar otro día</button>
+              Subir más capturas</button>
           </div>
         )}
 

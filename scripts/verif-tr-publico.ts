@@ -49,4 +49,33 @@ for (const estado of ['SIN_CONFIGURAR', 'TIMEOUT', 'ERROR_SCRIPT', 'ERROR_RED'])
 }
 ok(vist.includes('vuelve a enviarla'), 'un tiempo agotado le dice qué hacer, no solo que falló');
 
+console.log('\n── El día sale de la captura, no se pregunta ──');
+// Amilkar: «en teoría el api ya devuelve en el excel el día, no debería
+// tomar de ahí?». Sí. Pedirlo era copiar la forma del Google Form.
+ok(!vist.includes('Día que estás reportando'),
+   'la vista ya no pide la fecha como campo obligatorio');
+ok(vist.includes("useState('')") && vist.includes('El día lo saca el lector'),
+   'y se deja vacía a propósito, documentado');
+ok(vist.includes('const listo = !!persona && capturas.length > 0'),
+   'para enviar basta el correo confirmado y al menos una captura');
+ok(vist.includes('...(fecha ? { fecha } : {})'),
+   'solo se manda la fecha si alguien la escribió');
+ok(vist.includes('días distintos'),
+   'y se dice que puede subir varios días de una vez');
+ok(api.includes('fecha: str | None'), 'el servidor la acepta vacía');
+ok(api.includes('if fecha:'), 'y no se la pasa al lector cuando no la hay');
+
+console.log('\n── La carga del anexo es una sola pantalla ──');
+const carga = readFileSync('src/components/TrCargarHoras.tsx', 'utf8');
+ok(carga.includes('onDrop'), 'se suelta el archivo encima');
+ok(!carga.includes('paso 1') && !carga.includes('Paso ') && !/wizard/i.test(carga),
+   'no hay asistente por pasos');
+ok((carga.match(/<button/g) ?? []).length <= 4,
+   'pocos botones: soltar, cargar, cancelar');
+ok(carga.includes('trimestreDe'), 'el trimestre se deduce de las fechas, no se pregunta');
+ok(carga.includes('sinResolver'), 'solo pregunta por los nombres que no pudo resolver');
+ok(carga.includes('<details'), 'los avisos y los cambios van plegados, no estorbando');
+ok(carga.includes('guardarAlias'), 'lo confirmado se recuerda para la próxima carga');
+ok(carga.includes('sin cambiarle nada'), 'y se usa el mismo Excel que manejan hoy');
+
 console.log(f ? `\n${f} fallas` : '\nvista pública OK');
