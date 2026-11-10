@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   AlertTriangle, CheckCircle, Clock, ChevronRight, ChevronDown,
   FileDown, X, Users, Check, LayoutList, Search, ExternalLink,
-  Plus, Trash2, Printer,
+  Plus, Trash2, Printer, Pencil,
 } from 'lucide-react';
 import { PROJECTS, useAuth, canAccess, canInProject } from '../contexts/AuthContext';
 import { FlowStepper } from './SetupProject';
@@ -14,7 +14,7 @@ import {
   adminStore,
   type PlanEtapa, type EtapaStates, type PlanHistorialEntry,
   type ActivityAssignees, type AdminUser, type AdminProject, type PlanConfig, type PlanIssue, type PlanImpact, type BitacoraEntry,
-  issueImpacts, changeExtensionDays, makePlanKey, splitPlanKey, planKeyOf, CRONO_MAIN_NAME,
+  issueImpacts, aplicarEdicionIssue, changeExtensionDays, makePlanKey, splitPlanKey, planKeyOf, CRONO_MAIN_NAME,
 } from '../lib/adminStore';
 import {
   type PesoModo, PESO_MODO_DEFAULT, seriePlanConsolidada, seriePlanFase, marcasDe,
@@ -881,23 +881,49 @@ function IssuesPanel({ plan, issues, legacy, userName, onChange, outlines, readO
   const [showClosed, setShowClosed] = useState(false);
   const [resolving, setResolving] = useState<string | null>(null);
   const [resolveDate, setResolveDate] = useState(todayISO);
-  const empty = { title:'', detail:'', startDate: todayISO, impacts: [] as PlanImpact[] };
+  // Una alerta no nace completa: la tarea que impacta se descubre después, el
+  // bloqueante se extiende a otra fase, el título se escribió a la carrera. Sin
+  // edición solo quedaba borrar y volver a crear, y eso pierde quién la abrió.
+  const [editando, setEditando] = useState<string | null>(null);
+  const empty = { title:'', detail:'', startDate: todayISO, endDate: '', impacts: [] as PlanImpact[] };
   const [form, setForm] = useState(empty);
 
   const open   = issues.filter(i => !i.endDate).sort((a,b) => (a.type === b.type ? a.startDate.localeCompare(b.startDate) : a.type === 'bloqueante' ? -1 : 1));
   const closed = issues.filter(i => !!i.endDate).sort((a,b) => (b.endDate ?? '').localeCompare(a.endDate ?? ''));
 
+  const enEdicion = editando ? issues.find(i => i.id === editando) ?? null : null;
+  /** El tipo que manda el formulario: el que se está creando o el que se edita. */
+  const [tipoForm, setTipoForm] = useState<'alerta' | 'bloqueante'>('alerta');
+  const formAbierto = !!adding || !!enEdicion;
+
+  function cerrarForm() { setAdding(null); setEditando(null); setForm(empty); }
+  function abrirNuevo(t: 'alerta' | 'bloqueante') {
+    setEditando(null); setAdding(t); setTipoForm(t); setForm(empty);
+  }
+  function editar(i: PlanIssue) {
+    setAdding(null); setResolving(null); setEditando(i.id); setTipoForm(i.type);
+    setForm({ title: i.title, detail: i.detail ?? '', startDate: i.startDate,
+              endDate: i.endDate ?? '', impacts: issueImpacts(i) });
+  }
 
   function submit() {
-    if (!adding || !form.title.trim()) return;
-    const it: PlanIssue = {
-      id: `is-${Date.now()}-${Math.random().toString(36).slice(2,6)}`,
-      planKey: plan.planKey, type: adding, title: form.title.trim(), detail: form.detail.trim() || undefined,
-      startDate: form.startDate || todayISO,
-      impacts: form.impacts,
-      createdBy: userName, createdAt: new Date().toISOString(),
+    if (!formAbierto || !form.title.trim()) return;
+    const campos = {
+      type: tipoForm, title: form.title.trim(), detail: form.detail.trim() || undefined,
+      startDate: form.startDate || todayISO, impacts: form.impacts,
     };
-    onChange([...issues, it]); setAdding(null); setForm(empty);
+    if (enEdicion) {
+      onChange(issues.map(i => i.id === enEdicion.id
+        ? aplicarEdicionIssue(i, { ...campos, endDate: form.endDate || undefined }, userName)
+        : i));
+    } else {
+      onChange([...issues, {
+        id: `is-${Date.now()}-${Math.random().toString(36).slice(2,6)}`,
+        planKey: plan.planKey, ...campos,
+        createdBy: userName, createdAt: new Date().toISOString(),
+      }]);
+    }
+    cerrarForm();
   }
   function resolve(id: string) {
     onChange(issues.map(i => i.id === id ? { ...i, endDate: resolveDate || todayISO, closedBy: userName, closedAt: new Date().toISOString() } : i));
@@ -914,8 +940,9 @@ function IssuesPanel({ plan, issues, legacy, userName, onChange, outlines, readO
     const st = ISSUE_STYLE[i.type]; const isOpen = !i.endDate;
     const days = daysBetween(i.startDate, i.endDate ?? todayISO);
     const imps = issueImpacts(i);
+    const esta = editando === i.id;
     return (
-      <div key={i.id} style={{ display:'flex', alignItems:'flex-start', gap:7, padding:'6px 8px', margin:'3px 0', borderRadius:7, background: isOpen ? '#fff' : '#f8fafc', border:`0.5px solid ${isOpen ? st.bc : '#e2e8f0'}`, opacity: isOpen ? 1 : .75 }}>
+      <div key={i.id} style={{ display:'flex', alignItems:'flex-start', gap:7, padding:'6px 8px', margin:'3px 0', borderRadius:7, background: esta ? st.bg : isOpen ? '#fff' : '#f8fafc', border:`${esta ? 1 : 0.5}px solid ${esta ? st.solid : isOpen ? st.bc : '#e2e8f0'}`, opacity: isOpen ? 1 : .75 }}>
         <span style={{ fontSize:12, flexShrink:0, marginTop:1 }}>{st.icon}</span>
         <div style={{ flex:1, minWidth:0 }}>
           <div style={{ fontSize:11, color:'#111', fontWeight:600, lineHeight:1.4 }}>{i.title}</div>
@@ -940,6 +967,10 @@ function IssuesPanel({ plan, issues, legacy, userName, onChange, outlines, readO
           )}
         </div>
         {!readOnly && <div style={{ display:'flex', gap:3, flexShrink:0 }}>
+          <button onClick={() => esta ? cerrarForm() : editar(i)} title="Editar: título, fechas, tipo y tareas afectadas"
+            style={{ fontSize:9, padding:'2px 7px', background: esta ? st.solid : '#fff', color: esta ? '#fff' : '#64748b', border:`0.5px solid ${esta ? st.solid : '#e2e8f0'}`, borderRadius:5, cursor:'pointer', fontWeight:600, display:'flex', alignItems:'center', gap:3 }}>
+            <Pencil size={9}/>{esta ? 'Cerrar' : 'Editar'}
+          </button>
           {isOpen
             ? <button onClick={() => { setResolving(i.id); setResolveDate(todayISO); }} title="Reportar fin" style={{ fontSize:9, padding:'2px 7px', background:'#f0fdf4', color:'#15803d', border:'0.5px solid #bbf7d0', borderRadius:5, cursor:'pointer', fontWeight:600 }}>Resolver</button>
             : <button onClick={() => reopen(i.id)} title="Reabrir" style={{ fontSize:9, padding:'2px 7px', background:'#fff', color:'#64748b', border:'0.5px solid #e2e8f0', borderRadius:5, cursor:'pointer' }}>Reabrir</button>}
@@ -957,23 +988,46 @@ function IssuesPanel({ plan, issues, legacy, userName, onChange, outlines, readO
           {open.length > 0 && <span style={{ marginLeft:4, background:'rgba(0,0,0,0.08)', borderRadius:10, padding:'0 6px', fontSize:10 }}>{nBloq ? `${nBloq} ⛔ ` : ''}{nAlert ? `${nAlert} ⚠` : ''}</span>}
         </p>
         {!readOnly && <>
-        <button onClick={() => { setAdding('alerta'); setForm(empty); }} style={{ border:'0.5px solid #fde68a', background:'#fef9c3', cursor:'pointer', color:'#a16207', borderRadius:6, padding:'2px 7px', display:'flex', alignItems:'center', gap:3, fontSize:10, fontWeight:600 }}><Plus size={10}/> Alerta</button>
-        <button onClick={() => { setAdding('bloqueante'); setForm(empty); }} style={{ border:'0.5px solid #fecaca', background:'#fef2f2', cursor:'pointer', color:'#dc2626', borderRadius:6, padding:'2px 7px', display:'flex', alignItems:'center', gap:3, fontSize:10, fontWeight:600 }}><Plus size={10}/> Bloqueante</button>
+        <button onClick={() => abrirNuevo('alerta')} style={{ border:'0.5px solid #fde68a', background:'#fef9c3', cursor:'pointer', color:'#a16207', borderRadius:6, padding:'2px 7px', display:'flex', alignItems:'center', gap:3, fontSize:10, fontWeight:600 }}><Plus size={10}/> Alerta</button>
+        <button onClick={() => abrirNuevo('bloqueante')} style={{ border:'0.5px solid #fecaca', background:'#fef2f2', cursor:'pointer', color:'#dc2626', borderRadius:6, padding:'2px 7px', display:'flex', alignItems:'center', gap:3, fontSize:10, fontWeight:600 }}><Plus size={10}/> Bloqueante</button>
         </>}
       </div>
 
-      {adding && (() => { const st = ISSUE_STYLE[adding]; return (
+      {formAbierto && (() => { const st = ISSUE_STYLE[tipoForm]; return (
         <div style={{ background:'#fff', border:`0.5px solid ${st.bc}`, borderRadius:8, padding:'10px 12px', marginBottom:8 }}>
-          <p style={{ margin:'0 0 8px', fontSize:10, fontWeight:600, color:st.tc }}>{st.icon} Nuevo {st.label.toLowerCase()}</p>
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 130px', gap:6, marginBottom:6 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8, flexWrap:'wrap' }}>
+            <p style={{ margin:0, fontSize:10, fontWeight:600, color:st.tc }}>
+              {st.icon} {enEdicion ? `Editando: ${enEdicion.title}` : `Nuevo ${st.label.toLowerCase()}`}
+            </p>
+            {/* Una alerta que se complica pasa a bloqueante sin perder su historia. */}
+            <div style={{ display:'flex', gap:3, marginLeft:'auto' }}>
+              {(['alerta','bloqueante'] as const).map(t => (
+                <button key={t} onClick={() => setTipoForm(t)}
+                  style={{ fontSize:9, padding:'2px 8px', borderRadius:5, cursor:'pointer', fontWeight:600,
+                           border:`0.5px solid ${tipoForm===t ? ISSUE_STYLE[t].solid : '#e2e8f0'}`,
+                           background: tipoForm===t ? ISSUE_STYLE[t].bg : '#fff',
+                           color: tipoForm===t ? ISSUE_STYLE[t].tc : '#94a3b8' }}>
+                  {ISSUE_STYLE[t].icon} {ISSUE_STYLE[t].label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div style={{ display:'grid', gridTemplateColumns:`1fr 130px${enEdicion ? ' 130px' : ''}`, gap:6, marginBottom:6 }}>
             <input autoFocus value={form.title} onChange={e => setForm(f => ({ ...f, title:e.target.value }))} placeholder="¿Qué está pasando?"
-              onKeyDown={e => { if (e.key==='Enter') submit(); if (e.key==='Escape') setAdding(null); }}
+              onKeyDown={e => { if (e.key==='Enter') submit(); if (e.key==='Escape') cerrarForm(); }}
               style={{ padding:'6px 9px', fontSize:11, border:'0.5px solid #e2e8f0', borderRadius:6 }}/>
             <label style={{ display:'flex', flexDirection:'column', gap:2 }}>
               <span style={{ fontSize:8, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'.05em' }}>Inicio</span>
               <input type="date" value={form.startDate} max={todayISO} onChange={e => setForm(f => ({ ...f, startDate:e.target.value }))}
                 style={{ padding:'4px 6px', fontSize:10, border:'0.5px solid #e2e8f0', borderRadius:6 }}/>
             </label>
+            {enEdicion && (
+              <label style={{ display:'flex', flexDirection:'column', gap:2 }} title="Vacío = sigue abierta">
+                <span style={{ fontSize:8, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'.05em' }}>Fin · vacío = abierta</span>
+                <input type="date" value={form.endDate} min={form.startDate} max={todayISO} onChange={e => setForm(f => ({ ...f, endDate:e.target.value }))}
+                  style={{ padding:'4px 6px', fontSize:10, border:'0.5px solid #e2e8f0', borderRadius:6 }}/>
+              </label>
+            )}
           </div>
           <div style={{ marginBottom:6 }}>
             <span style={{ fontSize:8, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'.05em', display:'block', marginBottom:3 }}>Tareas impactadas</span>
@@ -990,9 +1044,13 @@ function IssuesPanel({ plan, issues, legacy, userName, onChange, outlines, readO
           </div>
           <textarea value={form.detail} onChange={e => setForm(f => ({ ...f, detail:e.target.value }))} rows={2} placeholder="Detalle / contexto (opcional)"
             style={{ width:'100%', padding:'5px 8px', fontSize:10, border:'0.5px solid #e2e8f0', borderRadius:6, resize:'vertical', boxSizing:'border-box', lineHeight:1.5, marginBottom:6 }}/>
-          <div style={{ display:'flex', gap:4 }}>
-            <button onClick={submit} disabled={!form.title.trim()} style={{ padding:'4px 12px', fontSize:10, background: form.title.trim() ? st.solid : '#e2e8f0', color:'#fff', border:'none', borderRadius:5, cursor: form.title.trim() ? 'pointer' : 'default', fontWeight:600 }}>Registrar</button>
-            <button onClick={() => setAdding(null)} style={{ padding:'4px 8px', fontSize:10, background:'#f1f5f9', border:'none', borderRadius:5, cursor:'pointer', color:'#374151' }}>Cancelar</button>
+          <div style={{ display:'flex', gap:4, alignItems:'center' }}>
+            <button onClick={submit} disabled={!form.title.trim()} style={{ padding:'4px 12px', fontSize:10, background: form.title.trim() ? st.solid : '#e2e8f0', color:'#fff', border:'none', borderRadius:5, cursor: form.title.trim() ? 'pointer' : 'default', fontWeight:600 }}>
+              {enEdicion ? 'Guardar cambios' : 'Registrar'}</button>
+            <button onClick={cerrarForm} style={{ padding:'4px 8px', fontSize:10, background:'#f1f5f9', border:'none', borderRadius:5, cursor:'pointer', color:'#374151' }}>Cancelar</button>
+            {enEdicion && <span style={{ fontSize:9, color:'#94a3b8' }}>
+              Abierta por {enEdicion.createdBy.split(' ')[0]} el {fmtShort(enEdicion.createdAt.slice(0,10))}
+            </span>}
           </div>
         </div>
       ); })()}
@@ -1014,9 +1072,9 @@ function IssuesPanel({ plan, issues, legacy, userName, onChange, outlines, readO
           {showClosed && closed.map(row)}
         </div>
       )}
-      {picker && adding && (
-        <ImpactPicker plans={outlines} value={form.impacts} accent={ISSUE_STYLE[adding].solid}
-          title={`Tareas impactadas por ${adding === 'bloqueante' ? 'el bloqueante' : 'la alerta'}`}
+      {picker && formAbierto && (
+        <ImpactPicker plans={outlines} value={form.impacts} accent={ISSUE_STYLE[tipoForm].solid}
+          title={`Tareas impactadas por ${tipoForm === 'bloqueante' ? 'el bloqueante' : 'la alerta'}`}
           onConfirm={imps => { setForm(f => ({ ...f, impacts: imps })); setPicker(false); }}
           onClose={() => setPicker(false)}/>
       )}

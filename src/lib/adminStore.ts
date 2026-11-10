@@ -251,6 +251,42 @@ export function issueImpacts(i: PlanIssue): PlanImpact[] {
   return [];
 }
 
+/** Lo que se puede cambiar de una alerta o bloqueante ya registrado. */
+export interface EdicionIssue {
+  type: 'alerta' | 'bloqueante';
+  title: string;
+  detail?: string;
+  startDate: string;
+  /** Vacío o undefined = sigue abierta. */
+  endDate?: string;
+  impacts: PlanImpact[];
+}
+
+/**
+ * Aplica una edición conservando lo que no se edita.
+ *
+ * Quién la abrió y cuándo no se tocan: son el registro de lo que pasó, no un
+ * campo del formulario. Y quitar la fecha de fin la reabre de verdad — si se
+ * dejara el `closedBy`, quedaría abierta pero con firma de cerrada.
+ */
+export function aplicarEdicionIssue(i: PlanIssue, e: EdicionIssue, por: string, ahora = new Date().toISOString()): PlanIssue {
+  const fin = e.endDate || undefined;
+  return {
+    ...i,
+    type: e.type,
+    title: e.title,
+    detail: e.detail,
+    startDate: e.startDate,
+    impacts: e.impacts,
+    endDate: fin,
+    closedBy: fin ? (i.closedBy ?? por) : undefined,
+    closedAt: fin ? (i.closedAt ?? ahora) : undefined,
+    // El formato viejo de impacto único se deja atrás: si quedara, issueImpacts
+    // seguiría devolviéndolo y la edición no tendría efecto.
+    entregableId: undefined, actIdx: undefined, etapaId: undefined,
+  };
+}
+
 /** Solicitud de acceso: correo del dominio autenticado con Google pero no registrado en el panel */
 export interface AccessRequest {
   id: string; email: string; name: string; provider: string;

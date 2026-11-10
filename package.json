@@ -22,6 +22,7 @@
     "verif:pct": "tsx scripts/verif-pct.ts",
     "verif:esperado": "tsx scripts/verif-esperado.ts",
     "verif:real-fase": "tsx scripts/verif-real-fase.ts",
+    "verif:issues": "tsx scripts/verif-issues.ts",
     "verif:tipos": "tsx scripts/verif-tipos.ts"
   },
   "dependencies": {
