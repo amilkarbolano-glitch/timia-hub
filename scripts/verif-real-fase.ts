@@ -7,11 +7,16 @@
 // ya contaba por casillas, así que la diferencia restaba dos magnitudes distintas.
 //
 // Caso real: MIGBD · DOCUMENTACIÓN Y GOBIERNO, 11 actividades y 18 casillas.
-//   antes:   media de los 11 % ............ 45.5%
-//   ahora:   780 / 18 ..................... 43.3%
-//   Excel:   6.6 casillas × 5.556 ......... 36.7%   (con ACLs en 0%, no en 100%)
+//   antes:   media de los 11 % ............ 48.2%
+//   ahora:   8.4 casillas × 5.556 ......... 46.7%
+//   Excel:   7.4 casillas × 5.556 ......... 41.1%   (ACLs en 0%, no en 100%)
+//
+// Los 5.6 puntos que separan la herramienta del Excel son exactamente una
+// casilla: la de ACLs. Mismo método, distinto dato.
 
+import { readFileSync } from 'node:fs';
 import { realFase, factorFase, marcasFase, seriePlanFase, enDia, type AvanceFase } from '../src/lib/avance';
+import { diaHabilDeSemana, computeBusinessWeekIdx } from '../src/lib/businessDays';
 
 let f = 0;
 const ok = (c: boolean, s: string) => { if (!c) f++; console.log(`${c ? '✓' : '✗'} ${s}`); };
@@ -33,7 +38,7 @@ const SEMANAS: number[][] = [
   [9],        // Despliegue de esquemas en entornos Productivo (Live)
   [4, 5],     // Creación de documentación técnica (ETL + DT)
 ];
-const PCTS = [80, 70, 100, 100, 0, 30, 0, 100, 0, 0, 20];
+const PCTS = [80, 70, 100, 100, 0, 30, 0, 100, 0, 0, 50];
 
 const fase: AvanceFase = {
   id: 'documentaci-n-', label: 'DOCUMENTACIÓN Y GOBIERNO',
@@ -50,24 +55,30 @@ ok(cerca(factorFase(fase), 5.556, 0.001), `factor estático 5.556 (${factorFase(
 console.log('\n── El real ya no es un promedio ──');
 const media = PCTS.reduce((s, v) => s + v, 0) / PCTS.length;
 const pesado = realFase(fase, 'actividad-semana');
-ok(cerca(media, 45.45), `el promedio simple daba ${media.toFixed(1)}% — lo que mostraba la insignia`);
-ok(cerca(pesado, 43.33), `pesado por casillas da ${pesado.toFixed(1)}%`);
-ok(!cerca(pesado, media, 1), 'son números distintos: el error valía 2.1 puntos en esta fase');
+ok(cerca(media, 48.18), `el promedio simple daba ${media.toFixed(1)}% — lo que mostraba la insignia`);
+ok(cerca(pesado, 46.67), `pesado por casillas da ${pesado.toFixed(1)}%`);
+ok(!cerca(pesado, media, 1), 'son números distintos: el promedio inflaba la fase en 1.5 puntos');
 
 console.log('\n── Regla de tres, actividad por actividad ──');
 // 3 casillas al 80% = 2.4 casillas; cada casilla vale 100/18.
-const casillasEsperadas = 3*0.8 + 2*0.7 + 1*1 + 1*1 + 2*0 + 2*0.3 + 2*0 + 1*1 + 1*0 + 1*0 + 2*0.2;
-ok(cerca(casillasEsperadas, 7.8, 0.001), `7.8 casillas ejecutadas (${casillasEsperadas})`);
+const casillasEsperadas = 3*0.8 + 2*0.7 + 1*1 + 1*1 + 2*0 + 2*0.3 + 2*0 + 1*1 + 1*0 + 1*0 + 2*0.5;
+ok(cerca(casillasEsperadas, 8.4, 0.001), `8.4 casillas ejecutadas (${casillasEsperadas})`);
 ok(cerca(pesado, casillasEsperadas * (100/18)), 'el % es exactamente casillas × factor');
 
 console.log('\n── Contra el cuadro «Real» del Excel ──');
-// Columna a columna, como las escribe el PM: S1 2.0, S2 2.0, S3 1.8, S4 0.2, S5 0.6.
-// Con ACLs en 0% —como está en el Excel y en la PPT— el método da 37.8%, y el
-// 1.1 que falta hasta 36.7% es la casilla que el PM escribió a mano en ETL+DT
-// (0.2 en vez de los 0.4 que salen de un 20% sobre 2 casillas).
+// Columna a columna, como las escribe el PM: S1 2.0, S2 2.0, S3 1.8, S4 1.0, S5 0.6
+// → 11.1, 11.1, 10.0, 5.6, 3.3 y acumulado 41.1. Con ACLs en 0% —como está en
+// el Excel— el método da el mismo número al decimal.
 const comoExcel = realFase({ ...fase, activities: fase.activities.map((a, i) => ({ ...a, pct: i === 7 ? 0 : a.pct })) }, 'actividad-semana');
-ok(cerca(comoExcel, 37.78), `con ACLs en 0% da ${comoExcel.toFixed(1)}% contra el 36.7% del Excel`);
-ok(Math.abs(comoExcel - 36.7) < 1.2, 'queda a poco más de un punto: la diferencia es un dato, no el método');
+ok(cerca(comoExcel, 41.11), `con ACLs en 0% da ${comoExcel.toFixed(1)}% — el 41.1% del Excel, clavado`);
+ok(cerca(pesado - comoExcel, 100/18), 'lo que separa herramienta y Excel es una casilla exacta: ACLs');
+
+console.log('\n── Columna a columna, como el cuadro «Real» ──');
+const serieReal = [11.1, 11.1, 10.0, 5.6, 3.3];   // lo que suma cada semana en el Excel
+const porSemana = [2.0, 2.0, 1.8, 1.0, 0.6];      // casillas ejecutadas en cada una
+porSemana.forEach((c, i) => ok(cerca(c * (100/18), serieReal[i], 0.06),
+  `S${i+1}: ${c} casillas = ${(c*100/18).toFixed(1)} (Excel ${serieReal[i]})`));
+ok(cerca(porSemana.reduce((s,v)=>s+v,0) * (100/18), 41.1, 0.06), 'el acumulado cierra en 41.1');
 
 console.log('\n── Una actividad larga pesa más que una corta ──');
 const corta: AvanceFase = { id:'x', label:'x', activities: [
@@ -83,6 +94,29 @@ const alCierreS18 = enDia(seriePlanFase(fase, 18), 18, 5);
 ok(cerca(alCierreS18, 100, 0.5), `al final del plan el esperado llega a 100% (${alCierreS18.toFixed(1)}%)`);
 const todoAl100 = realFase({ ...fase, activities: fase.activities.map(a => ({ ...a, pct: 100 })) }, 'actividad-semana');
 ok(cerca(todoAl100, 100, 0.01), `con todo al 100% el real llega a 100% (${todoAl100.toFixed(2)}%)`);
+
+console.log('\n── La raya de HOY va en el día, no al inicio de la semana ──');
+// MIGBD arranca el martes 13/10/2026. Con el 2 de noviembre festivo, S4 va del
+// miércoles 4 al martes 10, y hoy —martes 10— es su quinto y último día hábil:
+// la raya tiene que quedar a la derecha de S4, no pegada al borde izquierdo.
+const festivos = new Set(['2026-11-02', '2026-11-16']);
+const dia = (s: string) => diaHabilDeSemana('2026-10-13', festivos, new Date(s + 'T12:00:00'));
+const sem = (s: string) => computeBusinessWeekIdx('2026-10-13', festivos, new Date(s + 'T12:00:00')) + 1;
+ok(sem('2026-11-10') === 4 && dia('2026-11-10') === 5, `10/11 es S${sem('2026-11-10')} día ${dia('2026-11-10')} — cierra la semana`);
+ok(sem('2026-11-04') === 4 && dia('2026-11-04') === 1, '04/11 es S4 día 1 — abre la semana');
+ok(sem('2026-11-11') === 5, '11/11 ya es S5');
+
+const fuente = readFileSync(new URL('../src/components/PlanDeTrabajo.tsx', import.meta.url), 'utf8');
+ok(/function posHoy/.test(fuente), 'la posición de la raya es una función, no un borde fijo');
+ok(!/borderLeft: isToday \? '2px solid #16a34a'/.test(fuente), 'ya no queda ningún borde izquierdo verde');
+ok((fuente.match(/<RayaHoy /g) ?? []).length >= 3, 'la raya se dibuja en la cabecera y en las dos clases de celda');
+
+// posHoy: día 1 al borde izquierdo (20% de la casilla), día 5 al derecho (100%).
+const pos = (d: number) => (Math.max(1, Math.min(5, d)) / 5) * 100;
+ok(pos(5) === 100, 'día 5 → 100% de la casilla: la raya cierra la semana');
+ok(pos(1) === 20,  'día 1 → 20%: apenas entrada la semana');
+ok(pos(3) === 60,  'día 3 → 60%: a mitad de semana');
+ok(pos(9) === 100 && pos(0) === 20, 'fuera de rango se acota, no se sale de la casilla');
 
 console.log(f ? `\n${f} fallo(s)` : '\nTodo bien');
 process.exit(f ? 1 : 0);
