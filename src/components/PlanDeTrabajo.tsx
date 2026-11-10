@@ -18,7 +18,7 @@ import {
 } from '../lib/adminStore';
 import {
   type PesoModo, PESO_MODO_DEFAULT, seriePlanConsolidada, seriePlanFase, marcasDe,
-  enSemana, enDia, realPlan, type AvanceFase,
+  enSemana, enDia, realPlan, realFase, type AvanceFase,
 } from '../lib/avance';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -644,9 +644,24 @@ function EntregableSection({ block, projectId, sectionIdx, getActivityPct, setAc
     }
     return { list, weeks };
   }
-  const effectivePctReal = block.activities.length > 0
-    ? parseFloat((effectiveActivities.reduce((s, a) => s + a.pct, 0) / effectiveActivities.length).toFixed(1))
-    : block.pctReal;
+  // El real de la fase tiene que pesarse con la misma regla que el esperado que
+  // va a su lado. Con 'actividad-semana' cada actividad vale por sus casillas
+  // —una de 3 semanas pesa el triple que una de 1— y es la regla de tres del
+  // Excel del PM: 3 casillas al 80% aportan 2.4 de 18. Esta insignia promediaba
+  // los % a secas mientras el esperado ya contaba por casillas, así que la
+  // diferencia restaba dos cosas distintas: Documentación y Gobierno marcaba
+  // 45.5% (media de 11 actividades) contra el 36.7% del Excel.
+  const faseAvance: AvanceFase = {
+    id: block.id, label: block.name,
+    activities: block.activities.map((a, i) => ({
+      weeks: a.weeks, startWeek: a.startWeek, endWeek: a.endWeek, pct: getActivityPct(i),
+    })),
+  };
+  const effectivePctReal = block.activities.length === 0
+    ? block.pctReal
+    : pesoModo === 'actividad-semana'
+      ? parseFloat(realFase(faseAvance, pesoModo).toFixed(1))
+      : parseFloat((effectiveActivities.reduce((s, a) => s + a.pct, 0) / effectiveActivities.length).toFixed(1));
   // pctExp dinámico: promedio de lo que debería estar completado hoy según el Gantt
   // Esperado sobre la línea base y esperado replanificado (fin corrido por cambios funcionales)
   // El esperado de la fase tiene que usar el mismo método que el resto del plan.
@@ -655,10 +670,6 @@ function EntregableSection({ block, projectId, sectionIdx, getActivityPct, setAc
   // contaba por actividades — "¿cuántas deberían estar al 100%?" — y en una fase
   // cuyas tareas terminan todas más adelante daba 0% aunque ya hubiera semanas
   // corridas. Es lo que pasaba en Componentes ADA: 0% aquí contra 25% en el Excel.
-  const faseAvance: AvanceFase = {
-    id: block.id, label: block.name,
-    activities: block.activities.map(a => ({ weeks: a.weeks, startWeek: a.startWeek, endWeek: a.endWeek })),
-  };
   const semanasFase = planWeeks ?? Math.max(1, ...block.activities.map(a => a.endWeek));
   // Interpolado al día hábil en curso, igual que el general: un jueves no puede
   // exigir el trabajo que toca entregar el viernes.
@@ -1202,13 +1213,20 @@ function PlanDetail({ plan, getActivityPct, setActivityPct, esPctManual, onActiv
 
       <div style={{ display:'grid', gridTemplateColumns:`repeat(${plan.entregables.length},1fr)`, gap:8, marginBottom:14 }}>
         {plan.entregables.map(e => {
-          const ePct = e.activities.length
-            ? parseFloat((e.activities.reduce((s,a,i)=>s+getActivityPct(e.id,i,a),0)/e.activities.length).toFixed(1))
-            : e.pctReal;
+          // Estas tarjetas usaban el promedio simple de los % mientras el KPI de
+          // arriba y el Gantt ya pesaban por casillas: tres números distintos
+          // para la misma fase en la misma pantalla.
+          const faseE = fasesAvance.find(f => f.id === e.id);
+          const faseExtE = fasesAvanceExt.find(f => f.id === e.id);
+          const ePct = !e.activities.length ? e.pctReal
+            : porSemana && faseE
+              ? parseFloat(realFase(faseE, pesoModo).toFixed(1))
+              : parseFloat((e.activities.reduce((s,a,i)=>s+getActivityPct(e.id,i,a),0)/e.activities.length).toFixed(1));
           // pctExp dinámico por entregable
-          const eExp = e.activities.length
-            ? parseFloat((e.activities.reduce((s,a,i)=>s+computeActExpPct(a.startWeek,extensionFor(changes, plan.planKey, e.id, i, a.endWeek, issues, holidays).effEndWeek,todayWeekIdx),0)/e.activities.length).toFixed(1))
-            : e.pctExp;
+          const eExp = !e.activities.length ? e.pctExp
+            : porSemana && faseExtE
+              ? parseFloat(enDia(seriePlanFase(faseExtE, Math.max(planWeeks, semanaHoy)), semanaHoy, diaHoy).toFixed(1))
+              : parseFloat((e.activities.reduce((s,a,i)=>s+computeActExpPct(a.startWeek,extensionFor(changes, plan.planKey, e.id, i, a.endWeek, issues, holidays).effEndWeek,todayWeekIdx),0)/e.activities.length).toFixed(1));
           const dif = parseFloat((ePct-eExp).toFixed(1));
           return (
             <div key={e.id} style={{ background:'#fff', border:'0.5px solid #e2e8f0', borderRadius:10, padding:'10px 14px' }}>
