@@ -106,7 +106,27 @@ function hexToRgb(hex: string): [number, number, number] {
 
 // ─── GanttCell ────────────────────────────────────────────────────────────────
 
-function GanttCell({ wi, act, effectivePct, isSubtask, todayWeekIdx, issueMark, extWeeks = 0, blockWeeks = 0 }: { wi: number; act: PlanActivity; effectivePct: number; isSubtask?: boolean; todayWeekIdx?: number; issueMark?: 'alerta' | 'bloqueante'; extWeeks?: number; blockWeeks?: number }) {
+/**
+ * La raya verde de HOY, dentro de la columna de la semana en curso.
+ *
+ * Iba pegada al borde izquierdo de la casilla, así que un martes que cierra la
+ * semana se veía como si esa semana ni hubiera empezado — y el esperado, que sí
+ * cuenta el día hábil, decía otra cosa. Ahora la raya va donde está el día: el
+ * primer día hábil al borde izquierdo, el quinto al derecho.
+ *
+ * Va en porcentaje y no en píxeles porque la tabla se estira; el margen negativo
+ * mete la raya dentro de la casilla cuando cae justo en el borde derecho.
+ */
+function posHoy(diaHabil: number): number {
+  return (Math.max(1, Math.min(5, diaHabil)) / 5) * 100;
+}
+function RayaHoy({ diaHabil = 5, opacidad = 1 }: { diaHabil?: number; opacidad?: number }) {
+  const p = posHoy(diaHabil);
+  return <div style={{ position:'absolute', top:0, bottom:0, left:`${p}%`, marginLeft:-(p / 50),
+                       width:2, background:'#16a34a', opacity:opacidad, zIndex:2, pointerEvents:'none' }}/>;
+}
+
+function GanttCell({ wi, act, effectivePct, isSubtask, todayWeekIdx, diaHabil = 5, issueMark, extWeeks = 0, blockWeeks = 0 }: { wi: number; act: PlanActivity; effectivePct: number; isSubtask?: boolean; todayWeekIdx?: number; diaHabil?: number; issueMark?: 'alerta' | 'bloqueante'; extWeeks?: number; blockWeeks?: number }) {
   // Marca de alerta/bloqueante en la semana: franja inferior roja/ámbar
   const markBar = issueMark ? (
     <div style={{ position:'absolute', left:0, right:0, bottom:0, height:3, background: issueMark==='bloqueante' ? '#dc2626' : '#f59e0b', opacity:.9 }}/>
@@ -116,7 +136,7 @@ function GanttCell({ wi, act, effectivePct, isSubtask, todayWeekIdx, issueMark, 
   const cellStart = wi, cellEnd = wi + 1;
   const planOverlap = Math.max(0, Math.min(planEnd, cellEnd) - Math.max(planStart, cellStart));
   const isToday = todayWeekIdx !== undefined && todayWeekIdx >= 0 && wi === todayWeekIdx;
-  const todayStyle = isToday ? { borderLeft: '2px solid #16a34a', background: '#f0fdf4' } : {};
+  const todayStyle: React.CSSProperties = isToday ? { background: '#f0fdf4' } : {};
   // Segmento de extensión por cambios (rayado morado) entre planEnd y planEnd+extWeeks.
   // Se dibuja dentro del mismo marco (margen 3px 1px) que la barra planificada para que quede alineado.
   const extEnd = planEnd + extWeeks;
@@ -133,8 +153,9 @@ function GanttCell({ wi, act, effectivePct, isSubtask, todayWeekIdx, issueMark, 
       background:'repeating-linear-gradient(135deg, #fca5a5 0 3px, #fee2e2 3px 6px)', borderRadius: blkEnd <= cellEnd ? '0 3px 3px 0' : 0, boxShadow: blkEnd <= cellEnd ? 'inset -2px 0 0 #dc2626' : 'none' }}/>
   ) : null;
   if (planOverlap === 0) return (
-    <td style={{ position:'relative', width: CELL_W, minWidth: CELL_W, padding:0, borderLeft: isToday ? '2px solid #16a34a' : '0.5px solid #f1f5f9', background: isToday ? '#f0fdf4' : undefined }}>
+    <td style={{ position:'relative', width: CELL_W, minWidth: CELL_W, padding:0, borderLeft:'0.5px solid #f1f5f9', ...todayStyle }}>
       {markBar}
+      {isToday && <RayaHoy diaHabil={diaHabil}/>}
       {(extBar || blkBar) && <div style={{ position:'relative', margin:'3px 1px', height:13 }}>{extBar}{blkBar}</div>}
     </td>
   );
@@ -144,8 +165,9 @@ function GanttCell({ wi, act, effectivePct, isSubtask, todayWeekIdx, issueMark, 
   const isLast  = planEnd > cellStart && planEnd <= cellEnd;
   const br = `${isFirst?3:0}px ${isLast?3:0}px ${isLast?3:0}px ${isFirst?3:0}px`;
   return (
-    <td style={{ position:'relative', width: CELL_W, minWidth: CELL_W, padding:0, borderLeft: isToday ? '2px solid #16a34a' : '0.5px solid #f1f5f9', ...todayStyle }}>
+    <td style={{ position:'relative', width: CELL_W, minWidth: CELL_W, padding:0, borderLeft:'0.5px solid #f1f5f9', ...todayStyle }}>
       {markBar}
+      {isToday && <RayaHoy diaHabil={diaHabil}/>}
       <div style={{ position:'relative', margin:'3px 1px', height:13 }}>
         <div style={{ position:'absolute', top:0, height:'100%', left:`${(Math.max(planStart, cellStart) - cellStart) * 100}%`, width:`${planOverlap * 100}%`, borderRadius: br, overflow: 'hidden', background: isSubtask ? 'rgba(13,148,136,0.12)' : 'rgba(13,148,136,0.22)' }}>
           <div style={{ width: `${execPct}%`, height: '100%', background: isSubtask ? 'rgba(13,148,136,0.55)' : '#0d9488', transition: 'width .3s' }} />
@@ -158,11 +180,11 @@ function GanttCell({ wi, act, effectivePct, isSubtask, todayWeekIdx, issueMark, 
 
 // ─── GanttRow ─────────────────────────────────────────────────────────────────
 
-function GanttRow({ act, effectivePct, idx, expanded, onToggle, isSubtask = false, onPctChange, pctManual = false, onActivityClick, todayWeekIdx, doneDateLabel, issues = [], issueWeeks, changes, ext }: {
+function GanttRow({ act, effectivePct, idx, expanded, onToggle, isSubtask = false, onPctChange, pctManual = false, onActivityClick, todayWeekIdx, diaHabil = 5, doneDateLabel, issues = [], issueWeeks, changes, ext }: {
   act: PlanActivity; effectivePct: number; idx: number; expanded: boolean;
   onToggle: () => void; isSubtask?: boolean;
   onPctChange?: (n: number) => void; pctManual?: boolean; onActivityClick?: () => void;
-  todayWeekIdx?: number; doneDateLabel?: string;
+  todayWeekIdx?: number; diaHabil?: number; doneDateLabel?: string;
   /** Alertas/bloqueantes abiertos que impactan esta actividad */
   issues?: PlanIssue[];
   /** Por índice de semana (0-based), la marca a dibujar en la celda */
@@ -251,7 +273,7 @@ function GanttRow({ act, effectivePct, idx, expanded, onToggle, isSubtask = fals
         )}
       </td>
       {Array.from({ length: TOTAL_WEEKS }).map((_, wi) => (
-        <GanttCell key={wi} wi={wi} act={act} effectivePct={effectivePct} isSubtask={isSubtask} todayWeekIdx={todayWeekIdx} issueMark={issueWeeks?.[wi]} extWeeks={ext?.extWeeks ?? 0} blockWeeks={ext?.blockWeeks ?? 0}/>
+        <GanttCell key={wi} wi={wi} act={act} effectivePct={effectivePct} isSubtask={isSubtask} todayWeekIdx={todayWeekIdx} diaHabil={diaHabil} issueMark={issueWeeks?.[wi]} extWeeks={ext?.extWeeks ?? 0} blockWeeks={ext?.blockWeeks ?? 0}/>
       ))}
     </tr>
   );
@@ -736,7 +758,8 @@ function EntregableSection({ block, projectId, sectionIdx, getActivityPct, setAc
                     if (d) dateLabel = `${d.getDate()}/${d.getMonth() + 1}`;
                   }
                   return (
-                    <th key={i} style={{ width:CELL_W, padding:'4px 2px', textAlign:'center', borderLeft: isToday ? '2px solid #16a34a' : '0.5px solid rgba(255,255,255,0.15)', background: isToday ? 'rgba(22,163,74,0.25)' : undefined }}>
+                    <th key={i} style={{ position:'relative', width:CELL_W, padding:'4px 2px', textAlign:'center', borderLeft:'0.5px solid rgba(255,255,255,0.15)', background: isToday ? 'rgba(22,163,74,0.25)' : undefined }}>
+                      {isToday && <RayaHoy diaHabil={diaHabil}/>}
                       {isToday && <div style={{ fontSize:6, fontWeight:800, color:'#86efac', letterSpacing:'.05em', lineHeight:1.2 }}>HOY</div>}
                       <div style={{ fontSize:9, fontWeight:700, color: isToday ? '#fff' : '#fce7f3' }}>{w.l}</div>
                       <div style={{ fontSize:7, color: isToday ? '#bbf7d0' : '#fbcfe8' }}>{dateLabel}</div>
@@ -751,7 +774,7 @@ function EntregableSection({ block, projectId, sectionIdx, getActivityPct, setAc
                   <GanttRow act={act} effectivePct={act.pct} idx={i} expanded={expanded.has(i)} onToggle={() => toggle(i)}
                     onPctChange={v => setActivityPct(i, v)} pctManual={esPctManual?.(i) ?? false}
                     onActivityClick={() => onActivityClick(i, block.activities[i])}
-                    todayWeekIdx={todayWeekIdx} doneDateLabel={getDoneDate?.(i)}
+                    todayWeekIdx={todayWeekIdx} diaHabil={diaHabil} doneDateLabel={getDoneDate?.(i)}
                     issues={issuesFor(i).list} issueWeeks={issuesFor(i).weeks} changes={changesFor(i)} ext={extFor(i)}/>
                   {expanded.has(i) && act.subtasks?.map((sub, si) => (
                     <GanttRow key={`sub-${si}`} act={{ name:sub.name, pct:sub.pct, pctExp:sub.pct, startWeek:act.startWeek, endWeek:act.endWeek, ...(sub.optional?{optional:true}as any:{}) }} effectivePct={sub.pct} idx={si} expanded={false} onToggle={() => {}} isSubtask/>
