@@ -18,6 +18,10 @@ import {
   changeExtensionDays, makePlanKey, splitPlanKey, planKeyOf, CRONO_MAIN_NAME,
 } from '../lib/adminStore';
 import {
+  type CambioPct, nuevoCambio, pctsEnFecha, finDelDia, alcanzaElHistorial,
+  desdeCuando, ultimoMovimiento, cambiosDelDia,
+} from '../lib/historialPlan';
+import {
   type PesoModo, PESO_MODO_DEFAULT, seriePlanConsolidada, seriePlanFase, marcasDe,
   enSemana, enDia, realPlan, realFase, type AvanceFase,
 } from '../lib/avance';
@@ -1256,7 +1260,7 @@ function saveNotes(projectId: string, data: { pasos:string[]; alertas:string[]; 
   persistSet(`timia_notes_${projectId}`, data);
 }
 
-function PlanDetail({ plan, getActivityPct, setActivityPct, esPctManual, onActivityClick, onGoEstimaciones, getDoneDate, holidays, issues, onIssuesChange, userName, changes, outlines, canIssues = true }: {
+function PlanDetail({ plan, getActivityPct: getActivityPctHoy, setActivityPct, esPctManual, onActivityClick, onGoEstimaciones, getDoneDate, holidays, issues: issuesHoy, onIssuesChange, userName, changes, outlines, canIssues = true, pctHistorial = [], pctsActuales = {} }: {
   plan: WorkPlan;
   canIssues?: boolean;
   issues: PlanIssue[];
@@ -1271,6 +1275,9 @@ function PlanDetail({ plan, getActivityPct, setActivityPct, esPctManual, onActiv
   onGoEstimaciones?: () => void;
   holidays: Set<string>;
   getDoneDate?: (eid: string, ai: number) => string | undefined;
+  /** Movimientos de % registrados: con ellos se reconstruye una fecha pasada. */
+  pctHistorial?: CambioPct[];
+  pctsActuales?: Record<string, number>;
 }) {
   const color = PROJECTS.find(p => p.id === plan.projectId)?.color ?? '#64748b';
   // ── Extra notes (persisted) ─────────────────────────────────────────────────
@@ -1308,6 +1315,45 @@ function PlanDetail({ plan, getActivityPct, setActivityPct, esPctManual, onActiv
   const [fechaCorte, setFechaCorte] = useState<string>('');
   const corte = fechaCorte ? new Date(fechaCorte + 'T12:00:00') : undefined;
   const simulando = !!corte && !isNaN(corte.getTime());
+
+  // ── Mirar hacia atrás ──────────────────────────────────────────────────────
+  // El mismo selector va en las dos direcciones. Hacia adelante proyecta el
+  // esperado; hacia atrás devuelve los % que había ese día, deshaciendo desde
+  // hoy los movimientos posteriores. Son dos cosas distintas y la pantalla lo
+  // dice: proyectar es una hipótesis, mirar atrás es un dato.
+  const hoyISO = new Date().toISOString().slice(0, 10);
+  const mirandoAtras = simulando && fechaCorte < hoyISO;
+  const historialAlcanza = !mirandoAtras || alcanzaElHistorial(pctHistorial, finDelDia(fechaCorte), plan.planKey);
+  const pctsAtras = mirandoAtras && historialAlcanza
+    ? pctsEnFecha(pctsActuales, pctHistorial, finDelDia(fechaCorte))
+    : null;
+  /**
+   * El % de una actividad al corte. Sin valor propio ese día, se cae al % de la
+   * línea base del plan: usar el de hoy sería colar un dato de ahora en una
+   * foto del pasado.
+   */
+  const getActivityPct = (eid: string, ai: number, a: PlanActivity): number =>
+    pctsAtras ? (pctsAtras[`${plan.planKey}-${eid}-${ai}`] ?? a.pct) : getActivityPctHoy(eid, ai, a);
+
+  /**
+   * Las alertas como se veían ese día. Éstas no necesitan historial: ya guardan
+   * su fecha de inicio y de fin, así que basta leerlas. Una que se cerró
+   * después del corte vuelve a aparecer abierta, y una que nació después no
+   * aparece: el día del corte nadie sabía de ella.
+   */
+  const issues = mirandoAtras
+    ? issuesHoy
+        .filter(i => i.startDate <= fechaCorte)
+        .map(i => (i.endDate && i.endDate > fechaCorte)
+          ? { ...i, endDate: undefined, closedBy: undefined, closedAt: undefined, notaCierre: undefined }
+          : i)
+    : issuesHoy;
+  // Mirando atrás no se edita nada: lo que pasó, pasó.
+  const puedeEditar = canIssues && !mirandoAtras;
+
+  const desdeHistorial = desdeCuando(pctHistorial, plan.planKey);
+  const ultimo = ultimoMovimiento(pctHistorial, plan.planKey);
+  const movimientosDelCorte = mirandoAtras ? cambiosDelDia(pctHistorial, fechaCorte, plan.planKey) : [];
 
   const todayWeekIdx = computeCurrentWeekIdx(plan.startDate, holidays, corte);
   // Semana 1-indexada y día hábil dentro de ella: todayWeekIdx viene en base 0,
@@ -1410,10 +1456,10 @@ function PlanDetail({ plan, getActivityPct, setActivityPct, esPctManual, onActiv
         <div style={{ display:'flex', gap:8, flexShrink:0, alignItems:'center' }}>
           {/* Simular el esperado a otra fecha. El seguimiento se arma dos o tres
               días antes, y hay que saber contra qué número te van a comparar. */}
-          <label title="Ver el esperado a otra fecha, sin guardar nada"
+          <label title="Hacia adelante proyecta el esperado; hacia atrás muestra cómo estaba el plan ese día"
             style={{ display:'flex', flexDirection:'column', gap:2 }}>
             <span style={{ fontSize:8, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'.04em' }}>
-              Esperado al día</span>
+              Ver el plan al día</span>
             <input type="date" value={fechaCorte}
               onChange={e => setFechaCorte(e.target.value)}
               style={{ padding:'4px 7px', fontSize:11, borderRadius:7, outline:'none',
@@ -1428,11 +1474,13 @@ function PlanDetail({ plan, getActivityPct, setActivityPct, esPctManual, onActiv
                        borderRadius:7, cursor:'pointer' }}>Volver a hoy</button>
           )}
           {[
-            { label:'AVANCE REAL', val:`${overallReal}%`, bg:'#374151', c:'#fff', sc:'#9ca3af' },
-            { label: simulando ? 'ESPERADO · SIMULADO' : planHasExt ? 'ESPERADO · LÍNEA BASE' : 'AVANCE ESPERADO',
-              val:`${overallExpBase}%`, bg: simulando ? '#6d28d9' : '#4b5563', c:'#fff', sc: simulando ? '#ddd6fe' : '#9ca3af' },
+            { label: mirandoAtras ? `REAL AL ${fmtShort(fechaCorte).toUpperCase()}` : 'AVANCE REAL',
+              val:`${overallReal}%`, bg: mirandoAtras ? '#0f766e' : '#374151', c:'#fff', sc: mirandoAtras ? '#99f6e4' : '#9ca3af' },
+            { label: mirandoAtras ? 'ESPERADO ESE DÍA' : simulando ? 'ESPERADO · SIMULADO' : planHasExt ? 'ESPERADO · LÍNEA BASE' : 'AVANCE ESPERADO',
+              val:`${overallExpBase}%`, bg: mirandoAtras ? '#115e59' : simulando ? '#6d28d9' : '#4b5563', c:'#fff',
+              sc: mirandoAtras ? '#99f6e4' : simulando ? '#ddd6fe' : '#9ca3af' },
             ...(planHasExt ? [{ label:'ESPERADO · REPLAN. Δ⛔', val:`${overallExp}%`, bg:'#5b21b6', c:'#fff', sc:'#c4b5fd' }] : []),
-            { label: simulando ? 'DIF. CONTRA ESE DÍA' : 'DIFERENCIA',
+            { label: mirandoAtras ? 'DIFERENCIA ESE DÍA' : simulando ? 'DIF. CONTRA ESE DÍA' : 'DIFERENCIA',
               val:fmt1(overallDif), bg:difBg(overallDif), c:difColor(overallDif), sc:difColor(overallDif) },
           ].map(b => (
             <div key={b.label} style={{ textAlign:'center', padding:'6px 16px', background:b.bg, borderRadius:8 }}>
@@ -1443,22 +1491,57 @@ function PlanDetail({ plan, getActivityPct, setActivityPct, esPctManual, onActiv
         </div>
       </div>
 
-      {simulando && (
+      {/* Sello de corte: la presentación siempre lleva uno y la herramienta no lo daba. */}
+      {!simulando && (
+        <div style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 12px', marginBottom:10,
+                      background:'#f8fafc', border:'0.5px solid #e2e8f0', borderRadius:9, flexWrap:'wrap' }}>
+          <Clock size={11} color="#94a3b8"/>
+          <span style={{ fontSize:10.5, color:'#64748b' }}>
+            {ultimo
+              ? <>Información a corte de <b style={{ color:'#374151' }}>{new Date(ultimo.en).toLocaleString('es-CO', { day:'numeric', month:'long', hour:'2-digit', minute:'2-digit' })}</b>
+                  {' · '}último cambio de {ultimo.por.split(' ')[0]}</>
+              : <>Sin movimientos registrados todavía. A partir de ahora cada cambio de % queda con fecha y autor.</>}
+          </span>
+          {desdeHistorial && (
+            <span style={{ fontSize:9.5, color:'#94a3b8', marginLeft:'auto' }}>
+              historial desde el {fmtShort(desdeHistorial.toISOString().slice(0,10))}
+            </span>
+          )}
+        </div>
+      )}
+
+      {simulando && (() => {
+        const atras = mirandoAtras;
+        const bg = atras ? (historialAlcanza ? '#f0fdfa' : '#fffbeb') : '#f5f3ff';
+        const bc = atras ? (historialAlcanza ? '#99f6e4' : '#fde68a') : '#ddd6fe';
+        const tc = atras ? (historialAlcanza ? '#0f766e' : '#a16207') : '#6d28d9';
+        const fechaLarga = corte!.toLocaleDateString('es-CO', { weekday:'long', day:'numeric', month:'long' });
+        return (
         <div style={{ display:'flex', alignItems:'center', gap:9, padding:'9px 14px', marginBottom:12,
-                      background:'#f5f3ff', border:'0.5px solid #ddd6fe', borderRadius:10 }}>
-          <span style={{ fontSize:10, fontWeight:700, color:'#6d28d9', textTransform:'uppercase',
-                         letterSpacing:'.05em', flexShrink:0 }}>Simulación</span>
-          <span style={{ fontSize:11.5, color:'#5b21b6', lineHeight:1.5 }}>
-            Estás viendo el <b>esperado al {corte!.toLocaleDateString('es-CO', { weekday:'long', day:'numeric', month:'long' })}</b>
-            {' '}(semana {semanaHoy}, día {diaHoy} de 5).
-            El avance real sigue siendo el de hoy: el que no cambia es el de la gente, no el del plan.
+                      background:bg, border:`0.5px solid ${bc}`, borderRadius:10, flexWrap:'wrap' }}>
+          <span style={{ fontSize:10, fontWeight:700, color:tc, textTransform:'uppercase',
+                         letterSpacing:'.05em', flexShrink:0 }}>
+            {atras ? (historialAlcanza ? 'Corte histórico' : 'Sin datos') : 'Proyección'}</span>
+          <span style={{ fontSize:11.5, color:tc, lineHeight:1.5, flex:1, minWidth:240 }}>
+            {!atras ? <>
+              Estás viendo el <b>esperado al {fechaLarga}</b> (semana {semanaHoy}, día {diaHoy} de 5).
+              El avance real sigue siendo el de hoy: el que no cambia es el de la gente, no el del plan.
+            </> : historialAlcanza ? <>
+              El plan <b>como estaba el {fechaLarga}</b> (semana {semanaHoy}, día {diaHoy} de 5):
+              los % de ese día y las alertas que estaban abiertas entonces.
+              {movimientosDelCorte.length > 0 && <> Ese día se movieron {movimientosDelCorte.length} actividad{movimientosDelCorte.length !== 1 ? 'es' : ''}.</>}
+            </> : <>
+              No puedo mostrarte ese día: el historial empieza el{' '}
+              <b>{desdeHistorial ? fmtShort(desdeHistorial.toISOString().slice(0,10)) : 'día que se registre el primer cambio'}</b>.
+              Antes de esa fecha no hay movimientos guardados, y enseñarte los % de hoy con fecha de entonces sería mentirte.
+            </>}
           </span>
           <button onClick={() => setFechaCorte('')}
             style={{ marginLeft:'auto', flexShrink:0, padding:'5px 11px', fontSize:10.5, fontWeight:600,
-                     border:'none', background:'#6d28d9', color:'#fff', borderRadius:7, cursor:'pointer' }}>
+                     border:'none', background:tc, color:'#fff', borderRadius:7, cursor:'pointer' }}>
             Volver a hoy</button>
         </div>
-      )}
+      ); })()}
 
       <div style={{ display:'grid', gridTemplateColumns:`repeat(${plan.entregables.length},1fr)`, gap:8, marginBottom:14 }}>
         {plan.entregables.map(e => {
@@ -1515,8 +1598,14 @@ function PlanDetail({ plan, getActivityPct, setActivityPct, esPctManual, onActiv
 
       {/* Pasos (editables) + Alertas / Bloqueantes con fechas e impacto */}
       <div style={{ display:'grid', gridTemplateColumns:'1fr 2fr', gap:8, marginBottom:20 }}>
-        <PasosPanel pasos={pasos.filter(p => p.planKey === plan.planKey)} userName={userName}
-          onChange={guardarPasos} readOnly={!canIssues}/>
+        <PasosPanel userName={userName} onChange={guardarPasos} readOnly={!puedeEditar}
+          pasos={pasos
+            .filter(p => p.planKey === plan.planKey)
+            // Un paso que se cerró después del corte estaba pendiente ese día;
+            // uno creado después todavía no existía.
+            .filter(p => !mirandoAtras || p.creadoEn.slice(0,10) <= fechaCorte)
+            .map(p => (mirandoAtras && p.hechoEn && p.hechoEn > fechaCorte)
+              ? { ...p, hechoEn: undefined, hechoPor: undefined, notaCierre: undefined } : p)}/>
         <IssuesPanel
           plan={plan}
           issues={issues.filter(i => i.planKey === plan.planKey)}
@@ -1524,7 +1613,7 @@ function PlanDetail({ plan, getActivityPct, setActivityPct, esPctManual, onActiv
                    ...extraNotes.alertas.map((t:string) => ({ type:'alerta' as const, text:t })), ...extraNotes.bloqueantes.map((t:string) => ({ type:'bloqueante' as const, text:t }))]}
           userName={userName}
           outlines={outlines}
-          readOnly={!canIssues}
+          readOnly={!puedeEditar}
           onChange={next => onIssuesChange([...issues.filter(i => i.planKey !== plan.planKey), ...next])}
         />
       </div>
@@ -2581,6 +2670,7 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
   const [historial,         setHistorial]         = useState<PlanHistorialEntry[]>(() => adminStore.getHistorial());
   const [activityAssignees, setActivityAssignees] = useState<ActivityAssignees>(()   => adminStore.getActivityAssignees());
   const [pctOverrides,      setPctOverrides]      = useState<Record<string,number>>(()=> adminStore.getPlanPcts());
+  const [pctHistorial,      setPctHistorial]      = useState<CambioPct[]>(()=> adminStore.getPctHistorial());
   const [activityJiras,     setActivityJiras]     = useState<Record<string,string>>(()=> adminStore.getActivityJiras());
   const [activityDoneDates, setActivityDoneDates] = useState<Record<string,string>>(()=> adminStore.getActivityDoneDates());
   const [issues,            setIssues]            = useState<PlanIssue[]>(() => adminStore.getPlanIssues());
@@ -2699,17 +2789,29 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
     return pctOverrides[`${projectId}-${entregableId}-${actIdx}`] !== undefined;
   }
 
+  /**
+   * Deja constancia de un movimiento de %. Es lo que permite volver a sacar la
+   * foto de una fecha pasada: sin esto el plan solo sabe cómo está hoy.
+   */
+  function anotarCambio(clave: string, de: number | undefined, a: number | undefined) {
+    if (de === a) return;
+    const h = [...pctHistorial, nuevoCambio(clave, selected, de, a, user?.name ?? 'alguien')];
+    setPctHistorial(h); adminStore.savePctHistorial(h);
+  }
+
   /** Quita el valor manual y devuelve la actividad al cálculo de sus subtareas. */
   function quitarPctManual(entregableId: string, actIdx: number) {
     const k = `${selected}-${entregableId}-${actIdx}`;
     const next = { ...pctOverrides }; delete next[k];
     setPctOverrides(next); adminStore.savePlanPcts(next);
+    anotarCambio(k, pctOverrides[k], undefined);
   }
 
   function setActivityPctManual(entregableId: string, actIdx: number, pct: number) {
     const k = `${selected}-${entregableId}-${actIdx}`;
     const next = { ...pctOverrides, [k]: pct };
     setPctOverrides(next); adminStore.savePlanPcts(next);
+    anotarCambio(k, pctOverrides[k], pct);
     const doneKey = `${selected}-${entregableId}-${actIdx}`;
     const nextDone = { ...activityDoneDates };
     if (pct >= 100) {
@@ -2755,6 +2857,12 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
     setActivityDoneDates(nextDone2);
     setEtapaStates(nextEtapaStates); setPctOverrides(nextPctOverrides); setHistorial(nextHistorial);
     adminStore.saveEtapaStates(nextEtapaStates); adminStore.savePlanPcts(nextPctOverrides); adminStore.saveHistorial(nextHistorial); adminStore.saveActivityDoneDates(nextDone2);
+    // Marcar una etapa también mueve el % de la actividad: al historial va igual
+    // que si lo hubieran escrito a mano, o la foto del día saldría incompleta.
+    if (pctOverrides[pctKey] !== newActPct) {
+      const h = [...pctHistorial, nuevoCambio(pctKey, projectId, pctOverrides[pctKey], newActPct, user.name)];
+      setPctHistorial(h); adminStore.savePctHistorial(h);
+    }
   }
 
   /** Datos de la actividad del drawer que la tarjeta del tablero necesita. */
@@ -3396,6 +3504,8 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
               changes={changes}
               outlines={outlines.filter(o => o.projectId === plan.projectId)}
               canIssues={canIssues}
+              pctHistorial={pctHistorial}
+              pctsActuales={pctOverrides}
             />
             )}
           </>
