@@ -24,6 +24,7 @@
     "verif:real-fase": "tsx scripts/verif-real-fase.ts",
     "verif:issues": "tsx scripts/verif-issues.ts",
     "verif:pasos": "tsx scripts/verif-pasos.ts",
+    "verif:historial": "tsx scripts/verif-historial.ts",
     "verif:tipos": "tsx scripts/verif-tipos.ts"
   },
   "dependencies": {

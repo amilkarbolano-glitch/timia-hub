@@ -2,6 +2,7 @@
 
 import { PROJECTS as BASE_PROJECTS, normalizeRole, refreshProjects } from '../contexts/AuthContext';
 import { persistSet, persistGet, probeApi, apiMe, loadStateFromApi } from './persist';
+import type { CambioPct } from './historialPlan';
 export { loadStateFromApi } from './persist';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
@@ -620,6 +621,11 @@ export const adminStore = {
   // Plan % overrides (keyed by projectId.entregableId.activityIndex)
   getPlanPcts:   (): Record<string, number> => load('plan_pcts', {}),
   savePlanPcts:  (p: Record<string, number>) => save('plan_pcts', p),
+
+  // Historial de movimientos de % — append-only, es lo que permite ver el plan
+  // como estaba en una fecha pasada. Nunca se reescribe ni se poda.
+  getPctHistorial:  (): CambioPct[]  => load('plan_pct_historial', []),
+  savePctHistorial: (h: CambioPct[]) => save('plan_pct_historial', h),
 
   // Etapa states: key = `${projectId}__${entregableId}__${actIdx}__${etapaId}`
   getEtapaStates:  (): EtapaStates          => load('etapa_states', {}),
