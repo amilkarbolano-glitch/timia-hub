@@ -14,7 +14,8 @@ import {
   adminStore,
   type PlanEtapa, type EtapaStates, type PlanHistorialEntry,
   type ActivityAssignees, type AdminUser, type AdminProject, type PlanConfig, type PlanIssue, type PlanImpact, type BitacoraEntry,
-  issueImpacts, aplicarEdicionIssue, changeExtensionDays, makePlanKey, splitPlanKey, planKeyOf, CRONO_MAIN_NAME,
+  issueImpacts, aplicarEdicionIssue, escalarAlerta, migrarPasos, type PasoPlan,
+  changeExtensionDays, makePlanKey, splitPlanKey, planKeyOf, CRONO_MAIN_NAME,
 } from '../lib/adminStore';
 import {
   type PesoModo, PESO_MODO_DEFAULT, seriePlanConsolidada, seriePlanFase, marcasDe,
@@ -820,36 +821,6 @@ function EntregableSection({ block, projectId, sectionIdx, getActivityPct, setAc
   );
 }
 
-// ─── PlanNotesModal ───────────────────────────────────────────────────────────
-
-interface NoteItem { text: string; type: 'pasos'|'alertas'|'bloqueantes'; idx: number; custom: boolean; }
-
-function PlanNotesModal({ item, onClose, onDelete }: { item: NoteItem; onClose: () => void; onDelete?: () => void }) {
-  const typeLabel = item.type === 'pasos' ? 'Siguiente paso' : item.type === 'alertas' ? 'Alerta' : 'Bloqueante';
-  const typeColor = item.type === 'pasos' ? '#15803d' : item.type === 'alertas' ? '#a16207' : '#dc2626';
-  const typeBg    = item.type === 'pasos' ? '#f0fdf4' : item.type === 'alertas' ? '#fef9c3' : '#fef2f2';
-  return (
-    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.35)', zIndex:200, display:'flex', alignItems:'center', justifyContent:'center' }}
-      onClick={e=>{ if(e.target===e.currentTarget) onClose(); }}>
-      <div style={{ background:'#fff', borderRadius:14, padding:'24px 28px', maxWidth:480, width:'92%', boxShadow:'0 20px 60px rgba(0,0,0,0.15)' }}>
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:16 }}>
-          <span style={{ fontSize:11, padding:'3px 10px', borderRadius:8, background:typeBg, color:typeColor, fontWeight:600 }}>{typeLabel}</span>
-          <button onClick={onClose} style={{ border:'none', background:'none', cursor:'pointer', color:'#94a3b8', display:'flex' }}><X size={16}/></button>
-        </div>
-        <p style={{ margin:'0 0 20px', fontSize:14, color:'#111', lineHeight:1.7 }}>{item.text}</p>
-        <div style={{ display:'flex', justifyContent:'flex-end', gap:8 }}>
-          {item.custom && onDelete && (
-            <button onClick={()=>{ onDelete(); onClose(); }} style={{ display:'flex', alignItems:'center', gap:5, padding:'7px 14px', fontSize:12, border:'0.5px solid #fecaca', borderRadius:7, background:'#fef2f2', color:'#dc2626', cursor:'pointer' }}>
-              <Trash2 size={12}/> Eliminar
-            </button>
-          )}
-          <button onClick={onClose} style={{ padding:'7px 16px', fontSize:12, background:'#f1f5f9', border:'none', borderRadius:7, cursor:'pointer', color:'#374151' }}>Cerrar</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ─── IssuesPanel — alertas y bloqueantes con inicio/fin e impacto ─────────────
 
 const ISSUE_STYLE = {
@@ -881,11 +852,14 @@ function IssuesPanel({ plan, issues, legacy, userName, onChange, outlines, readO
   const [showClosed, setShowClosed] = useState(false);
   const [resolving, setResolving] = useState<string | null>(null);
   const [resolveDate, setResolveDate] = useState(todayISO);
+  // Un «resuelto» sin explicación no sirve en el seguimiento: la pregunta de la
+  // reunión no es si se cerró, es cómo.
+  const [resolveNota, setResolveNota] = useState('');
   // Una alerta no nace completa: la tarea que impacta se descubre después, el
   // bloqueante se extiende a otra fase, el título se escribió a la carrera. Sin
   // edición solo quedaba borrar y volver a crear, y eso pierde quién la abrió.
   const [editando, setEditando] = useState<string | null>(null);
-  const empty = { title:'', detail:'', startDate: todayISO, endDate: '', impacts: [] as PlanImpact[] };
+  const empty = { title:'', detail:'', startDate: todayISO, endDate: '', notaCierre:'', impacts: [] as PlanImpact[] };
   const [form, setForm] = useState(empty);
 
   const open   = issues.filter(i => !i.endDate).sort((a,b) => (a.type === b.type ? a.startDate.localeCompare(b.startDate) : a.type === 'bloqueante' ? -1 : 1));
@@ -903,7 +877,7 @@ function IssuesPanel({ plan, issues, legacy, userName, onChange, outlines, readO
   function editar(i: PlanIssue) {
     setAdding(null); setResolving(null); setEditando(i.id); setTipoForm(i.type);
     setForm({ title: i.title, detail: i.detail ?? '', startDate: i.startDate,
-              endDate: i.endDate ?? '', impacts: issueImpacts(i) });
+              endDate: i.endDate ?? '', notaCierre: i.notaCierre ?? '', impacts: issueImpacts(i) });
   }
 
   function submit() {
@@ -911,6 +885,7 @@ function IssuesPanel({ plan, issues, legacy, userName, onChange, outlines, readO
     const campos = {
       type: tipoForm, title: form.title.trim(), detail: form.detail.trim() || undefined,
       startDate: form.startDate || todayISO, impacts: form.impacts,
+      notaCierre: form.notaCierre.trim() || undefined,
     };
     if (enEdicion) {
       onChange(issues.map(i => i.id === enEdicion.id
@@ -926,9 +901,19 @@ function IssuesPanel({ plan, issues, legacy, userName, onChange, outlines, readO
     cerrarForm();
   }
   function resolve(id: string) {
-    onChange(issues.map(i => i.id === id ? { ...i, endDate: resolveDate || todayISO, closedBy: userName, closedAt: new Date().toISOString() } : i));
-    setResolving(null);
+    onChange(issues.map(i => i.id === id
+      ? { ...i, endDate: resolveDate || todayISO, closedBy: userName, closedAt: new Date().toISOString(),
+          notaCierre: resolveNota.trim() || undefined }
+      : i));
+    cerrarResolucion();
   }
+  /** Cierra la alerta y abre el bloqueante que la releva, enlazados. */
+  function escalar(i: PlanIssue) {
+    const [cerrada, nuevo] = escalarAlerta(i, resolveNota.trim(), userName, resolveDate || todayISO);
+    onChange([...issues.map(x => x.id === i.id ? cerrada : x), nuevo]);
+    cerrarResolucion();
+  }
+  function cerrarResolucion() { setResolving(null); setResolveNota(''); }
   function reopen(id: string) { onChange(issues.map(i => i.id === id ? { ...i, endDate: undefined, closedBy: undefined, closedAt: undefined } : i)); }
   function remove(id: string) { if (window.confirm('¿Eliminar este registro?')) onChange(issues.filter(i => i.id !== id)); }
 
@@ -955,14 +940,34 @@ function IssuesPanel({ plan, issues, legacy, userName, onChange, outlines, readO
               ? <ImpactChips impacts={imps} plans={outlines} max={4}/>
               : <span style={{ fontSize:9, color:'#94a3b8' }}>sin tarea asociada</span>}
             <span style={{ fontSize:9, color:'#94a3b8' }}>· {i.createdBy.split(' ')[0]}{i.closedBy ? ` · cerró ${i.closedBy.split(' ')[0]}` : ''}</span>
+            {i.origenId && <span title="Nació al escalar una alerta" style={{ fontSize:9, color:'#dc2626', background:'#fef2f2', border:'0.5px solid #fecaca', borderRadius:4, padding:'1px 5px', fontWeight:600 }}>escalado de una alerta</span>}
+            {issues.some(x => x.origenId === i.id) && <span title="Esta alerta escaló" style={{ fontSize:9, color:'#dc2626', background:'#fef2f2', border:'0.5px solid #fecaca', borderRadius:4, padding:'1px 5px', fontWeight:600 }}>escaló a bloqueante</span>}
           </div>
+          {i.notaCierre && (
+            <div style={{ fontSize:10, color:'#15803d', background:'#f0fdf4', border:'0.5px solid #bbf7d0', borderRadius:6, padding:'4px 7px', marginTop:5, lineHeight:1.45 }}>
+              <b style={{ fontWeight:600 }}>Cierre:</b> {i.notaCierre}
+            </div>
+          )}
           {resolving === i.id && (
-            <div style={{ display:'flex', alignItems:'center', gap:5, marginTop:6 }}>
-              <span style={{ fontSize:10, color:'#374151' }}>Fecha de fin:</span>
-              <input type="date" value={resolveDate} min={i.startDate} max={todayISO} onChange={e => setResolveDate(e.target.value)}
-                style={{ fontSize:10, padding:'2px 5px', border:'0.5px solid #e2e8f0', borderRadius:5 }}/>
-              <button onClick={() => resolve(i.id)} style={{ fontSize:10, padding:'3px 9px', background:'#15803d', color:'#fff', border:'none', borderRadius:5, cursor:'pointer', fontWeight:600 }}>Confirmar fin</button>
-              <button onClick={() => setResolving(null)} style={{ fontSize:10, padding:'3px 7px', background:'#f1f5f9', border:'none', borderRadius:5, cursor:'pointer' }}>Cancelar</button>
+            <div style={{ marginTop:6, padding:'7px 9px', background:'#f8fafc', border:'0.5px solid #e2e8f0', borderRadius:7 }}>
+              <div style={{ display:'flex', alignItems:'center', gap:5, marginBottom:5 }}>
+                <span style={{ fontSize:10, color:'#374151' }}>Fecha de fin:</span>
+                <input type="date" value={resolveDate} min={i.startDate} max={todayISO} onChange={e => setResolveDate(e.target.value)}
+                  style={{ fontSize:10, padding:'2px 5px', border:'0.5px solid #e2e8f0', borderRadius:5 }}/>
+              </div>
+              <textarea value={resolveNota} onChange={e => setResolveNota(e.target.value)} rows={2} autoFocus
+                placeholder="¿Cómo se resolvió? (ej.: Gobierno aprobó el diccionario el viernes)"
+                style={{ width:'100%', padding:'5px 8px', fontSize:10, border:'0.5px solid #e2e8f0', borderRadius:6, resize:'vertical', boxSizing:'border-box', lineHeight:1.5, marginBottom:5 }}/>
+              <div style={{ display:'flex', gap:4, flexWrap:'wrap', alignItems:'center' }}>
+                <button onClick={() => resolve(i.id)} style={{ fontSize:10, padding:'3px 9px', background:'#15803d', color:'#fff', border:'none', borderRadius:5, cursor:'pointer', fontWeight:600 }}>Confirmar fin</button>
+                {i.type === 'alerta' && (
+                  <button onClick={() => escalar(i)} title="Cierra la alerta y abre un bloqueante con las mismas tareas afectadas"
+                    style={{ fontSize:10, padding:'3px 9px', background:'#fef2f2', color:'#dc2626', border:'0.5px solid #fecaca', borderRadius:5, cursor:'pointer', fontWeight:600 }}>
+                    ⛔ Escalar a bloqueante
+                  </button>
+                )}
+                <button onClick={cerrarResolucion} style={{ fontSize:10, padding:'3px 7px', background:'#f1f5f9', border:'none', borderRadius:5, cursor:'pointer' }}>Cancelar</button>
+              </div>
             </div>
           )}
         </div>
@@ -972,7 +977,7 @@ function IssuesPanel({ plan, issues, legacy, userName, onChange, outlines, readO
             <Pencil size={9}/>{esta ? 'Cerrar' : 'Editar'}
           </button>
           {isOpen
-            ? <button onClick={() => { setResolving(i.id); setResolveDate(todayISO); }} title="Reportar fin" style={{ fontSize:9, padding:'2px 7px', background:'#f0fdf4', color:'#15803d', border:'0.5px solid #bbf7d0', borderRadius:5, cursor:'pointer', fontWeight:600 }}>Resolver</button>
+            ? <button onClick={() => { setResolving(i.id); setResolveDate(todayISO); setResolveNota(''); setEditando(null); }} title="Reportar fin" style={{ fontSize:9, padding:'2px 7px', background:'#f0fdf4', color:'#15803d', border:'0.5px solid #bbf7d0', borderRadius:5, cursor:'pointer', fontWeight:600 }}>Resolver</button>
             : <button onClick={() => reopen(i.id)} title="Reabrir" style={{ fontSize:9, padding:'2px 7px', background:'#fff', color:'#64748b', border:'0.5px solid #e2e8f0', borderRadius:5, cursor:'pointer' }}>Reabrir</button>}
           <button onClick={() => remove(i.id)} style={{ border:'none', background:'none', cursor:'pointer', color:'#cbd5e1', padding:2, display:'flex' }}><Trash2 size={10}/></button>
         </div>}
@@ -1044,6 +1049,10 @@ function IssuesPanel({ plan, issues, legacy, userName, onChange, outlines, readO
           </div>
           <textarea value={form.detail} onChange={e => setForm(f => ({ ...f, detail:e.target.value }))} rows={2} placeholder="Detalle / contexto (opcional)"
             style={{ width:'100%', padding:'5px 8px', fontSize:10, border:'0.5px solid #e2e8f0', borderRadius:6, resize:'vertical', boxSizing:'border-box', lineHeight:1.5, marginBottom:6 }}/>
+          {enEdicion && form.endDate && (
+            <textarea value={form.notaCierre} onChange={e => setForm(f => ({ ...f, notaCierre:e.target.value }))} rows={2} placeholder="¿Cómo se resolvió?"
+              style={{ width:'100%', padding:'5px 8px', fontSize:10, border:'0.5px solid #bbf7d0', background:'#f0fdf4', borderRadius:6, resize:'vertical', boxSizing:'border-box', lineHeight:1.5, marginBottom:6 }}/>
+          )}
           <div style={{ display:'flex', gap:4, alignItems:'center' }}>
             <button onClick={submit} disabled={!form.title.trim()} style={{ padding:'4px 12px', fontSize:10, background: form.title.trim() ? st.solid : '#e2e8f0', color:'#fff', border:'none', borderRadius:5, cursor: form.title.trim() ? 'pointer' : 'default', fontWeight:600 }}>
               {enEdicion ? 'Guardar cambios' : 'Registrar'}</button>
@@ -1082,6 +1091,156 @@ function IssuesPanel({ plan, issues, legacy, userName, onChange, outlines, readO
   );
 }
 
+// ─── PasosPanel ───────────────────────────────────────────────────────────────
+
+/**
+ * Siguientes pasos. Antes eran texto suelto y la única salida era la papelera:
+ * un paso cumplido desaparecía sin dejar rastro de que se había cumplido, que
+ * es justo lo que hay que contar en el seguimiento. Ahora se resuelven con
+ * fecha y nota, como las alertas, y se pueden editar.
+ */
+function PasosPanel({ pasos, userName, onChange, readOnly = false }: {
+  pasos: PasoPlan[];
+  userName: string;
+  onChange: (next: PasoPlan[]) => void;
+  readOnly?: boolean;
+}) {
+  const todayISO = new Date().toISOString().slice(0, 10);
+  const [adding, setAdding] = useState(false);
+  const [editando, setEditando] = useState<string | null>(null);
+  const [texto, setTexto] = useState('');
+  const [resolviendo, setResolviendo] = useState<string | null>(null);
+  const [fecha, setFecha] = useState(todayISO);
+  const [nota, setNota] = useState('');
+  const [verHechos, setVerHechos] = useState(false);
+
+  const abiertos = pasos.filter(p => !p.hechoEn);
+  const hechos   = pasos.filter(p => !!p.hechoEn).sort((a,b) => (b.hechoEn ?? '').localeCompare(a.hechoEn ?? ''));
+
+  function cerrarTodo() { setAdding(false); setEditando(null); setResolviendo(null); setTexto(''); setNota(''); }
+  function agregar() {
+    const t = texto.trim(); if (!t) return;
+    onChange([...pasos, { id:`pa-${Date.now()}-${Math.random().toString(36).slice(2,6)}`,
+      planKey: pasos[0]?.planKey ?? '', texto:t, creadoPor:userName, creadoEn:new Date().toISOString() }]);
+    cerrarTodo();
+  }
+  function guardarEdicion(id: string) {
+    const t = texto.trim(); if (!t) return;
+    onChange(pasos.map(p => p.id === id ? { ...p, texto: t } : p));
+    cerrarTodo();
+  }
+  function resolver(id: string) {
+    onChange(pasos.map(p => p.id === id
+      ? { ...p, hechoEn: fecha || todayISO, hechoPor: userName, notaCierre: nota.trim() || undefined } : p));
+    cerrarTodo();
+  }
+  function reabrir(id: string) {
+    onChange(pasos.map(p => p.id === id ? { ...p, hechoEn: undefined, hechoPor: undefined, notaCierre: undefined } : p));
+  }
+  function borrar(id: string) { if (window.confirm('¿Eliminar este paso?')) onChange(pasos.filter(p => p.id !== id)); }
+
+  const hay = pasos.length > 0;
+  const fila = (p: PasoPlan) => {
+    const abierto = !p.hechoEn;
+    const esta = editando === p.id;
+    return (
+      <div key={p.id} style={{ margin:'3px 0', padding:'5px 7px', borderRadius:7, background: abierto ? 'rgba(255,255,255,0.75)' : '#f8fafc',
+                               border:`0.5px solid ${esta ? '#15803d' : abierto ? '#dcfce7' : '#e2e8f0'}`, opacity: abierto ? 1 : .8 }}>
+        {esta ? (
+          <div>
+            <textarea value={texto} onChange={e => setTexto(e.target.value)} rows={2} autoFocus
+              onKeyDown={e => { if (e.key==='Enter' && !e.shiftKey) { e.preventDefault(); guardarEdicion(p.id); } if (e.key==='Escape') cerrarTodo(); }}
+              style={{ width:'100%', padding:'5px 8px', fontSize:11, border:'0.5px solid #bbf7d0', borderRadius:6, resize:'vertical', boxSizing:'border-box', lineHeight:1.5 }}/>
+            <div style={{ display:'flex', gap:4, marginTop:4 }}>
+              <button onClick={() => guardarEdicion(p.id)} style={{ padding:'3px 10px', fontSize:10, background:'#15803d', color:'#fff', border:'none', borderRadius:5, cursor:'pointer', fontWeight:600 }}>Guardar</button>
+              <button onClick={cerrarTodo} style={{ padding:'3px 8px', fontSize:10, background:'#f1f5f9', border:'none', borderRadius:5, cursor:'pointer', color:'#374151' }}>Cancelar</button>
+            </div>
+          </div>
+        ) : (
+          <div style={{ display:'flex', alignItems:'flex-start', gap:6 }}>
+            <span style={{ fontSize:11, flexShrink:0, marginTop:1, color: abierto ? '#15803d' : '#94a3b8' }}>{abierto ? '•' : '✓'}</span>
+            <div style={{ flex:1, minWidth:0 }}>
+              <div style={{ fontSize:11, color:'#374151', lineHeight:1.5, textDecoration: abierto ? 'none' : 'line-through' }}>{p.texto}</div>
+              <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginTop:2 }}>
+                {!abierto && <span style={{ fontSize:9, color:'#15803d', fontWeight:600, background:'#f0fdf4', borderRadius:4, padding:'1px 5px' }}>
+                  hecho {fmtShort(p.hechoEn!)}{p.hechoPor ? ` · ${p.hechoPor.split(' ')[0]}` : ''}</span>}
+                <span style={{ fontSize:9, color:'#94a3b8' }}>{p.creadoPor.split(' ')[0]}</span>
+              </div>
+              {p.notaCierre && <div style={{ fontSize:10, color:'#15803d', marginTop:3, lineHeight:1.45 }}>{p.notaCierre}</div>}
+              {resolviendo === p.id && (
+                <div style={{ marginTop:5, padding:'6px 8px', background:'#fff', border:'0.5px solid #e2e8f0', borderRadius:6 }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:5, marginBottom:4 }}>
+                    <span style={{ fontSize:10, color:'#374151' }}>Hecho el:</span>
+                    <input type="date" value={fecha} max={todayISO} onChange={e => setFecha(e.target.value)}
+                      style={{ fontSize:10, padding:'2px 5px', border:'0.5px solid #e2e8f0', borderRadius:5 }}/>
+                  </div>
+                  <textarea value={nota} onChange={e => setNota(e.target.value)} rows={2} autoFocus placeholder="¿Con qué resultado? (opcional)"
+                    style={{ width:'100%', padding:'5px 8px', fontSize:10, border:'0.5px solid #e2e8f0', borderRadius:6, resize:'vertical', boxSizing:'border-box', lineHeight:1.5, marginBottom:4 }}/>
+                  <div style={{ display:'flex', gap:4 }}>
+                    <button onClick={() => resolver(p.id)} style={{ fontSize:10, padding:'3px 9px', background:'#15803d', color:'#fff', border:'none', borderRadius:5, cursor:'pointer', fontWeight:600 }}>Confirmar</button>
+                    <button onClick={cerrarTodo} style={{ fontSize:10, padding:'3px 7px', background:'#f1f5f9', border:'none', borderRadius:5, cursor:'pointer' }}>Cancelar</button>
+                  </div>
+                </div>
+              )}
+            </div>
+            {!readOnly && (
+              <div style={{ display:'flex', gap:3, flexShrink:0 }}>
+                <button onClick={() => { cerrarTodo(); setEditando(p.id); setTexto(p.texto); }} title="Editar"
+                  style={{ fontSize:9, padding:'2px 6px', background:'#fff', color:'#64748b', border:'0.5px solid #e2e8f0', borderRadius:5, cursor:'pointer', fontWeight:600, display:'flex', alignItems:'center', gap:3 }}><Pencil size={9}/>Editar</button>
+                {abierto
+                  ? <button onClick={() => { cerrarTodo(); setResolviendo(p.id); setFecha(todayISO); }} title="Marcar como hecho"
+                      style={{ fontSize:9, padding:'2px 7px', background:'#f0fdf4', color:'#15803d', border:'0.5px solid #bbf7d0', borderRadius:5, cursor:'pointer', fontWeight:600 }}>Resolver</button>
+                  : <button onClick={() => reabrir(p.id)} title="Volver a pendiente"
+                      style={{ fontSize:9, padding:'2px 7px', background:'#fff', color:'#64748b', border:'0.5px solid #e2e8f0', borderRadius:5, cursor:'pointer' }}>Reabrir</button>}
+                <button onClick={() => borrar(p.id)} title="Eliminar — para un paso cumplido usa Resolver"
+                  style={{ border:'none', background:'none', cursor:'pointer', color:'#cbd5e1', padding:2, display:'flex' }}><Trash2 size={10}/></button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div style={{ background: hay ? '#f0fdf4' : '#f8fafc', borderRadius:10, padding:'10px 14px', border:`0.5px solid ${hay ? '#bbf7d0' : '#e2e8f0'}` }}>
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8, gap:8 }}>
+        <p style={{ margin:0, fontSize:11, fontWeight:600, color: hay ? '#15803d' : '#94a3b8', display:'flex', alignItems:'center', gap:5 }}>
+          <CheckCircle size={12}/> Siguientes pasos
+          {abiertos.length > 0 && <span style={{ marginLeft:4, background:'rgba(0,0,0,0.08)', borderRadius:10, padding:'0 6px', fontSize:10 }}>{abiertos.length}</span>}
+        </p>
+        {!readOnly && (
+          <button onClick={() => { cerrarTodo(); setAdding(true); }}
+            style={{ border:'none', background: hay ? '#bbf7d0' : '#e2e8f0', cursor:'pointer', color: hay ? '#15803d' : '#64748b', borderRadius:6, padding:'2px 7px', display:'flex', alignItems:'center', gap:3, fontSize:10, fontWeight:600 }}>
+            <Plus size={10}/> Paso
+          </button>
+        )}
+      </div>
+      {adding && (
+        <div style={{ marginBottom:8 }}>
+          <textarea value={texto} onChange={e => setTexto(e.target.value)} rows={2} autoFocus placeholder="Nuevo paso…"
+            onKeyDown={e => { if (e.key==='Enter' && !e.shiftKey) { e.preventDefault(); agregar(); } if (e.key==='Escape') cerrarTodo(); }}
+            style={{ width:'100%', padding:'5px 8px', fontSize:11, border:'0.5px solid #bbf7d0', borderRadius:6, background:'#fff', resize:'vertical', boxSizing:'border-box', outline:'none', lineHeight:1.5 }}/>
+          <div style={{ display:'flex', gap:4, marginTop:4 }}>
+            <button onClick={agregar} style={{ padding:'3px 10px', fontSize:10, background:'#15803d', color:'#fff', border:'none', borderRadius:5, cursor:'pointer', fontWeight:600 }}>Guardar</button>
+            <button onClick={cerrarTodo} style={{ padding:'3px 8px', fontSize:10, background:'#f1f5f9', border:'none', borderRadius:5, cursor:'pointer', color:'#374151' }}>Cancelar</button>
+          </div>
+        </div>
+      )}
+      {abiertos.length === 0 && !adding && <p style={{ margin:0, fontSize:11, color:'#94a3b8' }}>Sin pasos por iniciar</p>}
+      {abiertos.map(fila)}
+      {hechos.length > 0 && (
+        <div style={{ marginTop:6 }}>
+          <button onClick={() => setVerHechos(v => !v)} style={{ border:'none', background:'none', cursor:'pointer', fontSize:10, color:'#64748b', padding:0, display:'flex', alignItems:'center', gap:3 }}>
+            {verHechos ? <ChevronDown size={11}/> : <ChevronRight size={11}/>} {hechos.length} hecho{hechos.length!==1?'s':''}
+          </button>
+          {verHechos && hechos.map(fila)}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── PlanDetail ───────────────────────────────────────────────────────────────
 
 type PlanNotes = { pasos: string[]; alertas: string[]; bloqueantes: string[] };
@@ -1115,19 +1274,28 @@ function PlanDetail({ plan, getActivityPct, setActivityPct, esPctManual, onActiv
 }) {
   const color = PROJECTS.find(p => p.id === plan.projectId)?.color ?? '#64748b';
   // ── Extra notes (persisted) ─────────────────────────────────────────────────
-  const [extraNotes, setExtraNotes] = useState(() => loadNotes(plan.planKey));
-  const [noteModal,  setNoteModal]  = useState<NoteItem | null>(null);
-  const [addingTo,   setAddingTo]   = useState<'pasos'|'alertas'|'bloqueantes'|null>(null);
-  const [addText,    setAddText]    = useState('');
-  function saveExtra(next: typeof extraNotes) { setExtraNotes(next); saveNotes(plan.planKey, next); }
-  function addNote(type: 'pasos'|'alertas'|'bloqueantes') {
-    const t = addText.trim(); if (!t) return;
-    const next = { ...extraNotes, [type]: [...extraNotes[type], t] };
-    saveExtra(next); setAddText(''); setAddingTo(null);
-  }
-  function deleteNote(type: 'pasos'|'alertas'|'bloqueantes', customIdx: number) {
-    const next = { ...extraNotes, [type]: extraNotes[type].filter((_:string,i:number)=>i!==customIdx) };
-    saveExtra(next);
+  const [extraNotes] = useState(() => loadNotes(plan.planKey));
+
+  // ── Siguientes pasos ───────────────────────────────────────────────────────
+  // Los pasos vivían como texto suelto en dos sitios: el plan generado desde
+  // Estimaciones y las notas del navegador. Al abrir el cronograma por primera
+  // vez se convierten en registros, una sola vez, sin perder ninguno.
+  const [pasos, setPasos] = useState<PasoPlan[]>(() => adminStore.getPlanPasos());
+  useEffect(() => {
+    const nuevos = migrarPasos(plan.planKey, [...plan.pasos, ...extraNotes.pasos], userName,
+                               pasos, adminStore.getPasosMigrados());
+    if (!nuevos) return;
+    const todos = [...pasos, ...nuevos];
+    setPasos(todos); adminStore.savePlanPasos(todos);
+    adminStore.savePasosMigrados([...adminStore.getPasosMigrados(), plan.planKey]);
+  }, [plan.planKey]);
+  function guardarPasos(next: PasoPlan[]) {
+    // El estado vive en una sola colección para todos los cronogramas: se
+    // reemplazan los de éste y se dejan intactos los demás.
+    const otros = pasos.filter(p => p.planKey !== plan.planKey);
+    const mios  = next.map(p => ({ ...p, planKey: plan.planKey }));
+    const todos = [...otros, ...mios];
+    setPasos(todos); adminStore.savePlanPasos(todos);
   }
   // todayWeekIdx disponible en todo PlanDetail para cálculos de esperado
   /**
@@ -1347,53 +1515,8 @@ function PlanDetail({ plan, getActivityPct, setActivityPct, esPctManual, onActiv
 
       {/* Pasos (editables) + Alertas / Bloqueantes con fechas e impacto */}
       <div style={{ display:'grid', gridTemplateColumns:'1fr 2fr', gap:8, marginBottom:20 }}>
-        {([
-          { type:'pasos'      as const, icon:<CheckCircle size={12}/>, title:'Siguientes pasos', static:plan.pasos,       bg:'#f0fdf4', tc:'#15803d', bc:'#bbf7d0', em:'Sin pasos por iniciar', mk:'•'  },
-        ] as const).map(s => {
-          const allItems = [...s.static, ...extraNotes[s.type]];
-          const hasItems = allItems.length > 0;
-          return (
-            <div key={s.type} style={{ background:hasItems?s.bg:'#f8fafc', borderRadius:10, padding:'10px 14px', border:`0.5px solid ${hasItems?s.bc:'#e2e8f0'}` }}>
-              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8 }}>
-                <p style={{ margin:0, fontSize:11, fontWeight:600, color:hasItems?s.tc:'#94a3b8', display:'flex', alignItems:'center', gap:5 }}>
-                  {s.icon} {s.title}
-                  {allItems.length>0 && <span style={{ marginLeft:4, background:'rgba(0,0,0,0.08)', borderRadius:10, padding:'0 6px', fontSize:10 }}>{allItems.length}</span>}
-                </p>
-                <button onClick={()=>{ setAddingTo(s.type); setAddText(''); }}
-                  style={{ border:'none', background:hasItems?s.bc:'#e2e8f0', cursor:'pointer', color:hasItems?s.tc:'#64748b', borderRadius:6, padding:'2px 6px', display:'flex', alignItems:'center', gap:2, fontSize:10 }}>
-                  <Plus size={10}/> Add
-                </button>
-              </div>
-              {addingTo===s.type && (
-                <div style={{ marginBottom:8 }}>
-                  <textarea value={addText} onChange={e=>setAddText(e.target.value)} rows={2} autoFocus
-                    placeholder="Nuevo paso…"
-                    style={{ width:'100%', padding:'5px 8px', fontSize:11, border:`0.5px solid ${s.bc}`, borderRadius:6, background:'#fff', resize:'vertical', boxSizing:'border-box', outline:'none', lineHeight:1.5 }}
-                    onKeyDown={e=>{ if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();addNote(s.type);} if(e.key==='Escape') setAddingTo(null); }}
-                  />
-                  <div style={{ display:'flex', gap:4, marginTop:4 }}>
-                    <button onClick={()=>addNote(s.type)} style={{ padding:'3px 10px', fontSize:10, background:s.tc, color:'#fff', border:'none', borderRadius:5, cursor:'pointer', fontWeight:500 }}>Guardar</button>
-                    <button onClick={()=>setAddingTo(null)} style={{ padding:'3px 8px', fontSize:10, background:'#f1f5f9', border:'none', borderRadius:5, cursor:'pointer', color:'#374151' }}>Cancelar</button>
-                  </div>
-                </div>
-              )}
-              {hasItems ? allItems.map((item,i) => {
-                const isCustom = i >= s.static.length;
-                const customIdx = isCustom ? i - s.static.length : -1;
-                return (
-                  <div key={i} onClick={()=>setNoteModal({ text:item, type:s.type, idx:i, custom:isCustom })}
-                    style={{ display:'flex', alignItems:'flex-start', gap:5, margin:'3px 0', padding:'4px 6px', borderRadius:6, cursor:'pointer', background:'rgba(255,255,255,0.6)', transition:'background .1s', lineHeight:1.5 }}
-                    onMouseEnter={e=>(e.currentTarget.style.background='rgba(255,255,255,0.95)')}
-                    onMouseLeave={e=>(e.currentTarget.style.background='rgba(255,255,255,0.6)')}>
-                    <span style={{ fontSize:11, flexShrink:0, marginTop:1 }}>{s.mk}</span>
-                    <span style={{ fontSize:11, color:'#374151', flex:1 }}>{item}</span>
-                    {isCustom && <button onClick={e=>{e.stopPropagation();deleteNote(s.type,customIdx);}} style={{ border:'none', background:'none', cursor:'pointer', color:'#cbd5e1', padding:1, display:'flex', flexShrink:0 }}><Trash2 size={10}/></button>}
-                  </div>
-                );
-              }) : <p style={{ margin:0, fontSize:11, color:'#94a3b8' }}>{s.em}</p>}
-            </div>
-          );
-        })}
+        <PasosPanel pasos={pasos.filter(p => p.planKey === plan.planKey)} userName={userName}
+          onChange={guardarPasos} readOnly={!canIssues}/>
         <IssuesPanel
           plan={plan}
           issues={issues.filter(i => i.planKey === plan.planKey)}
@@ -1405,12 +1528,6 @@ function PlanDetail({ plan, getActivityPct, setActivityPct, esPctManual, onActiv
           onChange={next => onIssuesChange([...issues.filter(i => i.planKey !== plan.planKey), ...next])}
         />
       </div>
-      {/* Note detail modal */}
-      {noteModal && (
-        <PlanNotesModal item={noteModal} onClose={()=>setNoteModal(null)}
-          onDelete={noteModal.custom ? ()=>deleteNote(noteModal.type, noteModal.idx - (noteModal.type==='pasos'?plan.pasos:noteModal.type==='alertas'?plan.alertas:plan.bloqueantes).length) : undefined}
-        />
-      )}
 
       {(() => {
         return plan.entregables.map((e, ei) => (
@@ -2316,9 +2433,16 @@ async function exportPlanPPTX(plan: WorkPlan, getActivityPct: (eid: string, ai: 
   const sL=pptx.addSlide(); sL.background={color:BG_DARK};
   sL.addShape('rect'as any,{x:0,y:0,w:0.07,h:5.63,fill:{color:WARN}});
   sL.addText('Estado y próximas acciones',{x:0.4,y:0.22,w:9,fontSize:18,bold:true,color:WHITE});
-  [{title:'✅ Siguientes pasos',items:plan.pasos.length?plan.pasos:['Sin pasos registrados'],col:GREEN_L,x:0.4},
-   {title:'⚠ Alertas',        items:plan.alertas.length?plan.alertas:['Sin alertas'],col:WARN,x:3.5},
-   {title:'🚧 Bloqueantes',    items:plan.bloqueantes.length?plan.bloqueantes:['Sin bloqueantes'],col:ERR,x:6.6}
+  // Esta lámina iba contra el texto congelado del plan generado en Estimaciones,
+  // así que mostraba pasos y alertas de hace semanas. Ahora sale de lo que está
+  // abierto hoy — que es lo que se presenta en la reunión.
+  const pasosVivos = adminStore.getPlanPasos().filter(p => p.planKey === plan.planKey && !p.hechoEn).map(p => p.texto);
+  const issuesVivos = adminStore.getPlanIssues().filter(i => i.planKey === plan.planKey && !i.endDate);
+  const alertasVivas = issuesVivos.filter(i => i.type === 'alerta').map(i => i.title);
+  const bloqVivos    = issuesVivos.filter(i => i.type === 'bloqueante').map(i => i.title);
+  [{title:'✅ Siguientes pasos',items:pasosVivos.length?pasosVivos:['Sin pasos registrados'],col:GREEN_L,x:0.4},
+   {title:'⚠ Alertas',        items:alertasVivas.length?alertasVivas:['Sin alertas'],col:WARN,x:3.5},
+   {title:'🚧 Bloqueantes',    items:bloqVivos.length?bloqVivos:['Sin bloqueantes'],col:ERR,x:6.6}
   ].forEach(sec=>{
     sL.addShape('rect'as any,{x:sec.x,y:0.88,w:2.9,h:4.3,fill:{color:CARD},line:{color:BORDER_D,width:0.5}});
     sL.addText(sec.title,{x:sec.x+0.1,y:0.98,w:2.7,fontSize:9.5,bold:true,color:sec.col});

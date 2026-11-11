@@ -242,6 +242,22 @@ export interface PlanIssue {
   createdAt: string;               // ISO timestamp
   closedBy?: string;
   closedAt?: string;
+  /** Por qué se cerró. Un «resuelto» sin explicación no sirve en el seguimiento. */
+  notaCierre?: string;
+  /** Si nació al escalar otra alerta, el id de aquélla. */
+  origenId?: string;
+}
+
+/** Un siguiente paso del plan: se edita y se resuelve, igual que una alerta. */
+export interface PasoPlan {
+  id: string;
+  planKey: string;
+  texto: string;
+  hechoEn?: string;                // ISO yyyy-mm-dd — sin esto, sigue pendiente
+  hechoPor?: string;
+  notaCierre?: string;
+  creadoPor: string;
+  creadoEn: string;                // ISO timestamp
 }
 
 /** Normaliza los impactos de un issue (soporta el formato antiguo de impacto único) */
@@ -259,6 +275,7 @@ export interface EdicionIssue {
   startDate: string;
   /** Vacío o undefined = sigue abierta. */
   endDate?: string;
+  notaCierre?: string;
   impacts: PlanImpact[];
 }
 
@@ -281,10 +298,59 @@ export function aplicarEdicionIssue(i: PlanIssue, e: EdicionIssue, por: string, 
     endDate: fin,
     closedBy: fin ? (i.closedBy ?? por) : undefined,
     closedAt: fin ? (i.closedAt ?? ahora) : undefined,
+    // Reabrirla también se lleva la nota de cierre: ya no hay cierre que contar.
+    notaCierre: fin ? (e.notaCierre?.trim() || i.notaCierre) : undefined,
     // El formato viejo de impacto único se deja atrás: si quedara, issueImpacts
     // seguiría devolviéndolo y la edición no tendría efecto.
     entregableId: undefined, actIdx: undefined, etapaId: undefined,
   };
+}
+
+/**
+ * Cierra una alerta y devuelve el bloqueante que la releva.
+ *
+ * Una alerta que escala no es la misma cosa con otro color: duró unos días como
+ * aviso y a partir de hoy frena trabajo. Si solo se le cambiara el tipo se
+ * perdería cuánto estuvo abierta como alerta, que es lo que explica por qué no
+ * se actuó antes. Así quedan los dos registros, enlazados.
+ */
+export function escalarAlerta(a: PlanIssue, nota: string, por: string, fecha: string, ahora = new Date().toISOString()): [PlanIssue, PlanIssue] {
+  const cerrada: PlanIssue = {
+    ...a, endDate: fecha, closedBy: por, closedAt: ahora,
+    notaCierre: nota || 'Escalada a bloqueante.',
+  };
+  const nuevo: PlanIssue = {
+    id: `is-${Date.parse(ahora)}-esc`,
+    planKey: a.planKey, type: 'bloqueante',
+    title: a.title,
+    detail: a.detail,
+    startDate: fecha,
+    impacts: issueImpacts(a),
+    createdBy: por, createdAt: ahora,
+    origenId: a.id,
+  };
+  return [cerrada, nuevo];
+}
+
+/**
+ * Convierte los siguientes pasos de texto suelto a registros, una sola vez por
+ * cronograma. Devuelve `null` cuando no hay nada que migrar.
+ *
+ * La lista de migrados existe para el caso en que se resuelvan todos y la
+ * colección quede vacía para ese plan: sin ella volverían a aparecer los
+ * textos originales como si nunca se hubieran tocado.
+ */
+export function migrarPasos(
+  planKey: string, textos: string[], por: string,
+  ya: PasoPlan[], migrados: string[], ahora = new Date().toISOString(),
+): PasoPlan[] | null {
+  if (migrados.includes(planKey)) return null;
+  if (ya.some(p => p.planKey === planKey)) return null;
+  const limpios = textos.map(t => t.trim()).filter(Boolean);
+  if (!limpios.length) return null;
+  return limpios.map((texto, i) => ({
+    id: `pa-${Date.parse(ahora)}-${i}`, planKey, texto, creadoPor: por, creadoEn: ahora,
+  }));
 }
 
 /** Solicitud de acceso: correo del dominio autenticado con Google pero no registrado en el panel */
@@ -581,6 +647,13 @@ export const adminStore = {
   // Alertas / bloqueantes con fechas e impacto
   getPlanIssues:  (): PlanIssue[]     => load('plan_issues', []),
   savePlanIssues: (i: PlanIssue[])    => save('plan_issues', i),
+
+  // Siguientes pasos (se resuelven, no se borran)
+  getPlanPasos:  (): PasoPlan[]       => load('plan_pasos', []),
+  savePlanPasos: (p: PasoPlan[])      => save('plan_pasos', p),
+  /** Cronogramas cuyos pasos de texto suelto ya se convirtieron a registros. */
+  getPasosMigrados:  (): string[]         => load('plan_pasos_migrados', []),
+  savePasosMigrados: (k: string[])        => save('plan_pasos_migrados', k),
 
   getActivityJiras:  (): Record<string, string>      => load('activity_jiras', {}),
   saveActivityJiras: (j: Record<string, string>)     => save('activity_jiras', j),
