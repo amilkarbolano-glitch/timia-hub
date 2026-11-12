@@ -23,6 +23,7 @@ import {
 } from '../lib/historialPlan';
 import {
   type PesoModo, PESO_MODO_DEFAULT, seriePlanConsolidada, seriePlanFase, marcasDe,
+  seriePlanConExtension, seriePlanFaseConExtension,
   enSemana, enDia, realPlan, realFase, type AvanceFase,
 } from '../lib/avance';
 
@@ -733,19 +734,25 @@ function EntregableSection({ block, projectId, sectionIdx, getActivityPct, setAc
     : pesoModo === 'actividad-semana'
       ? esperadoPorCasillas(faseAvance)
       : parseFloat((block.activities.reduce((s, a) => s + computeActExpPct(a.startWeek, a.endWeek, todayWeekIdx), 0) / block.activities.length).toFixed(1));
+  const faseExt: AvanceFase = { ...faseAvance, activities: block.activities.map((a, i) => {
+    const eff = extensionFor(changes, planKey, block.id, i, a.endWeek, issues, holidays).effEndWeek;
+    const base = marcasDe({ weeks: a.weeks, startWeek: a.startWeek, endWeek: a.endWeek });
+    const extra: number[] = [];
+    for (let w = a.endWeek + 1; w <= eff; w++) extra.push(w);
+    return { weeks: [...base, ...extra], startWeek: a.startWeek, endWeek: eff };
+  }) };
   const dynamicPctExp = block.activities.length === 0 || todayWeekIdx === undefined
     ? block.pctExp
     : pesoModo === 'actividad-semana'
-      ? esperadoPorCasillas({ ...faseAvance, activities: block.activities.map((a, i) => {
-          const eff = extensionFor(changes, planKey, block.id, i, a.endWeek, issues, holidays).effEndWeek;
-          const base = marcasDe({ weeks: a.weeks, startWeek: a.startWeek, endWeek: a.endWeek });
-          const extra: number[] = [];
-          for (let w = a.endWeek + 1; w <= eff; w++) extra.push(w);
-          return { weeks: [...base, ...extra], startWeek: a.startWeek, endWeek: eff };
-        }) })
+      // Con el factor de la línea base: extender reparte el peso de la tarea
+      // entre más semanas, no se lo sube ni cambia el de las demás.
+      ? parseFloat(enDia(seriePlanFaseConExtension(faseAvance, faseExt, semanasFase), todayWeekIdx + 1, diaHabil).toFixed(1))
       : parseFloat((block.activities.reduce((s, a, i) => s + computeActExpPct(a.startWeek, extensionFor(changes, planKey, block.id, i, a.endWeek, issues, holidays).effEndWeek, todayWeekIdx), 0) / block.activities.length).toFixed(1));
   const sectionHasExt = block.activities.some((a, i) => extensionFor(changes, planKey, block.id, i, a.endWeek, issues, holidays).days > 0);
-  const dif = parseFloat((effectivePctReal - dynamicPctExp).toFixed(1));
+  // La diferencia que se reporta es contra la línea base: es el compromiso.
+  // El replanificado explica por qué, no sustituye a lo que se prometió.
+  const dif = parseFloat((effectivePctReal - basePctExp).toFixed(1));
+  const difReplan = parseFloat((effectivePctReal - dynamicPctExp).toFixed(1));
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const toggle = (i: number) => setExpanded(prev => { const n = new Set(prev); n.has(i) ? n.delete(i) : n.add(i); return n; });
 
@@ -759,8 +766,8 @@ function EntregableSection({ block, projectId, sectionIdx, getActivityPct, setAc
           </span>
           {[{ label:'Avance real', val:`${effectivePctReal}%`, bg:'#374151' },
             { label: sectionHasExt ? 'Esperado · base' : 'Esperado', val:`${basePctExp}%`, bg:'#4b5563' },
-            ...(sectionHasExt ? [{ label:'Esperado · replan. Δ⛔', val:`${dynamicPctExp}%`, bg:'#5b21b6' }] : []),
-            { label:'Diferencia', val:fmt1(dif), bg:difBg(dif), c:difColor(dif) }].map(b => (
+            { label:'Diferencia', val:fmt1(dif), bg:difBg(dif), c:difColor(dif) },
+            ...(sectionHasExt ? [{ label:'Dif. vs replan. Δ⛔', val:fmt1(difReplan), bg:'#5b21b6' }] : [])].map(b => (
             <div key={b.label} style={{ textAlign:'center', padding:'4px 12px', background: b.bg, borderRadius:7 }}>
               <div style={{ fontSize:8, color: (b as any).c ?? '#9ca3af', marginBottom:1 }}>{b.label}</div>
               <div style={{ fontSize:15, fontWeight:700, color: (b as any).c ?? '#fff' }}>{b.val}</div>
@@ -1457,54 +1464,24 @@ function PlanDetail({ plan, getActivityPct: getActivityPctHoy, setActivityPct, e
   //                     replicando el cálculo de las hojas "Plan de trabajo" del PM.
   const pesoModo: PesoModo = plan.pesoModo ?? PESO_MODO_DEFAULT;
   const porSemana = pesoModo === 'actividad-semana';
-  /** Fases en el formato de lib/avance, con el % real vigente de cada actividad. */
-  const fasesAvance: AvanceFase[] = plan.entregables.map(e => ({
-    id: e.id, label: e.name,
-    activities: e.activities.map((a, i) => ({
-      weeks: a.weeks, startWeek: a.startWeek, endWeek: a.endWeek, pct: getActivityPct(e.id, i, a),
-    })),
-  }));
-  /** Igual que fasesAvance pero con el fin efectivo (extensión por cambios y bloqueos). */
-  const fasesAvanceExt: AvanceFase[] = plan.entregables.map(e => ({
-    id: e.id, label: e.name,
-    activities: e.activities.map((a, i) => {
-      const eff = extensionFor(changes, plan.planKey, e.id, i, a.endWeek, issues, holidays).effEndWeek;
-      // Al extenderse, las semanas nuevas se añaden al final del tramo marcado.
-      const base = marcasDe({ weeks: a.weeks, startWeek: a.startWeek, endWeek: a.endWeek });
-      const extra: number[] = [];
-      for (let w = a.endWeek + 1; w <= eff; w++) extra.push(w);
-      return { weeks: [...base, ...extra], startWeek: a.startWeek, endWeek: eff, pct: getActivityPct(e.id, i, a) };
-    }),
-  }));
-  const planWeeks = plan.totalWeeks ?? Math.max(1, ...plan.entregables.flatMap(e => e.activities.map(a => a.endWeek)));
+  // Una sola fuente para los números del encabezado: la pantalla, las tarjetas
+  // de fase y el PPTX los sacaban por su cuenta y no coincidían entre sí.
+  const kpis = kpisDelPlan(plan, getActivityPct, holidays, issues, changes, corte);
+  const { fases: fasesAvance, fasesExt: fasesAvanceExt, planWeeks } = kpis;
+  const overallReal = kpis.real;
+  const overallExp = kpis.esperadoReplan;
+  const overallExpBase = kpis.esperadoBase;
+  const planHasExt = kpis.hayExtension;
 
-  const overallReal = porSemana
-    ? parseFloat(realPlan(fasesAvance, pesoModo).toFixed(1))
-    : parseFloat((plan.entregables.map(e => e.activities.length
-        ? e.activities.reduce((s,a,i) => s + getActivityPct(e.id,i,a), 0) / e.activities.length
-        : e.pctReal).reduce((s,v)=>s+v,0) / plan.entregables.length).toFixed(1));
+  // La diferencia que se reporta es contra la línea base: es lo que se
+  // prometió. El replanificado explica por qué se va tarde —cambios de alcance
+  // y bloqueantes corrieron fechas—, pero no sustituye al compromiso, y
+  // enseñarlo como «la» diferencia hace que el proyecto se vea mejor de lo que
+  // está frente a lo acordado.
+  const overallDif = kpis.dif;
+  const overallDifReplan = kpis.difReplan;
 
-  // overallExp dinámico: acumulado planificado a hoy (por semana) o promedio binario (por actividad)
-  // Dos arreglos aquí. (1) Iba una semana atrasado: enSemana espera la semana
-  // en base 1 y recibía todayWeekIdx, que es base 0 — por eso el general
-  // mostraba el cierre de la semana pasada mientras cada fase, que sí sumaba 1,
-  // mostraba la actual. (2) Ahora interpola al día hábil en curso.
-  const overallExp = porSemana
-    ? parseFloat(enDia(seriePlanConsolidada(fasesAvanceExt, Math.max(planWeeks, semanaHoy)), semanaHoy, diaHoy).toFixed(1))
-    : parseFloat((plan.entregables.map(e => {
-        if (!e.activities.length) return e.pctExp;
-        return e.activities.reduce((s, a, i) => s + computeActExpPct(a.startWeek, extensionFor(changes, plan.planKey, e.id, i, a.endWeek, issues, holidays).effEndWeek, todayWeekIdx), 0) / e.activities.length;
-      }).reduce((s,v)=>s+v,0) / plan.entregables.length).toFixed(1));
-  // Esperado sobre la línea base (sin extensión por cambios)
-  const overallExpBase = porSemana
-    ? parseFloat(enDia(seriePlanConsolidada(fasesAvance, Math.max(planWeeks, semanaHoy)), semanaHoy, diaHoy).toFixed(1))
-    : parseFloat((plan.entregables.map(e => {
-        if (!e.activities.length) return e.pctExp;
-        return e.activities.reduce((s, a) => s + computeActExpPct(a.startWeek, a.endWeek, todayWeekIdx), 0) / e.activities.length;
-      }).reduce((s,v)=>s+v,0) / plan.entregables.length).toFixed(1));
-  const planHasExt = plan.entregables.some(e => e.activities.some((a, i) => extensionFor(changes, plan.planKey, e.id, i, a.endWeek, issues, holidays).days > 0));
 
-  const overallDif  = parseFloat((overallReal-overallExp).toFixed(1));
 
   // ── Resumen de cambios funcionales sobre este cronograma ─────────────────
   const planChanges = changes.filter(c => (c.impacts ?? []).some(m => m.planKey === plan.planKey));
@@ -1569,11 +1546,12 @@ function PlanDetail({ plan, getActivityPct: getActivityPctHoy, setActivityPct, e
             { label: mirandoAtras ? 'ESPERADO ESE DÍA' : simulando ? 'ESPERADO · SIMULADO' : planHasExt ? 'ESPERADO · LÍNEA BASE' : 'AVANCE ESPERADO',
               val:`${overallExpBase}%`, bg: mirandoAtras ? '#115e59' : simulando ? '#6d28d9' : '#4b5563', c:'#fff',
               sc: mirandoAtras ? '#99f6e4' : simulando ? '#ddd6fe' : '#9ca3af' },
-            ...(planHasExt ? [{ label:'ESPERADO · REPLAN. Δ⛔', val:`${overallExp}%`, bg:'#5b21b6', c:'#fff', sc:'#c4b5fd' }] : []),
             { label: mirandoAtras ? 'DIFERENCIA ESE DÍA' : simulando ? 'DIF. CONTRA ESE DÍA' : 'DIFERENCIA',
               val:fmt1(overallDif), bg:difBg(overallDif), c:difColor(overallDif), sc:difColor(overallDif) },
+            ...(planHasExt ? [{ label:'DIF. VS REPLAN. Δ⛔', val:fmt1(overallDifReplan), bg:'#5b21b6', c:'#fff', sc:'#c4b5fd',
+              t:`Contra los fines ya corridos por cambios y bloqueantes: ese día tocaba ${overallExpBase === overallExp ? overallExpBase : overallExp}%. Explica el retraso; el que se reporta es la diferencia contra la línea base.` }] : []),
           ].map(b => (
-            <div key={b.label} style={{ textAlign:'center', padding:'6px 16px', background:b.bg, borderRadius:8 }}>
+            <div key={b.label} title={(b as { t?: string }).t} style={{ textAlign:'center', padding:'6px 16px', background:b.bg, borderRadius:8 }}>
               <div style={{ fontSize:8, color:b.sc, marginBottom:2, textTransform:'uppercase', letterSpacing:'.04em' }}>{b.label}</div>
               <div style={{ fontSize:20, fontWeight:700, color:b.c }}>{b.val}</div>
             </div>
@@ -2337,7 +2315,95 @@ function ConsolidadoView({ plans, holidays, getActivityPct, onOpen, openIssues =
 
 // ─── PPTX Export ──────────────────────────────────────────────────────────────
 
-async function exportPlanPPTX(plan: WorkPlan, getActivityPct: (eid: string, ai: number, a: PlanActivity) => number, screenshots: string[] = []) {
+/**
+ * Los números del encabezado del plan, calculados en un solo sitio.
+ *
+ * Había tres versiones distintas de lo mismo: la pantalla, las tarjetas de
+ * fase y el PPTX —y el PPTX además leía el `pctExp` congelado de la
+ * configuración, así que el deck salía con cifras que no coincidían con lo que
+ * se veía al generarlo. Si hay un número que tiene que ser uno solo, es éste.
+ *
+ * `esperadoBase` es contra lo prometido y `esperadoReplan` contra los fines ya
+ * corridos por cambios y bloqueantes. El que se reporta es el primero: el
+ * replanificado explica por qué se va tarde, no sustituye al compromiso.
+ */
+export interface KpisPlan {
+  real: number;
+  esperadoBase: number;
+  esperadoReplan: number;
+  dif: number;
+  difReplan: number;
+  hayExtension: boolean;
+  semana: number;
+  dia: number;
+  fases: AvanceFase[];
+  fasesExt: AvanceFase[];
+  planWeeks: number;
+}
+
+function kpisDelPlan(
+  plan: WorkPlan,
+  getActivityPct: (eid: string, ai: number, a: PlanActivity) => number,
+  holidays: Set<string>,
+  issues: PlanIssue[] = [],
+  changes: BitacoraEntry[] = [],
+  corte?: Date,
+): KpisPlan {
+  const pesoModo: PesoModo = plan.pesoModo ?? PESO_MODO_DEFAULT;
+  const porSemana = pesoModo === 'actividad-semana';
+  const semana = computeCurrentWeekIdx(plan.startDate, holidays, corte) + 1;
+  const dia = diaHabilDeSemana(plan.startDate, holidays, corte);
+  const planWeeks = plan.totalWeeks ?? Math.max(1, ...plan.entregables.flatMap(e => e.activities.map(a => a.endWeek)));
+  const horizonte = Math.max(planWeeks, semana);
+
+  const fases: AvanceFase[] = plan.entregables.map(e => ({
+    id: e.id, label: e.name,
+    activities: e.activities.map((a, i) => ({
+      weeks: a.weeks, startWeek: a.startWeek, endWeek: a.endWeek, pct: getActivityPct(e.id, i, a),
+    })),
+  }));
+  const fasesExt: AvanceFase[] = plan.entregables.map(e => ({
+    id: e.id, label: e.name,
+    activities: e.activities.map((a, i) => {
+      const eff = extensionFor(changes, plan.planKey, e.id, i, a.endWeek, issues, holidays).effEndWeek;
+      const base = marcasDe({ weeks: a.weeks, startWeek: a.startWeek, endWeek: a.endWeek });
+      const extra: number[] = [];
+      for (let w = a.endWeek + 1; w <= eff; w++) extra.push(w);
+      return { weeks: [...base, ...extra], startWeek: a.startWeek, endWeek: eff, pct: getActivityPct(e.id, i, a) };
+    }),
+  }));
+  const hayExtension = plan.entregables.some((e, _ei) => e.activities.some((a, i) =>
+    extensionFor(changes, plan.planKey, e.id, i, a.endWeek, issues, holidays).days > 0));
+
+  const r1 = (n: number) => parseFloat(n.toFixed(1));
+  const media = (f: (e: PlanEntregable) => number) =>
+    r1(plan.entregables.reduce((s, e) => s + f(e), 0) / Math.max(1, plan.entregables.length));
+
+  const real = porSemana
+    ? r1(realPlan(fases, pesoModo))
+    : media(e => e.activities.length
+        ? e.activities.reduce((s, a, i) => s + getActivityPct(e.id, i, a), 0) / e.activities.length
+        : e.pctReal);
+  const esperadoBase = porSemana
+    ? r1(enDia(seriePlanConsolidada(fases, horizonte), semana, dia))
+    : media(e => e.activities.length
+        ? e.activities.reduce((s, a) => s + computeActExpPct(a.startWeek, a.endWeek, semana - 1), 0) / e.activities.length
+        : e.pctExp);
+  const esperadoReplan = porSemana
+    ? r1(enDia(seriePlanConExtension(fases, fasesExt, horizonte), semana, dia))
+    : media(e => e.activities.length
+        ? e.activities.reduce((s, a, i) => s + computeActExpPct(a.startWeek,
+            extensionFor(changes, plan.planKey, e.id, i, a.endWeek, issues, holidays).effEndWeek, semana - 1), 0) / e.activities.length
+        : e.pctExp);
+
+  return {
+    real, esperadoBase, esperadoReplan,
+    dif: r1(real - esperadoBase), difReplan: r1(real - esperadoReplan),
+    hayExtension, semana, dia, fases, fasesExt, planWeeks,
+  };
+}
+
+async function exportPlanPPTX(plan: WorkPlan, getActivityPct: (eid: string, ai: number, a: PlanActivity) => number, screenshots: string[] = [], issues: PlanIssue[] = [], changes: BitacoraEntry[] = []) {
   const pptxgen = (await import('pptxgenjs')).default;
   const pptx = new pptxgen();
   pptx.layout = 'LAYOUT_WIDE';
@@ -2398,12 +2464,13 @@ async function exportPlanPPTX(plan: WorkPlan, getActivityPct: (eid: string, ai: 
   const BAR_PAD = 0.018;      // padding horizontal dentro de cada celda de semana
 
   const today = new Date().toLocaleDateString('es-CO',{day:'numeric',month:'long',year:'numeric'});
-  const overallReal = parseFloat((
-    plan.entregables.map(e=>e.activities.length?e.activities.reduce((s,a,i)=>s+getActivityPct(e.id,i,a),0)/e.activities.length:e.pctReal)
-      .reduce((s,v)=>s+v,0)/Math.max(1,plan.entregables.length)
-  ).toFixed(1));
-  const overallExp  = parseFloat((plan.entregables.reduce((s,e)=>s+e.pctExp,0)/Math.max(1,plan.entregables.length)).toFixed(1));
-  const dif = parseFloat((overallReal-overallExp).toFixed(1));
+  // Exactamente lo que muestra la pantalla al generar el deck: el esperado de
+  // la semana en curso, no el `pctExp` congelado de la configuración, que es lo
+  // que se exportaba antes y no cuadraba con nada.
+  const kpis = kpisDelPlan(plan, getActivityPct, _holidays, issues, changes);
+  const overallReal = kpis.real;
+  const overallExp  = kpis.esperadoBase;
+  const dif = kpis.dif;
 
   // ══ SLIDE 1: Portada ═════════════════════════════════════════════════════════
   const s1=pptx.addSlide(); s1.background={color:BG_DARK};
@@ -3057,7 +3124,7 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
         }
       }
 
-      await exportPlanPPTX(plan, (eid,ai,a) => getActivityPct(plan.planKey,eid,ai,a), screenshots);
+      await exportPlanPPTX(plan, (eid,ai,a) => getActivityPct(plan.planKey,eid,ai,a), screenshots, issues, changes);
     } catch (err) {
       console.error('PPTX export error:', err);
       const msg = (err instanceof Error) ? err.message : String(err);
