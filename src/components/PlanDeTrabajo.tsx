@@ -12,9 +12,9 @@ import { snapToBusinessDay, addBusinessDays, computeBusinessWeekIdx, dateToBusin
 import { sincronizarAsignados, reconciliarTablero, type MetaActividad } from '../lib/planTablero';
 import {
   adminStore,
-  type PlanEtapa, type EtapaStates, type PlanHistorialEntry,
+  type PlanEtapa, type EtapaStates, type PlanHistorialEntry, RESP_ETIQUETA,
   type ActivityAssignees, type AdminUser, type AdminProject, type PlanConfig, type PlanIssue, type PlanImpact, type BitacoraEntry,
-  issueImpacts, aplicarEdicionIssue, escalarAlerta, migrarPasos, type PasoPlan,
+  issueImpacts, aplicarEdicionIssue, escalarAlerta, migrarPasos, type PasoPlan, type TipoPaso,
   changeExtensionDays, makePlanKey, splitPlanKey, planKeyOf, CRONO_MAIN_NAME,
 } from '../lib/adminStore';
 import {
@@ -166,6 +166,11 @@ function GanttCell({ wi, act, effectivePct, isSubtask, todayWeekIdx, diaHabil = 
   );
   const execOverlap = Math.max(0, Math.min(execEnd, cellEnd) - Math.max(planStart, cellStart));
   const execPct = (execOverlap / planOverlap) * 100;
+  // Una tarea cerrada tiene que distinguirse de una que va por la mitad de un
+  // vistazo. Con el mismo verde azulado de siempre, lo único que las separaba
+  // era la longitud del relleno, y en una barra de una sola semana eso no se
+  // ve. Cerrada = verde con su palomita al final.
+  const finalizada = effectivePct >= 100;
   const isFirst = planStart >= cellStart && planStart < cellEnd;
   const isLast  = planEnd > cellStart && planEnd <= cellEnd;
   const br = `${isFirst?3:0}px ${isLast?3:0}px ${isLast?3:0}px ${isFirst?3:0}px`;
@@ -174,8 +179,16 @@ function GanttCell({ wi, act, effectivePct, isSubtask, todayWeekIdx, diaHabil = 
       {markBar}
       {isToday && <RayaHoy diaHabil={diaHabil}/>}
       <div style={{ position:'relative', margin:'3px 1px', height:13 }}>
-        <div style={{ position:'absolute', top:0, height:'100%', left:`${(Math.max(planStart, cellStart) - cellStart) * 100}%`, width:`${planOverlap * 100}%`, borderRadius: br, overflow: 'hidden', background: isSubtask ? 'rgba(13,148,136,0.12)' : 'rgba(13,148,136,0.22)' }}>
-          <div style={{ width: `${execPct}%`, height: '100%', background: isSubtask ? 'rgba(13,148,136,0.55)' : '#0d9488', transition: 'width .3s' }} />
+        <div title={finalizada ? 'Finalizada' : undefined}
+          style={{ position:'absolute', top:0, height:'100%', left:`${(Math.max(planStart, cellStart) - cellStart) * 100}%`, width:`${planOverlap * 100}%`, borderRadius: br, overflow: 'hidden',
+                   background: finalizada ? 'rgba(22,163,74,0.18)' : isSubtask ? 'rgba(13,148,136,0.12)' : 'rgba(13,148,136,0.22)' }}>
+          <div style={{ width: `${execPct}%`, height: '100%', transition: 'width .3s',
+                        background: finalizada ? (isSubtask ? 'rgba(22,163,74,0.6)' : '#16a34a')
+                                               : isSubtask ? 'rgba(13,148,136,0.55)' : '#0d9488' }} />
+          {finalizada && isLast && (
+            <span aria-hidden style={{ position:'absolute', right:2, top:0, bottom:0, display:'flex', alignItems:'center',
+                                       fontSize:9, lineHeight:1, color:'#fff', fontWeight:700 }}>✓</span>
+          )}
         </div>
         {extBar}{blkBar}
       </div>
@@ -498,6 +511,17 @@ function ActivityDrawer({ projectId, entregableId, actIdx, act, effectivePct, et
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
                             <span style={{ fontSize: 12, fontWeight: 500, color: isDone ? '#15803d' : '#374151', textDecoration: isDone ? 'line-through' : 'none' }}>{etapa.label}</span>
                             {etapa.optional && <span style={{ fontSize: 8, padding: '1px 5px', borderRadius: 10, background: '#f1f5f9', color: '#94a3b8' }}>opcional</span>}
+                            {/* El responsable de la etapa solo se enseña si difiere del de
+                                la actividad: repetir «Timia» en diez etapas de una actividad
+                                de Timia no informa de nada. */}
+                            {etapa.resp && etapa.resp !== (act.bbva ? 'bbva' : 'timia') && (
+                              <span title={`Esta etapa la ejecuta ${RESP_ETIQUETA[etapa.resp]}`}
+                                style={{ fontSize: 8, fontWeight: 700, padding: '1px 5px', borderRadius: 10,
+                                         background: etapa.resp === 'bbva' ? '#dbeafe' : '#fef9c3',
+                                         color: etapa.resp === 'bbva' ? '#1d4ed8' : '#a16207' }}>
+                                {RESP_ETIQUETA[etapa.resp]}
+                              </span>
+                            )}
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                             <span style={{ fontSize: 10, color: '#94a3b8' }}>{etapa.peso}% del avance</span>
@@ -791,6 +815,7 @@ function EntregableSection({ block, projectId, sectionIdx, getActivityPct, setAc
                   <div style={{ display:'flex', gap:14, alignItems:'center', flexWrap:'wrap' }}>
                     {[
                       { sw:<div style={{ width:20, height:9, background:'#0d9488', borderRadius:2 }}/>, l:'Ejecutado' },
+                      { sw:<div style={{ width:20, height:9, background:'#16a34a', borderRadius:2, display:'flex', alignItems:'center', justifyContent:'flex-end', paddingRight:2, boxSizing:'border-box', color:'#fff', fontSize:7, fontWeight:700 }}>✓</div>, l:'Finalizada' },
                       { sw:<div style={{ width:20, height:9, background:'rgba(13,148,136,0.22)', borderRadius:2 }}/>, l:'Planificado' },
                       { sw:<div style={{ width:20, height:9, background:'repeating-linear-gradient(135deg, #c4b5fd 0 3px, #ede9fe 3px 6px)', borderRadius:2 }}/>, l:'Extensión por cambios (Δ)' },
                       { sw:<div style={{ width:20, height:9, background:'repeating-linear-gradient(135deg, #fca5a5 0 3px, #fee2e2 3px 6px)', borderRadius:2 }}/>, l:'Días perdidos por bloqueante' },
@@ -863,7 +888,7 @@ function IssuesPanel({ plan, issues, legacy, userName, onChange, outlines, readO
   // bloqueante se extiende a otra fase, el título se escribió a la carrera. Sin
   // edición solo quedaba borrar y volver a crear, y eso pierde quién la abrió.
   const [editando, setEditando] = useState<string | null>(null);
-  const empty = { title:'', detail:'', startDate: todayISO, endDate: '', notaCierre:'', impacts: [] as PlanImpact[] };
+  const empty = { title:'', detail:'', startDate: todayISO, endDate: '', notaCierre:'', responsable:'', impacts: [] as PlanImpact[] };
   const [form, setForm] = useState(empty);
 
   const open   = issues.filter(i => !i.endDate).sort((a,b) => (a.type === b.type ? a.startDate.localeCompare(b.startDate) : a.type === 'bloqueante' ? -1 : 1));
@@ -881,7 +906,8 @@ function IssuesPanel({ plan, issues, legacy, userName, onChange, outlines, readO
   function editar(i: PlanIssue) {
     setAdding(null); setResolving(null); setEditando(i.id); setTipoForm(i.type);
     setForm({ title: i.title, detail: i.detail ?? '', startDate: i.startDate,
-              endDate: i.endDate ?? '', notaCierre: i.notaCierre ?? '', impacts: issueImpacts(i) });
+              endDate: i.endDate ?? '', notaCierre: i.notaCierre ?? '',
+              responsable: i.responsable ?? '', impacts: issueImpacts(i) });
   }
 
   function submit() {
@@ -890,6 +916,7 @@ function IssuesPanel({ plan, issues, legacy, userName, onChange, outlines, readO
       type: tipoForm, title: form.title.trim(), detail: form.detail.trim() || undefined,
       startDate: form.startDate || todayISO, impacts: form.impacts,
       notaCierre: form.notaCierre.trim() || undefined,
+      responsable: form.responsable.trim() || undefined,
     };
     if (enEdicion) {
       onChange(issues.map(i => i.id === enEdicion.id
@@ -940,6 +967,9 @@ function IssuesPanel({ plan, issues, legacy, userName, onChange, outlines, readO
             <span style={{ fontSize:9, color: st.tc, fontWeight:600, background: st.bg, borderRadius:4, padding:'1px 5px' }}>
               {fmtShort(i.startDate)} → {i.endDate ? fmtShort(i.endDate) : 'abierta'} · {days} día{days!==1?'s':''}
             </span>
+            {i.responsable
+              ? <span title="Responsable de destrabarlo" style={{ fontSize:9, fontWeight:600, color:'#334155', background:'#f1f5f9', border:'0.5px solid #e2e8f0', borderRadius:4, padding:'1px 6px' }}>👤 {i.responsable}</span>
+              : isOpen && <span style={{ fontSize:9, color:'#cbd5e1' }}>sin responsable</span>}
             {imps.length
               ? <ImpactChips impacts={imps} plans={outlines} max={4}/>
               : <span style={{ fontSize:9, color:'#94a3b8' }}>sin tarea asociada</span>}
@@ -1038,6 +1068,14 @@ function IssuesPanel({ plan, issues, legacy, userName, onChange, outlines, readO
               </label>
             )}
           </div>
+          <label style={{ display:'block', marginBottom:6 }}>
+            <span style={{ fontSize:8, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'.05em', display:'block', marginBottom:3 }}>
+              Responsable de destrabarlo</span>
+            <input value={form.responsable} onChange={e => setForm(f => ({ ...f, responsable:e.target.value }))}
+              placeholder="Nombre, área o equipo — p. ej. Gobierno del Dato BBVA"
+              onKeyDown={e => { if (e.key==='Enter') submit(); if (e.key==='Escape') cerrarForm(); }}
+              style={{ width:'100%', padding:'5px 9px', fontSize:11, border:'0.5px solid #e2e8f0', borderRadius:6, boxSizing:'border-box' }}/>
+          </label>
           <div style={{ marginBottom:6 }}>
             <span style={{ fontSize:8, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'.05em', display:'block', marginBottom:3 }}>Tareas impactadas</span>
             <div style={{ display:'flex', alignItems:'flex-start', gap:8, flexWrap:'wrap' }}>
@@ -1113,24 +1151,29 @@ function PasosPanel({ pasos, userName, onChange, readOnly = false }: {
   const [adding, setAdding] = useState(false);
   const [editando, setEditando] = useState<string | null>(null);
   const [texto, setTexto] = useState('');
+  // Lo que se está escribiendo: un paso que alguien hará, o una nota de contexto.
+  const [tipo, setTipo] = useState<TipoPaso>('paso');
   const [resolviendo, setResolviendo] = useState<string | null>(null);
   const [fecha, setFecha] = useState(todayISO);
   const [nota, setNota] = useState('');
   const [verHechos, setVerHechos] = useState(false);
 
   const abiertos = pasos.filter(p => !p.hechoEn);
+  const nPasos = abiertos.filter(p => (p.tipo ?? 'paso') === 'paso').length;
+  const nNotas = abiertos.length - nPasos;
   const hechos   = pasos.filter(p => !!p.hechoEn).sort((a,b) => (b.hechoEn ?? '').localeCompare(a.hechoEn ?? ''));
 
   function cerrarTodo() { setAdding(false); setEditando(null); setResolviendo(null); setTexto(''); setNota(''); }
   function agregar() {
     const t = texto.trim(); if (!t) return;
     onChange([...pasos, { id:`pa-${Date.now()}-${Math.random().toString(36).slice(2,6)}`,
-      planKey: pasos[0]?.planKey ?? '', texto:t, creadoPor:userName, creadoEn:new Date().toISOString() }]);
+      planKey: pasos[0]?.planKey ?? '', texto:t, tipo,
+      creadoPor:userName, creadoEn:new Date().toISOString() }]);
     cerrarTodo();
   }
   function guardarEdicion(id: string) {
     const t = texto.trim(); if (!t) return;
-    onChange(pasos.map(p => p.id === id ? { ...p, texto: t } : p));
+    onChange(pasos.map(p => p.id === id ? { ...p, texto: t, tipo } : p));
     cerrarTodo();
   }
   function resolver(id: string) {
@@ -1141,44 +1184,62 @@ function PasosPanel({ pasos, userName, onChange, readOnly = false }: {
   function reabrir(id: string) {
     onChange(pasos.map(p => p.id === id ? { ...p, hechoEn: undefined, hechoPor: undefined, notaCierre: undefined } : p));
   }
-  function borrar(id: string) { if (window.confirm('¿Eliminar este paso?')) onChange(pasos.filter(p => p.id !== id)); }
+  function borrar(id: string) { if (window.confirm('¿Eliminar este registro?')) onChange(pasos.filter(p => p.id !== id)); }
+  const esNota = (p: PasoPlan) => (p.tipo ?? 'paso') === 'nota';
 
   const hay = pasos.length > 0;
   const fila = (p: PasoPlan) => {
     const abierto = !p.hechoEn;
     const esta = editando === p.id;
+    const nota_ = esNota(p);
+    // El distintivo es mínimo a propósito: el borde izquierdo y la viñeta. Una
+    // etiqueta por fila en una lista de diez convertiría el recuadro en ruido.
+    const acento = nota_ ? '#64748b' : '#15803d';
     return (
       <div key={p.id} style={{ margin:'3px 0', padding:'5px 7px', borderRadius:7, background: abierto ? 'rgba(255,255,255,0.75)' : '#f8fafc',
-                               border:`0.5px solid ${esta ? '#15803d' : abierto ? '#dcfce7' : '#e2e8f0'}`, opacity: abierto ? 1 : .8 }}>
+                               border:`0.5px solid ${esta ? acento : abierto ? (nota_ ? '#e2e8f0' : '#dcfce7') : '#e2e8f0'}`,
+                               borderLeftWidth:2.5, borderLeftColor: nota_ ? '#cbd5e1' : '#86efac',
+                               opacity: abierto ? 1 : .8 }}>
         {esta ? (
           <div>
             <textarea value={texto} onChange={e => setTexto(e.target.value)} rows={2} autoFocus
               onKeyDown={e => { if (e.key==='Enter' && !e.shiftKey) { e.preventDefault(); guardarEdicion(p.id); } if (e.key==='Escape') cerrarTodo(); }}
               style={{ width:'100%', padding:'5px 8px', fontSize:11, border:'0.5px solid #bbf7d0', borderRadius:6, resize:'vertical', boxSizing:'border-box', lineHeight:1.5 }}/>
-            <div style={{ display:'flex', gap:4, marginTop:4 }}>
+            <div style={{ display:'flex', gap:4, marginTop:4, alignItems:'center' }}>
               <button onClick={() => guardarEdicion(p.id)} style={{ padding:'3px 10px', fontSize:10, background:'#15803d', color:'#fff', border:'none', borderRadius:5, cursor:'pointer', fontWeight:600 }}>Guardar</button>
               <button onClick={cerrarTodo} style={{ padding:'3px 8px', fontSize:10, background:'#f1f5f9', border:'none', borderRadius:5, cursor:'pointer', color:'#374151' }}>Cancelar</button>
+              <button onClick={() => setTipo(tipo === 'nota' ? 'paso' : 'nota')}
+                title="Una nota que acaba generando trabajo pasa a ser un paso, y al revés"
+                style={{ marginLeft:'auto', fontSize:9, padding:'3px 8px', background:'#fff', color:'#64748b', border:'0.5px solid #e2e8f0', borderRadius:5, cursor:'pointer', fontWeight:600 }}>
+                {tipo === 'nota' ? '✎ Nota' : '• Paso'} · cambiar
+              </button>
             </div>
           </div>
         ) : (
           <div style={{ display:'flex', alignItems:'flex-start', gap:6 }}>
-            <span style={{ fontSize:11, flexShrink:0, marginTop:1, color: abierto ? '#15803d' : '#94a3b8' }}>{abierto ? '•' : '✓'}</span>
+            <span title={nota_ ? 'Nota' : 'Siguiente paso'}
+              style={{ fontSize:11, flexShrink:0, marginTop:1, color: abierto ? acento : '#94a3b8' }}>
+              {nota_ ? '✎' : abierto ? '•' : '✓'}</span>
             <div style={{ flex:1, minWidth:0 }}>
-              <div style={{ fontSize:11, color:'#374151', lineHeight:1.5, textDecoration: abierto ? 'none' : 'line-through' }}>{p.texto}</div>
+              <div style={{ fontSize:11, color: nota_ ? '#475569' : '#374151', lineHeight:1.5,
+                            fontStyle: nota_ ? 'italic' : 'normal',
+                            textDecoration: abierto || nota_ ? 'none' : 'line-through' }}>{p.texto}</div>
               <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginTop:2 }}>
-                {!abierto && <span style={{ fontSize:9, color:'#15803d', fontWeight:600, background:'#f0fdf4', borderRadius:4, padding:'1px 5px' }}>
-                  hecho {fmtShort(p.hechoEn!)}{p.hechoPor ? ` · ${p.hechoPor.split(' ')[0]}` : ''}</span>}
+                {!abierto && <span style={{ fontSize:9, fontWeight:600, borderRadius:4, padding:'1px 5px',
+                                            color: nota_ ? '#64748b' : '#15803d', background: nota_ ? '#f1f5f9' : '#f0fdf4' }}>
+                  {nota_ ? 'archivada' : 'hecho'} {fmtShort(p.hechoEn!)}{p.hechoPor ? ` · ${p.hechoPor.split(' ')[0]}` : ''}</span>}
                 <span style={{ fontSize:9, color:'#94a3b8' }}>{p.creadoPor.split(' ')[0]}</span>
               </div>
               {p.notaCierre && <div style={{ fontSize:10, color:'#15803d', marginTop:3, lineHeight:1.45 }}>{p.notaCierre}</div>}
               {resolviendo === p.id && (
                 <div style={{ marginTop:5, padding:'6px 8px', background:'#fff', border:'0.5px solid #e2e8f0', borderRadius:6 }}>
                   <div style={{ display:'flex', alignItems:'center', gap:5, marginBottom:4 }}>
-                    <span style={{ fontSize:10, color:'#374151' }}>Hecho el:</span>
+                    <span style={{ fontSize:10, color:'#374151' }}>{nota_ ? 'Archivar el:' : 'Hecho el:'}</span>
                     <input type="date" value={fecha} max={todayISO} onChange={e => setFecha(e.target.value)}
                       style={{ fontSize:10, padding:'2px 5px', border:'0.5px solid #e2e8f0', borderRadius:5 }}/>
                   </div>
-                  <textarea value={nota} onChange={e => setNota(e.target.value)} rows={2} autoFocus placeholder="¿Con qué resultado? (opcional)"
+                  <textarea value={nota} onChange={e => setNota(e.target.value)} rows={2} autoFocus
+                    placeholder={nota_ ? '¿Por qué deja de aplicar? (opcional)' : '¿Con qué resultado? (opcional)'}
                     style={{ width:'100%', padding:'5px 8px', fontSize:10, border:'0.5px solid #e2e8f0', borderRadius:6, resize:'vertical', boxSizing:'border-box', lineHeight:1.5, marginBottom:4 }}/>
                   <div style={{ display:'flex', gap:4 }}>
                     <button onClick={() => resolver(p.id)} style={{ fontSize:10, padding:'3px 9px', background:'#15803d', color:'#fff', border:'none', borderRadius:5, cursor:'pointer', fontWeight:600 }}>Confirmar</button>
@@ -1189,14 +1250,18 @@ function PasosPanel({ pasos, userName, onChange, readOnly = false }: {
             </div>
             {!readOnly && (
               <div style={{ display:'flex', gap:3, flexShrink:0 }}>
-                <button onClick={() => { cerrarTodo(); setEditando(p.id); setTexto(p.texto); }} title="Editar"
+                <button onClick={() => { cerrarTodo(); setEditando(p.id); setTexto(p.texto); setTipo(p.tipo ?? 'paso'); }} title="Editar"
                   style={{ fontSize:9, padding:'2px 6px', background:'#fff', color:'#64748b', border:'0.5px solid #e2e8f0', borderRadius:5, cursor:'pointer', fontWeight:600, display:'flex', alignItems:'center', gap:3 }}><Pencil size={9}/>Editar</button>
                 {abierto
-                  ? <button onClick={() => { cerrarTodo(); setResolviendo(p.id); setFecha(todayISO); }} title="Marcar como hecho"
-                      style={{ fontSize:9, padding:'2px 7px', background:'#f0fdf4', color:'#15803d', border:'0.5px solid #bbf7d0', borderRadius:5, cursor:'pointer', fontWeight:600 }}>Resolver</button>
+                  ? <button onClick={() => { cerrarTodo(); setResolviendo(p.id); setFecha(todayISO); }}
+                      title={nota_ ? 'Archivar: deja de aplicar' : 'Marcar como hecho'}
+                      style={{ fontSize:9, padding:'2px 7px', borderRadius:5, cursor:'pointer', fontWeight:600,
+                               background: nota_ ? '#f8fafc' : '#f0fdf4', color: nota_ ? '#64748b' : '#15803d',
+                               border:`0.5px solid ${nota_ ? '#e2e8f0' : '#bbf7d0'}` }}>
+                      {nota_ ? 'Archivar' : 'Resolver'}</button>
                   : <button onClick={() => reabrir(p.id)} title="Volver a pendiente"
                       style={{ fontSize:9, padding:'2px 7px', background:'#fff', color:'#64748b', border:'0.5px solid #e2e8f0', borderRadius:5, cursor:'pointer' }}>Reabrir</button>}
-                <button onClick={() => borrar(p.id)} title="Eliminar — para un paso cumplido usa Resolver"
+                <button onClick={() => borrar(p.id)} title="Eliminar — para algo ya cumplido usa Resolver"
                   style={{ border:'none', background:'none', cursor:'pointer', color:'#cbd5e1', padding:2, display:'flex' }}><Trash2 size={10}/></button>
               </div>
             )}
@@ -1210,33 +1275,58 @@ function PasosPanel({ pasos, userName, onChange, readOnly = false }: {
     <div style={{ background: hay ? '#f0fdf4' : '#f8fafc', borderRadius:10, padding:'10px 14px', border:`0.5px solid ${hay ? '#bbf7d0' : '#e2e8f0'}` }}>
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8, gap:8 }}>
         <p style={{ margin:0, fontSize:11, fontWeight:600, color: hay ? '#15803d' : '#94a3b8', display:'flex', alignItems:'center', gap:5 }}>
-          <CheckCircle size={12}/> Siguientes pasos
-          {abiertos.length > 0 && <span style={{ marginLeft:4, background:'rgba(0,0,0,0.08)', borderRadius:10, padding:'0 6px', fontSize:10 }}>{abiertos.length}</span>}
+          <CheckCircle size={12}/> Siguientes pasos y notas
+          {nPasos > 0 && <span title="pasos pendientes" style={{ marginLeft:4, background:'rgba(0,0,0,0.08)', borderRadius:10, padding:'0 6px', fontSize:10 }}>{nPasos}</span>}
+          {nNotas > 0 && <span title="notas vigentes" style={{ background:'#e2e8f0', color:'#64748b', borderRadius:10, padding:'0 6px', fontSize:10 }}>✎ {nNotas}</span>}
         </p>
         {!readOnly && (
-          <button onClick={() => { cerrarTodo(); setAdding(true); }}
-            style={{ border:'none', background: hay ? '#bbf7d0' : '#e2e8f0', cursor:'pointer', color: hay ? '#15803d' : '#64748b', borderRadius:6, padding:'2px 7px', display:'flex', alignItems:'center', gap:3, fontSize:10, fontWeight:600 }}>
-            <Plus size={10}/> Paso
-          </button>
+          <div style={{ display:'flex', gap:4 }}>
+            <button onClick={() => { cerrarTodo(); setTipo('paso'); setAdding(true); }}
+              style={{ border:'none', background: hay ? '#bbf7d0' : '#e2e8f0', cursor:'pointer', color: hay ? '#15803d' : '#64748b', borderRadius:6, padding:'2px 7px', display:'flex', alignItems:'center', gap:3, fontSize:10, fontWeight:600 }}>
+              <Plus size={10}/> Paso
+            </button>
+            <button onClick={() => { cerrarTodo(); setTipo('nota'); setAdding(true); }}
+              title="Contexto que conviene recordar, sin tarea detrás"
+              style={{ border:'0.5px solid #e2e8f0', background:'#fff', cursor:'pointer', color:'#64748b', borderRadius:6, padding:'2px 7px', display:'flex', alignItems:'center', gap:3, fontSize:10, fontWeight:600 }}>
+              <Plus size={10}/> Nota
+            </button>
+          </div>
         )}
       </div>
       {adding && (
         <div style={{ marginBottom:8 }}>
-          <textarea value={texto} onChange={e => setTexto(e.target.value)} rows={2} autoFocus placeholder="Nuevo paso…"
+          {/* Se puede cambiar de idea a mitad de escribir sin perder el texto. */}
+          <div style={{ display:'flex', gap:4, marginBottom:4 }}>
+            {(['paso','nota'] as const).map(t => (
+              <button key={t} onClick={() => setTipo(t)}
+                style={{ fontSize:9, padding:'2px 8px', borderRadius:5, cursor:'pointer', fontWeight:600,
+                         border:`0.5px solid ${tipo===t ? (t==='nota' ? '#94a3b8' : '#15803d') : '#e2e8f0'}`,
+                         background: tipo===t ? (t==='nota' ? '#f1f5f9' : '#f0fdf4') : '#fff',
+                         color: tipo===t ? (t==='nota' ? '#475569' : '#15803d') : '#94a3b8' }}>
+                {t==='nota' ? '✎ Nota' : '• Paso'}
+              </button>
+            ))}
+            <span style={{ fontSize:9, color:'#94a3b8', alignSelf:'center' }}>
+              {tipo==='nota' ? 'contexto que conviene recordar' : 'algo que alguien tiene que hacer'}
+            </span>
+          </div>
+          <textarea value={texto} onChange={e => setTexto(e.target.value)} rows={2} autoFocus
+            placeholder={tipo==='nota' ? 'Nueva nota…' : 'Nuevo paso…'}
             onKeyDown={e => { if (e.key==='Enter' && !e.shiftKey) { e.preventDefault(); agregar(); } if (e.key==='Escape') cerrarTodo(); }}
-            style={{ width:'100%', padding:'5px 8px', fontSize:11, border:'0.5px solid #bbf7d0', borderRadius:6, background:'#fff', resize:'vertical', boxSizing:'border-box', outline:'none', lineHeight:1.5 }}/>
+            style={{ width:'100%', padding:'5px 8px', fontSize:11, borderRadius:6, background:'#fff', resize:'vertical', boxSizing:'border-box', outline:'none', lineHeight:1.5,
+                     border:`0.5px solid ${tipo==='nota' ? '#e2e8f0' : '#bbf7d0'}` }}/>
           <div style={{ display:'flex', gap:4, marginTop:4 }}>
             <button onClick={agregar} style={{ padding:'3px 10px', fontSize:10, background:'#15803d', color:'#fff', border:'none', borderRadius:5, cursor:'pointer', fontWeight:600 }}>Guardar</button>
             <button onClick={cerrarTodo} style={{ padding:'3px 8px', fontSize:10, background:'#f1f5f9', border:'none', borderRadius:5, cursor:'pointer', color:'#374151' }}>Cancelar</button>
           </div>
         </div>
       )}
-      {abiertos.length === 0 && !adding && <p style={{ margin:0, fontSize:11, color:'#94a3b8' }}>Sin pasos por iniciar</p>}
+      {abiertos.length === 0 && !adding && <p style={{ margin:0, fontSize:11, color:'#94a3b8' }}>Sin pasos ni notas</p>}
       {abiertos.map(fila)}
       {hechos.length > 0 && (
         <div style={{ marginTop:6 }}>
           <button onClick={() => setVerHechos(v => !v)} style={{ border:'none', background:'none', cursor:'pointer', fontSize:10, color:'#64748b', padding:0, display:'flex', alignItems:'center', gap:3 }}>
-            {verHechos ? <ChevronDown size={11}/> : <ChevronRight size={11}/>} {hechos.length} hecho{hechos.length!==1?'s':''}
+            {verHechos ? <ChevronDown size={11}/> : <ChevronRight size={11}/>} {hechos.length} cerrado{hechos.length!==1?'s':''}
           </button>
           {verHechos && hechos.map(fila)}
         </div>

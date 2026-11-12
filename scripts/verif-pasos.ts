@@ -73,5 +73,38 @@ ok(/const pasosVivos = adminStore\.getPlanPasos\(\)/.test(fuente),
    'la lámina final del PPTX sale de lo que está abierto hoy, no del texto congelado del plan');
 ok(!/PlanNotesModal/.test(fuente), 'el modal de notas viejo ya no queda dando vueltas');
 
+console.log('\n── Notas y pasos en el mismo recuadro ──');
+// Dos cosas distintas que se leen juntas en la reunión: un paso es trabajo que
+// alguien hará; una nota es contexto que no se «resuelve», se archiva.
+ok(/const esNota = \(p: PasoPlan\)/.test(fuente), 'cada registro sabe si es paso o nota');
+ok(/p\.tipo \?\? 'paso'/.test(fuente), 'lo que ya existía sigue siendo un paso: nada que migrar');
+ok(/nota_ \? '✎' : abierto \? '•' : '✓'/.test(fuente), 'el distintivo es la viñeta, no una etiqueta por fila');
+ok(/borderLeftColor: nota_ \? '#cbd5e1' : '#86efac'/.test(fuente), 'y el borde izquierdo, que se lee de reojo');
+ok(/nota_ \? 'Archivar' : 'Resolver'/.test(fuente), 'una nota se archiva, no se resuelve');
+ok(/Siguientes pasos y notas/.test(fuente), 'el recuadro es uno solo');
+ok(/setTipo\(tipo === 'nota' \? 'paso' : 'nota'\)/.test(fuente), 'una nota que genera trabajo puede pasar a paso');
+
+console.log('\n── Responsable de la alerta ──');
+ok(/Responsable de destrabarlo/.test(fuente), 'el formulario pide de quién depende');
+ok(/responsable: form\.responsable\.trim\(\) \|\| undefined/.test(fuente), 'y se guarda sin espacios sueltos');
+ok(/sin responsable/.test(fuente), 'si falta en una abierta, la fila lo dice en vez de callarlo');
+const escalado2 = escalarAlerta({ ...alerta, responsable: 'Gobierno del Dato BBVA' }, 'x', 'David', '2026-11-12')[1];
+ok(escalado2.responsable === 'Gobierno del Dato BBVA', 'al escalar, el bloqueante hereda el responsable');
+
+console.log('\n── Etapas que dependen del banco ──');
+ok(/etapa\.resp !== \(act\.bbva \? 'bbva' : 'timia'\)/.test(fuente),
+   'la insignia solo sale si la etapa difiere de su actividad: repetirla no informa');
+const est = readFileSync(new URL('../src/components/Estimaciones.tsx', import.meta.url), 'utf8');
+ok(/etapa\.resp \?\? ''/.test(est), 'el editor de etapas tiene el selector de responsable');
+ok(/<option value="bbva">BBVA<\/option>/.test(est), 'con BBVA entre las opciones');
+ok(/— resp\./.test(est), 'y vacío = hereda el de la actividad, que es lo normal');
+
+console.log('\n── Finalizada se ve finalizada ──');
+ok(/const finalizada = effectivePct >= 100/.test(fuente), 'el 100% marca la barra como cerrada');
+ok(/finalizada \? \(isSubtask \? 'rgba\(22,163,74,0\.6\)' : '#16a34a'\)/.test(fuente),
+   'en verde, no en el mismo verde azulado del avance');
+ok(/finalizada && isLast &&/.test(fuente), 'con la palomita al final del tramo');
+ok(/l:'Finalizada'/.test(fuente), 'y la leyenda lo explica');
+
 console.log(f ? `\n${f} fallo(s)` : '\nTodo bien');
 process.exit(f ? 1 : 0);

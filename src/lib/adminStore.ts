@@ -201,7 +201,20 @@ export interface PlanEtapa {
   peso: number;           // porcentaje de la actividad que representa (0-100)
   optional?: boolean;
   subs?: string[];        // sub-ítems descriptivos (no pesan individualmente)
+  /**
+   * Quién ejecuta esta etapa, igual que en la actividad. Una actividad puede ser
+   * nuestra y aun así tener dentro un paso que depende del banco —el VoBo de
+   * Gobierno, el despliegue en Live—, y ése es justo el que suele atascarse. Sin
+   * marcarlo, la actividad aparece como nuestra y el atasco no se ve venir.
+   * Si falta, la etapa hereda el responsable de su actividad.
+   */
+  resp?: 'timia' | 'bbva' | 'mixto';
 }
+
+/** Etiqueta corta del responsable, para las insignias del plan. */
+export const RESP_ETIQUETA: Record<'timia' | 'bbva' | 'mixto', string> = {
+  timia: 'Timia', bbva: 'BBVA', mixto: 'Mixto',
+};
 
 /** Estado de cada etapa (keyed por `${projectId}__${entregableId}__${actIdx}__${etapaId}`) */
 export type EtapaStates = Record<string, {
@@ -233,6 +246,13 @@ export interface PlanIssue {
   detail?: string;
   startDate: string;               // ISO yyyy-mm-dd — cuándo inicia
   endDate?: string;                // ISO yyyy-mm-dd — cuándo se reporta el fin (undefined = abierta)
+  /**
+   * De quién depende destrabarlo. Texto libre a propósito: casi siempre es
+   * alguien de fuera —un área del banco, un proveedor, un nombre que no está
+   * en la plataforma— y un desplegable de usuarios dejaría esos casos sin
+   * responsable, que son justo los que se atascan.
+   */
+  responsable?: string;
   /** Tareas/subtareas impactadas (una o varias, incluso de otro cronograma del proyecto) */
   impacts?: PlanImpact[];
   /** @deprecated — formato antiguo de impacto único; usar impacts */
@@ -249,11 +269,23 @@ export interface PlanIssue {
   origenId?: string;
 }
 
-/** Un siguiente paso del plan: se edita y se resuelve, igual que una alerta. */
+/**
+ * Una entrada del recuadro de siguientes pasos.
+ *
+ * Caben dos cosas distintas en el mismo sitio porque en la reunión se leen
+ * juntas: un **paso** es algo que alguien tiene que hacer y se resuelve; una
+ * **nota** es contexto que conviene recordar y no se resuelve, solo se archiva
+ * cuando deja de importar. Separarlas en dos recuadros obligaría a mirar a dos
+ * sitios para contar la misma historia.
+ */
+export type TipoPaso = 'paso' | 'nota';
+
 export interface PasoPlan {
   id: string;
   planKey: string;
   texto: string;
+  /** Si falta es un paso: así los registros de antes de esto siguen valiendo. */
+  tipo?: TipoPaso;
   hechoEn?: string;                // ISO yyyy-mm-dd — sin esto, sigue pendiente
   hechoPor?: string;
   notaCierre?: string;
@@ -277,6 +309,7 @@ export interface EdicionIssue {
   /** Vacío o undefined = sigue abierta. */
   endDate?: string;
   notaCierre?: string;
+  responsable?: string;
   impacts: PlanImpact[];
 }
 
@@ -295,6 +328,7 @@ export function aplicarEdicionIssue(i: PlanIssue, e: EdicionIssue, por: string, 
     title: e.title,
     detail: e.detail,
     startDate: e.startDate,
+    responsable: e.responsable?.trim() || undefined,
     impacts: e.impacts,
     endDate: fin,
     closedBy: fin ? (i.closedBy ?? por) : undefined,
@@ -326,6 +360,7 @@ export function escalarAlerta(a: PlanIssue, nota: string, por: string, fecha: st
     title: a.title,
     detail: a.detail,
     startDate: fecha,
+    responsable: a.responsable,
     impacts: issueImpacts(a),
     createdBy: por, createdAt: ahora,
     origenId: a.id,
