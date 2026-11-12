@@ -77,7 +77,19 @@ ok(/const kpis = kpisDelPlan\(plan, getActivityPct, _holidays, issues, changes\)
 ok(!/const overallExp  = parseFloat\(\(plan\.entregables\.reduce\(\(s,e\)=>s\+e\.pctExp/.test(fuente),
    'el deck ya no exporta el pctExp congelado de la configuración');
 ok(/const overallDif = kpis\.dif;/.test(fuente), 'la diferencia que se reporta es contra la línea base');
-ok(/DIF\. VS REPLAN/.test(fuente), 'y la del replanificado se enseña aparte, como explicación');
+ok(!/DIF\. VS REPLAN/.test(fuente) && !/ESPERADO · REPLAN/.test(fuente),
+   'el esperado replanificado ya no se enseña: nadie lo entendía, ni el jefe');
+
+console.log('\n── El impacto se cuenta en días ──');
+ok(/label:'IMPACTO EN EL CRONOGRAMA'/.test(fuente), 'el encabezado enseña los días que se corre la entrega');
+ok(/const diasCorridos = endDate && newEndDate/.test(fuente),
+   'medidos entre la fecha de fin de la línea base y la nueva, no sumando tareas');
+ok(/businessDaysBetween\(endDate\.toISOString/.test(fuente), 'y en días hábiles, no naturales');
+ok(/'cabe'/.test(fuente), 'si las fechas corridas caben en el plan, lo dice en vez de inventar un número');
+ok(/const diasFase = Math\.round\(\(finEfectivo - finBase\) \* 5\)/.test(fuente),
+   'cada fase enseña lo que se corre su propio fin');
+ok(/Sumar los días de todas las tareas diría que/.test(fuente),
+   'queda escrito por qué no se suman: dos tareas bloqueadas la misma semana no cuestan el doble de calendario');
 
 console.log(f ? `\n${f} fallo(s)` : '\nTodo bien');
 process.exit(f ? 1 : 0);

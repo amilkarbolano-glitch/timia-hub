@@ -23,7 +23,7 @@ import {
 } from '../lib/historialPlan';
 import {
   type PesoModo, PESO_MODO_DEFAULT, seriePlanConsolidada, seriePlanFase, marcasDe,
-  seriePlanConExtension, seriePlanFaseConExtension,
+  seriePlanConExtension,
   enSemana, enDia, realPlan, realFase, type AvanceFase,
 } from '../lib/avance';
 
@@ -734,25 +734,19 @@ function EntregableSection({ block, projectId, sectionIdx, getActivityPct, setAc
     : pesoModo === 'actividad-semana'
       ? esperadoPorCasillas(faseAvance)
       : parseFloat((block.activities.reduce((s, a) => s + computeActExpPct(a.startWeek, a.endWeek, todayWeekIdx), 0) / block.activities.length).toFixed(1));
-  const faseExt: AvanceFase = { ...faseAvance, activities: block.activities.map((a, i) => {
-    const eff = extensionFor(changes, planKey, block.id, i, a.endWeek, issues, holidays).effEndWeek;
-    const base = marcasDe({ weeks: a.weeks, startWeek: a.startWeek, endWeek: a.endWeek });
-    const extra: number[] = [];
-    for (let w = a.endWeek + 1; w <= eff; w++) extra.push(w);
-    return { weeks: [...base, ...extra], startWeek: a.startWeek, endWeek: eff };
-  }) };
-  const dynamicPctExp = block.activities.length === 0 || todayWeekIdx === undefined
-    ? block.pctExp
-    : pesoModo === 'actividad-semana'
-      // Con el factor de la línea base: extender reparte el peso de la tarea
-      // entre más semanas, no se lo sube ni cambia el de las demás.
-      ? parseFloat(enDia(seriePlanFaseConExtension(faseAvance, faseExt, semanasFase), todayWeekIdx + 1, diaHabil).toFixed(1))
-      : parseFloat((block.activities.reduce((s, a, i) => s + computeActExpPct(a.startWeek, extensionFor(changes, planKey, block.id, i, a.endWeek, issues, holidays).effEndWeek, todayWeekIdx), 0) / block.activities.length).toFixed(1));
-  const sectionHasExt = block.activities.some((a, i) => extensionFor(changes, planKey, block.id, i, a.endWeek, issues, holidays).days > 0);
+  const extsFase = block.activities.map((a, i) => extensionFor(changes, planKey, block.id, i, a.endWeek, issues, holidays));
+  const sectionHasExt = extsFase.some(e => e.days > 0);
+  // Cuánto se corre el fin de la fase: el de la tarea que más tarde acaba ahora
+  // menos el que acababa antes. Sumar los días de todas las tareas diría que
+  // dos bloqueadas la misma semana cuestan el doble de calendario, y no.
+  const finBase = Math.max(0, ...block.activities.map(a => a.endWeek));
+  const finEfectivo = Math.max(0, ...extsFase.map(e => e.effEndWeek));
+  const diasFase = Math.round((finEfectivo - finBase) * 5);
+  const diasPerdidos = extsFase.reduce((s, e) => s + e.days, 0);
+  const tareasCorridas = extsFase.filter(e => e.days > 0).length;
   // La diferencia que se reporta es contra la línea base: es el compromiso.
   // El replanificado explica por qué, no sustituye a lo que se prometió.
   const dif = parseFloat((effectivePctReal - basePctExp).toFixed(1));
-  const difReplan = parseFloat((effectivePctReal - dynamicPctExp).toFixed(1));
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const toggle = (i: number) => setExpanded(prev => { const n = new Set(prev); n.has(i) ? n.delete(i) : n.add(i); return n; });
 
@@ -767,8 +761,12 @@ function EntregableSection({ block, projectId, sectionIdx, getActivityPct, setAc
           {[{ label:'Avance real', val:`${effectivePctReal}%`, bg:'#374151' },
             { label: sectionHasExt ? 'Esperado · base' : 'Esperado', val:`${basePctExp}%`, bg:'#4b5563' },
             { label:'Diferencia', val:fmt1(dif), bg:difBg(dif), c:difColor(dif) },
-            ...(sectionHasExt ? [{ label:'Dif. vs replan. Δ⛔', val:fmt1(difReplan), bg:'#5b21b6' }] : [])].map(b => (
-            <div key={b.label} style={{ textAlign:'center', padding:'4px 12px', background: b.bg, borderRadius:7 }}>
+            ...(sectionHasExt ? [{
+              label:'Impacto', val: diasFase > 0 ? `+${diasFase} d` : 'cabe', bg:'#5b21b6',
+              t: `${diasFase > 0 ? `El fin de la fase se corre ${diasFase} día(s) hábil(es). ` : 'Las fechas corridas caben dentro de la fase. '}`
+                 + `${diasPerdidos} d en ${tareasCorridas} tarea(s) por cambios y bloqueantes.`,
+            }] : [])].map(b => (
+            <div key={b.label} title={(b as { t?: string }).t} style={{ textAlign:'center', padding:'4px 12px', background: b.bg, borderRadius:7 }}>
               <div style={{ fontSize:8, color: (b as any).c ?? '#9ca3af', marginBottom:1 }}>{b.label}</div>
               <div style={{ fontSize:15, fontWeight:700, color: (b as any).c ?? '#fff' }}>{b.val}</div>
             </div>
@@ -1469,7 +1467,6 @@ function PlanDetail({ plan, getActivityPct: getActivityPctHoy, setActivityPct, e
   const kpis = kpisDelPlan(plan, getActivityPct, holidays, issues, changes, corte);
   const { fases: fasesAvance, fasesExt: fasesAvanceExt, planWeeks } = kpis;
   const overallReal = kpis.real;
-  const overallExp = kpis.esperadoReplan;
   const overallExpBase = kpis.esperadoBase;
   const planHasExt = kpis.hayExtension;
 
@@ -1479,7 +1476,6 @@ function PlanDetail({ plan, getActivityPct: getActivityPctHoy, setActivityPct, e
   // enseñarlo como «la» diferencia hace que el proyecto se vea mejor de lo que
   // está frente a lo acordado.
   const overallDif = kpis.dif;
-  const overallDifReplan = kpis.difReplan;
 
 
 
@@ -1499,7 +1495,13 @@ function PlanDetail({ plan, getActivityPct: getActivityPctHoy, setActivityPct, e
     const weeksShift = effEnd - baseEnd;
     const endDate = holidays ? effectiveEndDate(plan.startDate, baseEnd, 0, holidays) : null;
     const newEndDate = weeksShift > 0 && holidays ? effectiveEndDate(plan.startDate, effEnd, 0, holidays) : null;
-    return { n: planChanges.length, hours, absorbed, daysTotal, blockTotal, nBlock: planBlockers.length, nBlockOpen: planBlockers.filter(b => !b.endDate).length, tasks, weeksShift, endDate, newEndDate };
+    // Días hábiles que se corrió el fin del cronograma. Es lo que se dice en voz
+    // alta —«esto nos movió la entrega N días»— y no se puede falsear sumando:
+    // dos tareas bloqueadas la misma semana no cuestan el doble de calendario.
+    const diasCorridos = endDate && newEndDate
+      ? businessDaysBetween(endDate.toISOString().slice(0,10), newEndDate.toISOString().slice(0,10), holidays)
+      : 0;
+    return { n: planChanges.length, hours, absorbed, daysTotal, blockTotal, nBlock: planBlockers.length, nBlockOpen: planBlockers.filter(b => !b.endDate).length, tasks, weeksShift, endDate, newEndDate, diasCorridos };
   })();
 
   return (
@@ -1548,8 +1550,22 @@ function PlanDetail({ plan, getActivityPct: getActivityPctHoy, setActivityPct, e
               sc: mirandoAtras ? '#99f6e4' : simulando ? '#ddd6fe' : '#9ca3af' },
             { label: mirandoAtras ? 'DIFERENCIA ESE DÍA' : simulando ? 'DIF. CONTRA ESE DÍA' : 'DIFERENCIA',
               val:fmt1(overallDif), bg:difBg(overallDif), c:difColor(overallDif), sc:difColor(overallDif) },
-            ...(planHasExt ? [{ label:'DIF. VS REPLAN. Δ⛔', val:fmt1(overallDifReplan), bg:'#5b21b6', c:'#fff', sc:'#c4b5fd',
-              t:`Contra los fines ya corridos por cambios y bloqueantes: ese día tocaba ${overallExpBase === overallExp ? overallExpBase : overallExp}%. Explica el retraso; el que se reporta es la diferencia contra la línea base.` }] : []),
+            // El impacto va en días, no en un segundo porcentaje: «esto nos
+            // movió la entrega N días» se entiende sin explicar nada, y era
+            // justo lo que el esperado replanificado no conseguía decir.
+            ...(planHasExt && changeSummary ? [{
+              label:'IMPACTO EN EL CRONOGRAMA',
+              val: changeSummary.diasCorridos > 0 ? `+${changeSummary.diasCorridos} d` : 'cabe',
+              bg:'#5b21b6', c:'#fff', sc:'#c4b5fd',
+              t: [
+                changeSummary.diasCorridos > 0
+                  ? `El fin del cronograma se corre ${changeSummary.diasCorridos} día(s) hábil(es)${changeSummary.newEndDate ? `: ${fmtCalDate(changeSummary.newEndDate)}` : ''}.`
+                  : 'Las fechas corridas caben dentro del plan: la entrega no se mueve.',
+                changeSummary.daysTotal > 0 ? `${changeSummary.daysTotal} d por cambios de alcance.` : '',
+                changeSummary.blockTotal > 0 ? `${changeSummary.blockTotal} d perdidos por bloqueantes.` : '',
+                changeSummary.tasks > 0 ? `${changeSummary.tasks} tarea(s) con fecha corrida.` : '',
+              ].filter(Boolean).join(' '),
+            }] : []),
           ].map(b => (
             <div key={b.label} title={(b as { t?: string }).t} style={{ textAlign:'center', padding:'6px 16px', background:b.bg, borderRadius:8 }}>
               <div style={{ fontSize:8, color:b.sc, marginBottom:2, textTransform:'uppercase', letterSpacing:'.04em' }}>{b.label}</div>
