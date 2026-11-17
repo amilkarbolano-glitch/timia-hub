@@ -26,6 +26,7 @@
     "verif:pasos": "tsx scripts/verif-pasos.ts",
     "verif:historial": "tsx scripts/verif-historial.ts",
     "verif:replan": "tsx scripts/verif-replan.ts",
+    "verif:q43": "tsx scripts/verif-q43.ts",
     "verif:tipos": "tsx scripts/verif-tipos.ts"
   },
   "dependencies": {
