@@ -215,7 +215,14 @@ function GanttRow({ act, effectivePct, idx, expanded, onToggle, isSubtask = fals
 }) {
   const hasBloq  = issues.some(i => i.type === 'bloqueante');
   const hasAlert = issues.some(i => i.type === 'alerta');
-  const issueColor = hasBloq ? '#dc2626' : hasAlert ? '#f59e0b' : undefined;
+  // Una tarea terminada se lee de un vistazo con el mismo lenguaje que ya usan
+  // la alerta y el bloqueante: un tinte muy suave en toda la fila y una franja
+  // de color a la izquierda. La barra verde sola no basta — en un tramo de una
+  // semana es un cuadrito, y la fila entera sí se distingue de un barrido.
+  const terminada = effectivePct >= 100 && !isSubtask;
+  // Terminada manda sobre el aviso: lo que importa de una tarea cerrada es que
+  // está cerrada. El icono ⛔/⚠ se queda, para no perder que hubo un tropiezo.
+  const issueColor = terminada ? '#16a34a' : hasBloq ? '#dc2626' : hasAlert ? '#f59e0b' : undefined;
   const hasSubtasks = (act.subtasks?.length ?? 0) > 0;
   const hasEtapas   = (act.etapas?.length ?? 0) > 0;
   const [editing, setEditing] = useState(false);
@@ -236,9 +243,9 @@ function GanttRow({ act, effectivePct, idx, expanded, onToggle, isSubtask = fals
   }
 
   return (
-    <tr style={{ background: hasBloq ? '#fff5f5' : hasAlert ? '#fffbeb' : isSubtask ? '#f8fffb' : idx % 2 === 0 ? '#fff' : '#fafafe' }}
+    <tr style={{ background: terminada ? '#f4fdf6' : hasBloq ? '#fff5f5' : hasAlert ? '#fffbeb' : isSubtask ? '#f8fffb' : idx % 2 === 0 ? '#fff' : '#fafafe' }}
         onClick={!editing && onActivityClick && !isSubtask ? onActivityClick : undefined}>
-      <td style={{ padding: isSubtask ? '4px 8px 4px 24px' : '5px 10px', fontSize: isSubtask ? 10 : 11, color: '#374151', borderRight: '0.5px solid #e2e8f0', borderLeft: issueColor ? `3px solid ${issueColor}` : undefined, minWidth: 230, maxWidth: 230, cursor: onActivityClick && !isSubtask ? 'pointer' : 'default' }}>
+      <td style={{ padding: isSubtask ? '4px 8px 4px 24px' : '5px 10px', fontSize: isSubtask ? 10 : 11, color: terminada ? '#166534' : '#374151', borderRight: '0.5px solid #e2e8f0', borderLeft: issueColor ? `3px solid ${issueColor}` : undefined, minWidth: 230, maxWidth: 230, cursor: onActivityClick && !isSubtask ? 'pointer' : 'default' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
           {issueColor && (
             <span title={issues.map(i => `${i.type === 'bloqueante' ? '⛔' : '⚠'} ${i.title} (desde ${i.startDate})`).join('\n')}

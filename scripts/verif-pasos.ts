@@ -105,6 +105,13 @@ ok(/finalizada \? \(isSubtask \? 'rgba\(22,163,74,0\.6\)' : '#16a34a'\)/.test(fu
    'en verde, no en el mismo verde azulado del avance');
 ok(/finalizada && isLast &&/.test(fuente), 'con la palomita al final del tramo');
 ok(/l:'Finalizada'/.test(fuente), 'y la leyenda lo explica');
+ok(/const terminada = effectivePct >= 100 && !isSubtask/.test(fuente),
+   'la fila entera sabe que la tarea está cerrada, no solo la barra');
+ok(/background: terminada \? '#f4fdf6'/.test(fuente),
+   'con un tinte tan suave como el de la alerta y el bloqueante');
+ok(/issueColor = terminada \? '#16a34a'/.test(fuente),
+   'y la franja de la izquierda en verde, el mismo lenguaje que el ámbar y el rojo');
+ok(/color: terminada \? '#166534' : '#374151'/.test(fuente), 'el nombre en verde apagado');
 
 console.log(f ? `\n${f} fallo(s)` : '\nTodo bien');
 process.exit(f ? 1 : 0);
