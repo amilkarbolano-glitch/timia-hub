@@ -83,6 +83,56 @@ export function seriePlanFase(fase: AvanceFase, totalWeeks: number): Serie {
   return { semanal, acumulado: acumular(semanal) };
 }
 
+/**
+ * Reparte el peso de cada actividad entre las casillas que ocupa de verdad.
+ *
+ * Extender una tarea no crea trabajo: lo estira. Si una actividad de 2 semanas
+ * se corre a 4, sigue pesando lo mismo dentro del plan, solo que cada semana
+ * aporta la mitad. Sumar casillas sin más haría dos cosas malas a la vez —
+ * subir el peso de la tarea retrasada (premiar el retraso) y crecer el
+ * denominador, moviendo el % de todas las demás actividades por un motivo que
+ * no tiene nada que ver con ellas.
+ */
+function repartirConExtension(
+  base: AvanceActividad[], ext: AvanceActividad[], factor: number,
+  semanal: number[], totalWeeks: number,
+): void {
+  base.forEach((a, i) => {
+    const marcasBase = marcasDe(a);
+    const marcasExt = marcasDe(ext[i] ?? a);
+    if (!marcasBase.length || !marcasExt.length) return;
+    const porCasilla = (marcasBase.length * factor) / marcasExt.length;
+    for (const w of marcasExt) {
+      if (w >= 1 && w <= totalWeeks) semanal[w - 1] += porCasilla;
+    }
+  });
+}
+
+/**
+ * Serie planificada con los fines corridos por cambios y bloqueantes.
+ *
+ * Usa el factor de la línea base a propósito: así el esperado replanificado y
+ * el avance real están en la misma escala y su diferencia significa algo. Con
+ * el factor de las casillas extendidas, un plan al 50% real se comparaba contra
+ * un esperado medido sobre otro total, y la diferencia salía más pequeña de lo
+ * que era.
+ */
+export function seriePlanConExtension(base: AvanceFase[], ext: AvanceFase[], totalWeeks: number): Serie {
+  if (!totalWeeks) return serieVacia(0);
+  const factor = factorGlobal(base);
+  const semanal = Array(totalWeeks).fill(0);
+  base.forEach((f, i) => repartirConExtension(f.activities, (ext[i] ?? f).activities, factor, semanal, totalWeeks));
+  return { semanal, acumulado: acumular(semanal) };
+}
+
+/** Lo mismo para una sola fase, con el factor de la fase. */
+export function seriePlanFaseConExtension(base: AvanceFase, ext: AvanceFase, totalWeeks: number): Serie {
+  const factor = factorFase(base);
+  const semanal = Array(totalWeeks).fill(0);
+  repartirConExtension(base.activities, ext.activities, factor, semanal, totalWeeks);
+  return { semanal, acumulado: acumular(semanal) };
+}
+
 /** Serie planificada consolidada del plan, con el factor global. */
 export function seriePlanConsolidada(fases: AvanceFase[], totalWeeks: number): Serie {
   if (!totalWeeks) return serieVacia(0);

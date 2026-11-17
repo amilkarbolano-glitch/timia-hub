@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { AuthProvider, useAuth, canAccess, ROLE_LANDING, UserRole } from './contexts/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
+import TrPublico from './components/TrPublico';
 import Layout, { View } from './components/Layout';
 import KanbanBoard from './components/KanbanBoard';
 import ProjectStandards from './components/ProjectStandards';
@@ -263,7 +264,25 @@ function AppInner() {
 
 // ─── Entrada ──────────────────────────────────────────────────────────────────
 
+/** Rutas que se ven sin iniciar sesión. Hoy solo el registro de TR. */
+const BASE_URL = ((import.meta as any).env?.BASE_URL ?? '/').replace(/\/+$/, '');
+const RUTAS_PUBLICAS: Record<string, React.ComponentType> = {
+  '/tr': TrPublico,
+};
+
+function rutaPublica(): React.ComponentType | null {
+  let p = window.location.pathname;
+  if (BASE_URL && p.startsWith(BASE_URL)) p = p.slice(BASE_URL.length);
+  p = p.replace(/\/+$/, '') || '/';
+  return RUTAS_PUBLICAS[p] ?? null;
+}
+
 export default function App() {
+  // Se resuelve antes del AuthProvider: la gente sube su TR desde el celular y
+  // no tiene por qué pasar por el login de Google para eso.
+  const Publica = rutaPublica();
+  if (Publica) return <Publica />;
+
   return (
     <AuthProvider>
       <ProtectedRoute>

@@ -376,6 +376,22 @@ function EtapaRow({
         />
         <span style={{ fontSize: 10, color: '#94a3b8' }}>%</span>
       </div>
+      {/* Quién la ejecuta. Vacío = lo que diga la actividad: la mayoría de las
+          etapas son del mismo responsable y marcarlas una a una sería ruido. */}
+      <select
+        value={etapa.resp ?? ''}
+        onChange={e => onChange({ ...etapa, resp: (e.target.value || undefined) as PlanEtapa['resp'] })}
+        title="Quién ejecuta esta etapa. Vacío = el mismo responsable de la actividad."
+        style={{ flexShrink: 0, padding: '4px 5px', fontSize: 9.5, borderRadius: 5, outline: 'none',
+                 border: `1px solid ${etapa.resp === 'bbva' ? '#bfdbfe' : '#e2e8f0'}`,
+                 background: etapa.resp === 'bbva' ? '#eff6ff' : etapa.resp === 'mixto' ? '#fefce8' : '#fff',
+                 color: etapa.resp === 'bbva' ? '#1d4ed8' : etapa.resp === 'mixto' ? '#a16207' : '#64748b',
+                 fontWeight: etapa.resp ? 600 : 400 }}>
+        <option value="">— resp.</option>
+        <option value="timia">Timia</option>
+        <option value="bbva">BBVA</option>
+        <option value="mixto">Mixto</option>
+      </select>
       <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 9, color: '#94a3b8', cursor: 'pointer', flexShrink: 0 }}>
         <input
           type="checkbox" checked={etapa.optional ?? false}
