@@ -769,13 +769,20 @@ function EntregableSection({ block, projectId, sectionIdx, getActivityPct, setAc
             { label: sectionHasExt ? 'Esperado · base' : 'Esperado', val:`${basePctExp}%`, bg:'#4b5563' },
             { label:'Diferencia', val:fmt1(dif), bg:difBg(dif), c:difColor(dif) },
             ...(sectionHasExt ? [{
-              label:'Impacto', val: diasFase > 0 ? `+${diasFase} d` : 'cabe', bg:'#5b21b6',
-              t: `${diasFase > 0 ? `El fin de la fase se corre ${diasFase} día(s) hábil(es). ` : 'Las fechas corridas caben dentro de la fase. '}`
+              // El impacto se dice en la misma unidad siempre: 0 d es comparable
+              // con +5 d, y «cabe» no lo era. Lo que se perdió no desaparece,
+              // baja a la segunda línea: se absorbió con holgura, no es gratis.
+              label:'Impacto', val: diasFase > 0 ? `+${diasFase} d` : '0 d', bg:'#5b21b6',
+              sub: diasFase <= 0 && diasPerdidos > 0 ? `${diasPerdidos} d con holgura` : undefined,
+              t: `${diasFase > 0 ? `El fin de la fase se corre ${diasFase} día(s) hábil(es). ` : 'El fin de la fase no se mueve: las tareas corridas no son las que marcan el cierre. '}`
                  + `${diasPerdidos} d en ${tareasCorridas} tarea(s) por cambios y bloqueantes.`,
             }] : [])].map(b => (
             <div key={b.label} title={(b as { t?: string }).t} style={{ textAlign:'center', padding:'4px 12px', background: b.bg, borderRadius:7 }}>
               <div style={{ fontSize:8, color: (b as any).c ?? '#9ca3af', marginBottom:1 }}>{b.label}</div>
               <div style={{ fontSize:15, fontWeight:700, color: (b as any).c ?? '#fff' }}>{b.val}</div>
+              {(b as { sub?: string }).sub && (
+                <div style={{ fontSize:8, color:'#c4b5fd', marginTop:1 }}>{(b as { sub?: string }).sub}</div>
+              )}
             </div>
           ))}
         </div>
@@ -1561,13 +1568,17 @@ function PlanDetail({ plan, getActivityPct: getActivityPctHoy, setActivityPct, e
             // movió la entrega N días» se entiende sin explicar nada, y era
             // justo lo que el esperado replanificado no conseguía decir.
             ...(planHasExt && changeSummary ? [{
-              label:'IMPACTO EN EL CRONOGRAMA',
-              val: changeSummary.diasCorridos > 0 ? `+${changeSummary.diasCorridos} d` : 'cabe',
+              // «Impacto en la entrega» y no «en el cronograma»: lo que el comité
+              // pregunta es si la fecha prometida se mueve, no si la rejilla cambió.
+              label:'IMPACTO EN LA ENTREGA',
+              val: changeSummary.diasCorridos > 0 ? `+${changeSummary.diasCorridos} d` : '0 d',
+              sub: changeSummary.diasCorridos <= 0 && changeSummary.daysTotal + changeSummary.blockTotal > 0
+                ? `${changeSummary.daysTotal + changeSummary.blockTotal} d con holgura` : undefined,
               bg:'#5b21b6', c:'#fff', sc:'#c4b5fd',
               t: [
                 changeSummary.diasCorridos > 0
                   ? `El fin del cronograma se corre ${changeSummary.diasCorridos} día(s) hábil(es)${changeSummary.newEndDate ? `: ${fmtCalDate(changeSummary.newEndDate)}` : ''}.`
-                  : 'Las fechas corridas caben dentro del plan: la entrega no se mueve.',
+                  : 'La entrega no se mueve: las tareas corridas no son las que marcan el cierre del cronograma.',
                 changeSummary.daysTotal > 0 ? `${changeSummary.daysTotal} d por cambios de alcance.` : '',
                 changeSummary.blockTotal > 0 ? `${changeSummary.blockTotal} d perdidos por bloqueantes.` : '',
                 changeSummary.tasks > 0 ? `${changeSummary.tasks} tarea(s) con fecha corrida.` : '',
@@ -1577,6 +1588,9 @@ function PlanDetail({ plan, getActivityPct: getActivityPctHoy, setActivityPct, e
             <div key={b.label} title={(b as { t?: string }).t} style={{ textAlign:'center', padding:'6px 16px', background:b.bg, borderRadius:8 }}>
               <div style={{ fontSize:8, color:b.sc, marginBottom:2, textTransform:'uppercase', letterSpacing:'.04em' }}>{b.label}</div>
               <div style={{ fontSize:20, fontWeight:700, color:b.c }}>{b.val}</div>
+              {(b as { sub?: string }).sub && (
+                <div style={{ fontSize:9, color:b.sc, marginTop:1 }}>{(b as { sub?: string }).sub}</div>
+              )}
             </div>
           ))}
         </div>
@@ -1682,7 +1696,7 @@ function PlanDetail({ plan, getActivityPct: getActivityPctHoy, setActivityPct, e
           <span style={{ marginLeft:'auto', fontSize:10, color: changeSummary.weeksShift > 0 ? '#dc2626' : '#15803d', fontWeight:600 }}>
             {changeSummary.weeksShift > 0
               ? `Fin del cronograma: ${changeSummary.newEndDate ? fmtCalDate(changeSummary.newEndDate) : ''} (+${changeSummary.weeksShift} sem vs. línea base${changeSummary.endDate ? ` ${fmtCalDate(changeSummary.endDate)}` : ''})`
-              : 'Fin del cronograma sin cambio — la extensión cabe dentro del plan'}
+              : 'Entrega sin mover — las fechas corridas se absorben con la holgura'}
           </span>
         </div>
       )}
