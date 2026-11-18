@@ -64,8 +64,41 @@ const WEEKS = [
   {l:'S7',d:'09/03'},{l:'S8',d:'16/03'},{l:'S9',d:'24/03'},
   {l:'S10',d:'31/03'},{l:'S11',d:'09/04'},{l:'S12',d:'16/04'},{l:'S13',d:'23/04'},
 ];
+// Respaldo para cuando no hay plan en contexto. El número de semanas de un
+// cronograma SIEMPRE sale del plan: 13 quemadas hacían que un proyecto de 5
+// semanas dibujara 13 columnas en el Gantt.
 const TOTAL_WEEKS = 13;
 const CELL_W = 38;
+
+/** Semanas de un plan: lo configurado en estimación, y si no, hasta dónde llega la última tarea. */
+function weeksOf(p: { totalWeeks?: number; weekLabels?: string[]; entregables: PlanEntregable[] }): number {
+  return Math.max(1, p.totalWeeks ?? p.weekLabels?.length
+    ?? Math.max(1, ...p.entregables.flatMap(e => e.activities.map(a => a.endWeek))));
+}
+
+/** Columnas de semana con su etiqueta corta. La fecha la resuelve quien la pinte. */
+function weekCols(n: number): { l: string; d: string }[] {
+  return Array.from({ length: Math.max(1, n) }, (_, i) => ({ l: `S${i + 1}`, d: WEEKS[i]?.d ?? '' }));
+}
+
+/** Columnas con fecha real: weekLabels del plan, si no startDate, si no respaldo. */
+function weekColsFor(
+  p: { totalWeeks?: number; weekLabels?: string[]; startDate?: string; entregables: PlanEntregable[] },
+  holidays: Set<string>, total?: number,
+): { l: string; d: string }[] {
+  return Array.from({ length: total ?? weeksOf(p) }, (_, i) => {
+    let d = '';
+    if (p.weekLabels && p.weekLabels[i]) {
+      d = p.weekLabels[i].replace(/^S\d+\s*[··]\s*/, '');
+    } else if (p.startDate) {
+      const dt = weekToActualDate(p.startDate, i + 1, holidays);
+      d = dt ? `${dt.getDate()}/${dt.getMonth() + 1}` : `S${i + 1}`;
+    } else {
+      d = WEEKS[i]?.d ?? `S${i + 1}`;
+    }
+    return { l: `S${i + 1}`, d };
+  });
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -199,11 +232,13 @@ function GanttCell({ wi, act, effectivePct, isSubtask, todayWeekIdx, diaHabil = 
 
 // ─── GanttRow ─────────────────────────────────────────────────────────────────
 
-function GanttRow({ act, effectivePct, idx, expanded, onToggle, isSubtask = false, onPctChange, pctManual = false, onActivityClick, todayWeekIdx, diaHabil = 5, doneDateLabel, issues = [], issueWeeks, changes, ext }: {
+function GanttRow({ act, effectivePct, idx, expanded, onToggle, isSubtask = false, onPctChange, pctManual = false, onActivityClick, todayWeekIdx, diaHabil = 5, doneDateLabel, issues = [], issueWeeks, changes, ext, weeks }: {
   act: PlanActivity; effectivePct: number; idx: number; expanded: boolean;
   onToggle: () => void; isSubtask?: boolean;
   onPctChange?: (n: number) => void; pctManual?: boolean; onActivityClick?: () => void;
   todayWeekIdx?: number; diaHabil?: number; doneDateLabel?: string;
+  /** Columnas de semana a pintar; sin esto cae al respaldo de 13. */
+  weeks?: number;
   /** Alertas/bloqueantes abiertos que impactan esta actividad */
   issues?: PlanIssue[];
   /** Por índice de semana (0-based), la marca a dibujar en la celda */
@@ -298,7 +333,7 @@ function GanttRow({ act, effectivePct, idx, expanded, onToggle, isSubtask = fals
           </span>
         )}
       </td>
-      {Array.from({ length: TOTAL_WEEKS }).map((_, wi) => (
+      {Array.from({ length: weeks ?? TOTAL_WEEKS }).map((_, wi) => (
         <GanttCell key={wi} wi={wi} act={act} effectivePct={effectivePct} isSubtask={isSubtask} todayWeekIdx={todayWeekIdx} diaHabil={diaHabil} issueMark={issueWeeks?.[wi]} extWeeks={ext?.extWeeks ?? 0} blockWeeks={ext?.blockWeeks ?? 0}/>
       ))}
     </tr>
@@ -696,7 +731,7 @@ function EntregableSection({ block, projectId, sectionIdx, getActivityPct, setAc
       list.forEach(x => {
         const a = dateToBusinessWeekIdx(planStartDate, x.startDate, holidays);
         const b = dateToBusinessWeekIdx(planStartDate, x.endDate ?? todayISO, holidays);
-        for (let w = Math.max(0, a); w <= Math.max(a, b) && w < TOTAL_WEEKS; w++) {
+        for (let w = Math.max(0, a); w <= Math.max(a, b) && w < semanasGrid; w++) {
           if (x.type === 'bloqueante' || !weeks[w]) weeks[w] = x.type;
         }
       });
@@ -751,6 +786,9 @@ function EntregableSection({ block, projectId, sectionIdx, getActivityPct, setAc
   const diasFase = Math.round((finEfectivo - finBase) * 5);
   const diasPerdidos = extsFase.reduce((s, e) => s + e.days, 0);
   const tareasCorridas = extsFase.filter(e => e.days > 0).length;
+  // Columnas del Gantt: las semanas del plan y, si una extensión corrió el fin
+  // más allá, hasta donde llegue. Nunca una constante.
+  const semanasGrid = Math.max(1, semanasFase, finEfectivo);
   // La diferencia que se reporta es contra la línea base: es el compromiso.
   // El replanificado explica por qué, no sustituye a lo que se prometió.
   const dif = parseFloat((effectivePctReal - basePctExp).toFixed(1));
@@ -789,12 +827,12 @@ function EntregableSection({ block, projectId, sectionIdx, getActivityPct, setAc
       </div>
       {block.activities.length > 0 ? (
         <div data-gantt-table style={{ overflowX: 'auto', borderRadius: 8, border: '0.5px solid #e2e8f0' }}>
-          <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 288 + TOTAL_WEEKS * CELL_W }}>
+          <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 288 + semanasGrid * CELL_W }}>
             <thead>
               <tr style={{ background: '#881337' }}>
                 <th style={{ padding:'6px 10px', textAlign:'left', fontSize:10, color:'#fff', fontWeight:600, minWidth:230 }}>Actividades / Avance</th>
                 <th style={{ padding:'6px', textAlign:'center', fontSize:10, color:'#fff', fontWeight:600, width:50 }}>%</th>
-                {WEEKS.map((w, i) => {
+                {weekCols(semanasGrid).map((w, i) => {
                   const isToday = todayWeekIdx !== undefined && todayWeekIdx >= 0 && i === todayWeekIdx;
                   // Fecha dinámica: si tenemos startDate la calculamos; si no, fallback a WEEKS[i].d
                   let dateLabel = w.d;
@@ -823,14 +861,14 @@ function EntregableSection({ block, projectId, sectionIdx, getActivityPct, setAc
                     onPctChange={v => setActivityPct(i, v)} pctManual={esPctManual?.(i) ?? false}
                     onActivityClick={() => onActivityClick(i, block.activities[i])}
                     todayWeekIdx={todayWeekIdx} diaHabil={diaHabil} doneDateLabel={getDoneDate?.(i)}
-                    issues={issuesFor(i).list} issueWeeks={issuesFor(i).weeks} changes={changesFor(i)} ext={extFor(i)}/>
+                    issues={issuesFor(i).list} issueWeeks={issuesFor(i).weeks} changes={changesFor(i)} ext={extFor(i)} weeks={semanasGrid}/>
                   {expanded.has(i) && act.subtasks?.map((sub, si) => (
-                    <GanttRow key={`sub-${si}`} act={{ name:sub.name, pct:sub.pct, pctExp:sub.pct, startWeek:act.startWeek, endWeek:act.endWeek, ...(sub.optional?{optional:true}as any:{}) }} effectivePct={sub.pct} idx={si} expanded={false} onToggle={() => {}} isSubtask/>
+                    <GanttRow key={`sub-${si}`} act={{ name:sub.name, pct:sub.pct, pctExp:sub.pct, startWeek:act.startWeek, endWeek:act.endWeek, ...(sub.optional?{optional:true}as any:{}) }} effectivePct={sub.pct} idx={si} expanded={false} onToggle={() => {}} isSubtask weeks={semanasGrid}/>
                   ))}
                 </React.Fragment>
               ))}
               <tr style={{ background: '#f8fafc' }}>
-                <td colSpan={2 + TOTAL_WEEKS} style={{ padding:'5px 10px' }}>
+                <td colSpan={2 + semanasGrid} style={{ padding:'5px 10px' }}>
                   <div style={{ display:'flex', gap:14, alignItems:'center', flexWrap:'wrap' }}>
                     {[
                       { sw:<div style={{ width:20, height:9, background:'#0d9488', borderRadius:2 }}/>, l:'Ejecutado' },
@@ -2183,7 +2221,7 @@ function ConsolidadoView({ plans, holidays, getActivityPct, onOpen, openIssues =
       sr += getActivityPct(p.planKey, e.id, i, a); se += computeActExpPct(a.startWeek, ex.effEndWeek, todayIdx); n++;
       extDays += ex.days; baseEndW = Math.max(baseEndW, a.endWeek); effEndW = Math.max(effEndW, ex.effEndWeek);
     }));
-    const weeks = Math.max(p.weekLabels?.length ?? Math.max(TOTAL_WEEKS, ...p.entregables.flatMap(e => e.activities.map(a => a.endWeek))), effEndW);
+    const weeks = Math.max(weeksOf(p), effEndW);
     const weeksShift = Math.max(0, effEndW - baseEndW);
     const start = weekToActualDate(p.startDate, 1, holidays);
     const end   = weekToActualDate(p.startDate, weeks + 1, holidays);
@@ -2471,19 +2509,7 @@ async function exportPlanPPTX(plan: WorkPlan, getActivityPct: (eid: string, ai: 
 
   // ── Semanas — dinámico basado en startDate del plan ──────────────────────
   const _holidays = new Set(adminStore.getHolidays().map(h => h.date));
-  const WKS: { l: string; d: string }[] = Array.from({ length: TOTAL_WEEKS }, (_, i) => {
-    let d = '';
-    if (plan.weekLabels && plan.weekLabels[i]) {
-      d = plan.weekLabels[i].replace(/^S\d+\s*[··]\s*/, '');
-    } else if (plan.startDate) {
-      const dt = weekToActualDate(plan.startDate, i + 1, _holidays);
-      d = dt ? `${dt.getDate()}/${dt.getMonth() + 1}` : `S${i + 1}`;
-    } else {
-      const fallback = ['26/01','02/02','09/02','16/02','23/02','02/03','09/03','16/03','24/03','31/03','09/04','16/04','23/04'];
-      d = fallback[i] ?? `S${i + 1}`;
-    }
-    return { l: `S${i + 1}`, d };
-  });
+  const WKS: { l: string; d: string }[] = weekColsFor(plan, _holidays);
 
   // ── Layout de la tabla ────────────────────────────────────────────────────
   const LM      = 0.18;       // left margin
@@ -2818,7 +2844,7 @@ export function getPlanSummaries(): PlanSummary[] {
       if (pct >= 100) done++; else if (end && end < today) late++; else if (todayIdx + 1 >= a.startWeek) inProg++;
     }));
     const mine = issues.filter(x => !x.endDate && issueImpacts(x).some(m => m.planKey === p.planKey) || (!x.endDate && x.planKey === p.planKey));
-    const weeks = Math.max(p.weekLabels?.length ?? TOTAL_WEEKS, maxEnd);
+    const weeks = Math.max(weeksOf(p), maxEnd);
     return { planKey: p.planKey, projectId: p.projectId, cronoName: p.cronoId ? (p.cronoName ?? p.cronoId) : CRONO_MAIN_NAME, startDate: p.startDate,
       real: n ? sr / n : 0, exp: n ? se / n : 0, nActs: n, done, late, inProgress: inProg,
       openBloq: mine.filter(x => x.type === 'bloqueante').length, openAlert: mine.filter(x => x.type === 'alerta').length,
@@ -3184,7 +3210,11 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
       const ML = 14, MR = 14;                           // márgenes laterales
       const CW = PW - ML - MR;                          // 269mm ancho útil
       const NAME_COL = 90, PCT_COL = 11;
-      const WEEK_COL = (CW - NAME_COL - PCT_COL) / TOTAL_WEEKS; // ~13mm
+      // Las semanas del PDF son las del plan; con 13 fijas un cronograma de 5
+      // semanas salía con 8 columnas vacías.
+      const SEMANAS = weeksOf(plan);
+      const WKS_PDF = weekColsFor(plan, new Set(adminStore.getHolidays().map(h => h.date)), SEMANAS);
+      const WEEK_COL = (CW - NAME_COL - PCT_COL) / SEMANAS;
       const HDR_H = 28, TBL_HDR_H = 8, ROW_H = 7.5;
 
       const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
@@ -3314,7 +3344,7 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
         pdf.text('Actividades / Avance', ML + 2, tY + 5.5);
         pdf.text('%', ML + NAME_COL + PCT_COL / 2, tY + 5.5, { align: 'center' });
 
-        WEEKS.forEach((w, wi) => {
+        WKS_PDF.forEach((w, wi) => {
           const wx = ML + NAME_COL + PCT_COL + wi * WEEK_COL;
           pdf.setDrawColor(255, 255, 255); pdf.setLineWidth(0.2);
           pdf.line(wx, tY, wx, tY + TBL_HDR_H);
@@ -3356,7 +3386,7 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
           pdf.text(`${rowPct.toFixed(0)}%`, ML + NAME_COL + PCT_COL / 2, ry + 5.2, { align: 'center' });
 
           // barras Gantt por semana
-          for (let wi = 0; wi < TOTAL_WEEKS; wi++) {
+          for (let wi = 0; wi < SEMANAS; wi++) {
             const wx = ML + NAME_COL + PCT_COL + wi * WEEK_COL;
             pdf.setDrawColor(226, 232, 240); pdf.setLineWidth(0.12);
             pdf.line(wx, ry, wx, ry + ROW_H);
