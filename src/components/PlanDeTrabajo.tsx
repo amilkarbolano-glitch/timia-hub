@@ -102,6 +102,14 @@ function weekColsFor(
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+/** ISO guardado → YYYY-MM-DD en hora local, que es el día que ve el usuario. */
+function isoAYmd(iso?: string): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 function difColor(d: number) { return d >= 0 ? '#15803d' : d < -5 ? '#dc2626' : '#d97706'; }
 function difBg(d: number)    { return d >= 0 ? '#dcfce7' : d < -5 ? '#fef2f2' : '#fef9c3'; }
 function fmt1(n: number)     { const d = parseFloat(n.toFixed(1)); return `${d > 0 ? '+' : ''}${d}%`; }
@@ -232,11 +240,15 @@ function GanttCell({ wi, act, effectivePct, isSubtask, todayWeekIdx, diaHabil = 
 
 // ─── GanttRow ─────────────────────────────────────────────────────────────────
 
-function GanttRow({ act, effectivePct, idx, expanded, onToggle, isSubtask = false, onPctChange, pctManual = false, onActivityClick, todayWeekIdx, diaHabil = 5, doneDateLabel, issues = [], issueWeeks, changes, ext, weeks }: {
+function GanttRow({ act, effectivePct, idx, expanded, onToggle, isSubtask = false, onPctChange, pctManual = false, onActivityClick, todayWeekIdx, diaHabil = 5, doneDateLabel, doneDateISO, onDoneDateChange, issues = [], issueWeeks, changes, ext, weeks }: {
   act: PlanActivity; effectivePct: number; idx: number; expanded: boolean;
   onToggle: () => void; isSubtask?: boolean;
   onPctChange?: (n: number) => void; pctManual?: boolean; onActivityClick?: () => void;
   todayWeekIdx?: number; diaHabil?: number; doneDateLabel?: string;
+  /** La fecha de finalizada tal como está guardada, para abrir el calendario en ella. */
+  doneDateISO?: string;
+  /** Cambia la fecha de finalizada (YYYY-MM-DD; vacío la quita). Sin esto, la fecha es solo texto. */
+  onDoneDateChange?: (ymd: string | undefined) => void;
   /** Columnas de semana a pintar; sin esto cae al respaldo de 13. */
   weeks?: number;
   /** Alertas/bloqueantes abiertos que impactan esta actividad */
@@ -249,6 +261,9 @@ function GanttRow({ act, effectivePct, idx, expanded, onToggle, isSubtask = fals
   ext?: { days: number; extWeeks: number; hours: number; newEndLabel?: string; blockDays?: number; blockWeeks?: number; blockers?: PlanIssue[]; changeDays?: number };
 }) {
   const hasBloq  = issues.some(i => i.type === 'bloqueante');
+  // La fecha de finalizada se pone sola al llegar al 100%, pero casi nunca se
+  // marca el mismo día en que se acabó la tarea. Un clic abre el calendario.
+  const [editandoFecha, setEditandoFecha] = useState(false);
   const hasAlert = issues.some(i => i.type === 'alerta');
   // Una tarea terminada se lee de un vistazo con el mismo lenguaje que ya usan
   // la alerta y el bloqueante: un tinte muy suave en toda la fila y una franja
@@ -294,11 +309,24 @@ function GanttRow({ act, effectivePct, idx, expanded, onToggle, isSubtask = fals
           {isSubtask && <span style={{ color: '#94a3b8', fontSize: 10, flexShrink: 0 }}>└</span>}
           {act.bbva && !isSubtask && <span style={{ fontSize: 8, padding: '1px 4px', borderRadius: 3, background: '#dbeafe', color: '#1d4ed8', fontWeight: 700, flexShrink: 0, whiteSpace: 'nowrap' }}>BBVA</span>}
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{act.name}</span>
-          {doneDateLabel && (
-            <span style={{ fontSize: 9, color: '#15803d', fontWeight: 500, flexShrink: 0, whiteSpace: 'nowrap' }}>
+          {doneDateLabel && (editandoFecha && onDoneDateChange ? (
+            <input type="date" autoFocus defaultValue={isoAYmd(doneDateISO)}
+              onClick={e => e.stopPropagation()}
+              onChange={e => { onDoneDateChange(e.target.value || undefined); setEditandoFecha(false); }}
+              onBlur={() => setEditandoFecha(false)}
+              onKeyDown={e => { if (e.key === 'Escape') setEditandoFecha(false); }}
+              style={{ fontSize: 9, padding: '1px 3px', border: '1.5px solid #16a34a', borderRadius: 5,
+                       outline: 'none', flexShrink: 0, colorScheme: 'light' }}/>
+          ) : (
+            <span onClick={onDoneDateChange ? (e => { e.stopPropagation(); setEditandoFecha(true); }) : undefined}
+              title={onDoneDateChange ? 'Clic para corregir la fecha de finalizada' : undefined}
+              style={{ fontSize: 9, color: '#15803d', fontWeight: 500, flexShrink: 0, whiteSpace: 'nowrap',
+                       cursor: onDoneDateChange ? 'pointer' : 'default', borderRadius: 4,
+                       padding: onDoneDateChange ? '0 3px' : 0,
+                       outline: onDoneDateChange ? '1.5px dashed #16a34a50' : 'none' }}>
               ({doneDateLabel})
             </span>
-          )}
+          ))}
           {(act as any).optional && <span style={{ fontSize: 8, color: '#94a3b8', flexShrink: 0 }}>(opc.)</span>}
           {(changes?.length ?? 0) > 0 && (
             <span title={[...changes!.map(c => `Δ ${c.fecha} · ${c.descripcion}${c.horasEstimadas ? ` (+${c.horasEstimadas} h${c.modo === 'absorbe' ? ', absorbido' : ''})` : ''}${c.responsable ? ` · ${c.responsable}` : ''}`),
@@ -691,7 +719,7 @@ function ActivityDrawer({ projectId, entregableId, actIdx, act, effectivePct, et
 
 // ─── EntregableSection ────────────────────────────────────────────────────────
 
-function EntregableSection({ block, projectId, sectionIdx, getActivityPct, setActivityPct, esPctManual, onActivityClick, onGoEstimaciones, todayWeekIdx, diaHabil = 5, getDoneDate, planStartDate, holidays, weekLabels, issues, changes, planKey, pesoModo = PESO_MODO_DEFAULT, planWeeks }: {
+function EntregableSection({ block, projectId, sectionIdx, getActivityPct, setActivityPct, esPctManual, onActivityClick, onGoEstimaciones, todayWeekIdx, diaHabil = 5, getDoneDate, getDoneDateISO, onDoneDateChange, planStartDate, holidays, weekLabels, issues, changes, planKey, pesoModo = PESO_MODO_DEFAULT, planWeeks }: {
   block: PlanEntregable; projectId: string; sectionIdx: number;
   getActivityPct: (i: number) => number;
   setActivityPct: (i: number, pct: number) => void;
@@ -704,6 +732,8 @@ function EntregableSection({ block, projectId, sectionIdx, getActivityPct, setAc
   /** Día hábil dentro de la semana en curso (1..5). */
   diaHabil?: number;
   getDoneDate?: (i: number) => string | undefined;
+  getDoneDateISO?: (i: number) => string | undefined;
+  onDoneDateChange?: (i: number, ymd: string | undefined) => void;
   planStartDate?: string;
   holidays?: Set<string>;
   weekLabels?: string[];
@@ -861,6 +891,8 @@ function EntregableSection({ block, projectId, sectionIdx, getActivityPct, setAc
                     onPctChange={v => setActivityPct(i, v)} pctManual={esPctManual?.(i) ?? false}
                     onActivityClick={() => onActivityClick(i, block.activities[i])}
                     todayWeekIdx={todayWeekIdx} diaHabil={diaHabil} doneDateLabel={getDoneDate?.(i)}
+                    doneDateISO={getDoneDateISO?.(i)}
+                    onDoneDateChange={onDoneDateChange ? (v => onDoneDateChange(i, v)) : undefined}
                     issues={issuesFor(i).list} issueWeeks={issuesFor(i).weeks} changes={changesFor(i)} ext={extFor(i)} weeks={semanasGrid}/>
                   {expanded.has(i) && act.subtasks?.map((sub, si) => (
                     <GanttRow key={`sub-${si}`} act={{ name:sub.name, pct:sub.pct, pctExp:sub.pct, startWeek:act.startWeek, endWeek:act.endWeek, ...(sub.optional?{optional:true}as any:{}) }} effectivePct={sub.pct} idx={si} expanded={false} onToggle={() => {}} isSubtask weeks={semanasGrid}/>
@@ -1407,7 +1439,7 @@ function saveNotes(projectId: string, data: { pasos:string[]; alertas:string[]; 
   persistSet(`timia_notes_${projectId}`, data);
 }
 
-function PlanDetail({ plan, getActivityPct: getActivityPctHoy, setActivityPct, esPctManual, onActivityClick, onGoEstimaciones, getDoneDate, holidays, issues: issuesHoy, onIssuesChange, userName, changes, outlines, canIssues = true, pctHistorial = [], pctsActuales = {} }: {
+function PlanDetail({ plan, getActivityPct: getActivityPctHoy, setActivityPct, esPctManual, onActivityClick, onGoEstimaciones, getDoneDate, getDoneDateISO, onDoneDateChange, holidays, issues: issuesHoy, onIssuesChange, userName, changes, outlines, canIssues = true, pctHistorial = [], pctsActuales = {} }: {
   plan: WorkPlan;
   canIssues?: boolean;
   issues: PlanIssue[];
@@ -1422,6 +1454,8 @@ function PlanDetail({ plan, getActivityPct: getActivityPctHoy, setActivityPct, e
   onGoEstimaciones?: () => void;
   holidays: Set<string>;
   getDoneDate?: (eid: string, ai: number) => string | undefined;
+  getDoneDateISO?: (eid: string, ai: number) => string | undefined;
+  onDoneDateChange?: (eid: string, ai: number, ymd: string | undefined) => void;
   /** Movimientos de % registrados: con ellos se reconstruye una fecha pasada. */
   pctHistorial?: CambioPct[];
   pctsActuales?: Record<string, number>;
@@ -1772,6 +1806,8 @@ function PlanDetail({ plan, getActivityPct: getActivityPctHoy, setActivityPct, e
             onGoEstimaciones={onGoEstimaciones}
             todayWeekIdx={todayWeekIdx}
             getDoneDate={getDoneDate ? (i => getDoneDate(e.id, i)) : undefined}
+            getDoneDateISO={getDoneDateISO ? (i => getDoneDateISO(e.id, i)) : undefined}
+            onDoneDateChange={onDoneDateChange ? ((i, v) => onDoneDateChange(e.id, i, v)) : undefined}
             planStartDate={plan.startDate}
             holidays={holidays}
             weekLabels={plan.weekLabels}
@@ -3568,6 +3604,21 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
     return `finalizada ${d.getDate()} ${d.toLocaleDateString('es-CO', { month: 'short' })}`;
   }
 
+  function getDoneDateISO(projectId: string, entregableId: string, actIdx: number): string | undefined {
+    return activityDoneDates[`${projectId}-${entregableId}-${actIdx}`];
+  }
+
+  /** Corrige a mano la fecha de finalizada. Se guarda al mediodía local: con la
+   *  medianoche, el ISO cae en el día anterior según la zona y la fila mostraba
+   *  un día menos. Vacío quita la fecha. */
+  function setDoneDate(projectId: string, entregableId: string, actIdx: number, ymd: string | undefined) {
+    const k = `${projectId}-${entregableId}-${actIdx}`;
+    const next = { ...activityDoneDates };
+    if (ymd) next[k] = new Date(`${ymd}T12:00:00`).toISOString(); else delete next[k];
+    setActivityDoneDates(next);
+    adminStore.saveActivityDoneDates(next);
+  }
+
   // All active users for the search (not project-filtered — 100+ employees)
   const allUsers: AdminUser[] = adminStore.getUsers().filter(u => u.active);
 
@@ -3721,6 +3772,8 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
               onActivityClick={(eid,ai,a)=>setDrawer({projectId:plan.planKey,entregableId:eid,actIdx:ai,act:a})}
               onGoEstimaciones={onGoEstimaciones}
               getDoneDate={(eid,ai)=>getDoneDateLabel(plan.planKey,eid,ai)}
+              getDoneDateISO={(eid,ai)=>getDoneDateISO(plan.planKey,eid,ai)}
+              onDoneDateChange={canMark ? ((eid,ai,v)=>setDoneDate(plan.planKey,eid,ai,v)) : undefined}
               holidays={holidays}
               issues={issues}
               onIssuesChange={handleIssuesChange}
