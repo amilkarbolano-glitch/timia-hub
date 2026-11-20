@@ -69,7 +69,9 @@ const Avatar = ({ u, size = 24 }: { u: AdminUser; size?: number }) => (
 
 function ProjectCard({ r, onOpen }: { r: ProjectRow; onOpen?: () => void }) {
   return (
-    <div style={{ background: '#fff', border: '0.5px solid #e2e8f0', borderLeft: `4px solid ${r.p.color}`, borderRadius: 12, padding: '12px 16px' }}>
+    <div onClick={onOpen}
+      title={onOpen ? `Abrir el plan de trabajo de ${r.p.name}` : undefined}
+      style={{ background: '#fff', border: '0.5px solid #e2e8f0', borderLeft: `4px solid ${r.p.color}`, borderRadius: 12, padding: '12px 16px', cursor: onOpen ? 'pointer' : 'default' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: '#111' }}>{r.p.name} <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 500 }}>{r.p.id}</span></div>
@@ -93,7 +95,7 @@ function ProjectCard({ r, onOpen }: { r: ProjectRow; onOpen?: () => void }) {
         <div style={{ marginLeft: 'auto', display: 'flex', paddingLeft: 6 }}>{r.team.slice(0, 6).map(u => <Avatar key={u.id} u={u} />)}{r.team.length > 6 && <span style={{ fontSize: 9, marginLeft: 4 }}>+{r.team.length - 6}</span>}</div>
       </div>
       {r.riskWhy.length > 0 && <div style={{ marginTop: 6, fontSize: 9, color: riskColor(r.risk) }}>{r.riskWhy.join(' · ')}</div>}
-      {onOpen && <button onClick={onOpen} style={{ marginTop: 8, fontSize: 10, padding: '4px 10px', background: '#fff', border: `0.5px solid ${r.p.color}60`, color: r.p.color, borderRadius: 8, cursor: 'pointer', fontWeight: 600 }}>Abrir plan de trabajo</button>}
+      {onOpen && <button onClick={e => { e.stopPropagation(); onOpen(); }} style={{ marginTop: 8, fontSize: 10, padding: '4px 10px', background: '#fff', border: `0.5px solid ${r.p.color}60`, color: r.p.color, borderRadius: 8, cursor: 'pointer', fontWeight: 600 }}>Abrir plan de trabajo</button>}
     </div>
   );
 }
@@ -199,13 +201,16 @@ export default function PMDashboard({ onViewChange }: PMDashboardProps) {
   );
 }
 
-export function ProyectosPage() {
+export function ProyectosPage({ onViewChange }: PMDashboardProps = {}) {
   const { rows } = useDashboardData();
+  const abrir = (id: string) => onViewChange
+    ? () => { localStorage.setItem('timia_last_plan_project', id); onViewChange('plan-trabajo', id); }
+    : undefined;
   return (
     <div style={{ padding: '28px 36px', maxWidth: 1600, margin: '0 auto' }}>
       <h1 style={{ margin: '0 0 4px', fontSize: 22, fontWeight: 500, color: '#111' }}>Proyectos</h1>
       <p style={{ margin: '0 0 18px', fontSize: 13, color: '#94a3b8' }}>{rows.length} proyecto{rows.length !== 1 ? 's' : ''} activo{rows.length !== 1 ? 's' : ''}</p>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: 10 }}>{rows.map(r => <ProjectCard key={r.p.id} r={r} />)}</div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: 10 }}>{rows.map(r => <ProjectCard key={r.p.id} r={r} onOpen={abrir(r.p.id)} />)}</div>
     </div>
   );
 }

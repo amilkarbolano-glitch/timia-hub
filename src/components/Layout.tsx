@@ -53,7 +53,11 @@ export function menuDe(rol: string): (ItemMenu | GrupoMenu)[] {
 
     grupo('Planeación', 'Cómo va el trabajo', [
       { view: 'proyectos',    label: 'Proyectos',       icon: <Activity size={13}/>,      perm: 'view_analytics' },
-      { view: 'plan-trabajo', label: 'Plan de Trabajo', icon: <CalendarRange size={13}/>, perm: 'view_plan_trabajo' },
+      // El plan se abre desde Proyectos: se hace clic en el proyecto y lleva a
+      // su plan, así que dos enlaces al mismo sitio sobraban. El directo se
+      // queda solo para quien NO ve Proyectos: un tech lead tiene plan.view
+      // pero no analytics.view, y sin esto se quedaría sin forma de llegar.
+      ...(puede('view_analytics') ? [] : [{ view: 'plan-trabajo' as View, label: 'Plan de Trabajo', icon: <CalendarRange size={13}/>, perm: 'view_plan_trabajo' }]),
       { view: 'estimaciones', label: 'Estimaciones',    icon: <BarChart3 size={13}/>,     perm: 'view_estimaciones' },
     ]),
 

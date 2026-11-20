@@ -218,7 +218,7 @@ function AppInner() {
         return canAccess(role, 'fabrica.view') ? <Fabrica /> : <AccessDenied onBack={goHome}/>;
 
       case 'proyectos':
-        return canAccess(role, 'projects.view_all') || role === 'pm' ? <ProyectosPage /> : <AccessDenied onBack={goHome}/>;
+        return canAccess(role, 'projects.view_all') || role === 'pm' ? <ProyectosPage onViewChange={navigate} /> : <AccessDenied onBack={goHome}/>;
 
       case 'analytics':
         // Un solo dashboard, con datos reales. El acceso lo controla el permiso

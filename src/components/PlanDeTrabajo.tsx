@@ -64,10 +64,51 @@ const WEEKS = [
   {l:'S7',d:'09/03'},{l:'S8',d:'16/03'},{l:'S9',d:'24/03'},
   {l:'S10',d:'31/03'},{l:'S11',d:'09/04'},{l:'S12',d:'16/04'},{l:'S13',d:'23/04'},
 ];
+// Respaldo para cuando no hay plan en contexto. El número de semanas de un
+// cronograma SIEMPRE sale del plan: 13 quemadas hacían que un proyecto de 5
+// semanas dibujara 13 columnas en el Gantt.
 const TOTAL_WEEKS = 13;
 const CELL_W = 38;
 
+/** Semanas de un plan: lo configurado en estimación, y si no, hasta dónde llega la última tarea. */
+function weeksOf(p: { totalWeeks?: number; weekLabels?: string[]; entregables: PlanEntregable[] }): number {
+  return Math.max(1, p.totalWeeks ?? p.weekLabels?.length
+    ?? Math.max(1, ...p.entregables.flatMap(e => e.activities.map(a => a.endWeek))));
+}
+
+/** Columnas de semana con su etiqueta corta. La fecha la resuelve quien la pinte. */
+function weekCols(n: number): { l: string; d: string }[] {
+  return Array.from({ length: Math.max(1, n) }, (_, i) => ({ l: `S${i + 1}`, d: WEEKS[i]?.d ?? '' }));
+}
+
+/** Columnas con fecha real: weekLabels del plan, si no startDate, si no respaldo. */
+function weekColsFor(
+  p: { totalWeeks?: number; weekLabels?: string[]; startDate?: string; entregables: PlanEntregable[] },
+  holidays: Set<string>, total?: number,
+): { l: string; d: string }[] {
+  return Array.from({ length: total ?? weeksOf(p) }, (_, i) => {
+    let d = '';
+    if (p.weekLabels && p.weekLabels[i]) {
+      d = p.weekLabels[i].replace(/^S\d+\s*[··]\s*/, '');
+    } else if (p.startDate) {
+      const dt = weekToActualDate(p.startDate, i + 1, holidays);
+      d = dt ? `${dt.getDate()}/${dt.getMonth() + 1}` : `S${i + 1}`;
+    } else {
+      d = WEEKS[i]?.d ?? `S${i + 1}`;
+    }
+    return { l: `S${i + 1}`, d };
+  });
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/** ISO guardado → YYYY-MM-DD en hora local, que es el día que ve el usuario. */
+function isoAYmd(iso?: string): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 
 function difColor(d: number) { return d >= 0 ? '#15803d' : d < -5 ? '#dc2626' : '#d97706'; }
 function difBg(d: number)    { return d >= 0 ? '#dcfce7' : d < -5 ? '#fef2f2' : '#fef9c3'; }
@@ -199,11 +240,17 @@ function GanttCell({ wi, act, effectivePct, isSubtask, todayWeekIdx, diaHabil = 
 
 // ─── GanttRow ─────────────────────────────────────────────────────────────────
 
-function GanttRow({ act, effectivePct, idx, expanded, onToggle, isSubtask = false, onPctChange, pctManual = false, onActivityClick, todayWeekIdx, diaHabil = 5, doneDateLabel, issues = [], issueWeeks, changes, ext }: {
+function GanttRow({ act, effectivePct, idx, expanded, onToggle, isSubtask = false, onPctChange, pctManual = false, onActivityClick, todayWeekIdx, diaHabil = 5, doneDateLabel, doneDateISO, onDoneDateChange, issues = [], issueWeeks, changes, ext, weeks }: {
   act: PlanActivity; effectivePct: number; idx: number; expanded: boolean;
   onToggle: () => void; isSubtask?: boolean;
   onPctChange?: (n: number) => void; pctManual?: boolean; onActivityClick?: () => void;
   todayWeekIdx?: number; diaHabil?: number; doneDateLabel?: string;
+  /** La fecha de finalizada tal como está guardada, para abrir el calendario en ella. */
+  doneDateISO?: string;
+  /** Cambia la fecha de finalizada (YYYY-MM-DD; vacío la quita). Sin esto, la fecha es solo texto. */
+  onDoneDateChange?: (ymd: string | undefined) => void;
+  /** Columnas de semana a pintar; sin esto cae al respaldo de 13. */
+  weeks?: number;
   /** Alertas/bloqueantes abiertos que impactan esta actividad */
   issues?: PlanIssue[];
   /** Por índice de semana (0-based), la marca a dibujar en la celda */
@@ -214,6 +261,9 @@ function GanttRow({ act, effectivePct, idx, expanded, onToggle, isSubtask = fals
   ext?: { days: number; extWeeks: number; hours: number; newEndLabel?: string; blockDays?: number; blockWeeks?: number; blockers?: PlanIssue[]; changeDays?: number };
 }) {
   const hasBloq  = issues.some(i => i.type === 'bloqueante');
+  // La fecha de finalizada se pone sola al llegar al 100%, pero casi nunca se
+  // marca el mismo día en que se acabó la tarea. Un clic abre el calendario.
+  const [editandoFecha, setEditandoFecha] = useState(false);
   const hasAlert = issues.some(i => i.type === 'alerta');
   // Una tarea terminada se lee de un vistazo con el mismo lenguaje que ya usan
   // la alerta y el bloqueante: un tinte muy suave en toda la fila y una franja
@@ -259,11 +309,24 @@ function GanttRow({ act, effectivePct, idx, expanded, onToggle, isSubtask = fals
           {isSubtask && <span style={{ color: '#94a3b8', fontSize: 10, flexShrink: 0 }}>└</span>}
           {act.bbva && !isSubtask && <span style={{ fontSize: 8, padding: '1px 4px', borderRadius: 3, background: '#dbeafe', color: '#1d4ed8', fontWeight: 700, flexShrink: 0, whiteSpace: 'nowrap' }}>BBVA</span>}
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{act.name}</span>
-          {doneDateLabel && (
-            <span style={{ fontSize: 9, color: '#15803d', fontWeight: 500, flexShrink: 0, whiteSpace: 'nowrap' }}>
+          {doneDateLabel && (editandoFecha && onDoneDateChange ? (
+            <input type="date" autoFocus defaultValue={isoAYmd(doneDateISO)}
+              onClick={e => e.stopPropagation()}
+              onChange={e => { onDoneDateChange(e.target.value || undefined); setEditandoFecha(false); }}
+              onBlur={() => setEditandoFecha(false)}
+              onKeyDown={e => { if (e.key === 'Escape') setEditandoFecha(false); }}
+              style={{ fontSize: 9, padding: '1px 3px', border: '1.5px solid #16a34a', borderRadius: 5,
+                       outline: 'none', flexShrink: 0, colorScheme: 'light' }}/>
+          ) : (
+            <span onClick={onDoneDateChange ? (e => { e.stopPropagation(); setEditandoFecha(true); }) : undefined}
+              title={onDoneDateChange ? 'Clic para corregir la fecha de finalizada' : undefined}
+              style={{ fontSize: 9, color: '#15803d', fontWeight: 500, flexShrink: 0, whiteSpace: 'nowrap',
+                       cursor: onDoneDateChange ? 'pointer' : 'default', borderRadius: 4,
+                       padding: onDoneDateChange ? '0 3px' : 0,
+                       outline: onDoneDateChange ? '1.5px dashed #16a34a50' : 'none' }}>
               ({doneDateLabel})
             </span>
-          )}
+          ))}
           {(act as any).optional && <span style={{ fontSize: 8, color: '#94a3b8', flexShrink: 0 }}>(opc.)</span>}
           {(changes?.length ?? 0) > 0 && (
             <span title={[...changes!.map(c => `Δ ${c.fecha} · ${c.descripcion}${c.horasEstimadas ? ` (+${c.horasEstimadas} h${c.modo === 'absorbe' ? ', absorbido' : ''})` : ''}${c.responsable ? ` · ${c.responsable}` : ''}`),
@@ -298,7 +361,7 @@ function GanttRow({ act, effectivePct, idx, expanded, onToggle, isSubtask = fals
           </span>
         )}
       </td>
-      {Array.from({ length: TOTAL_WEEKS }).map((_, wi) => (
+      {Array.from({ length: weeks ?? TOTAL_WEEKS }).map((_, wi) => (
         <GanttCell key={wi} wi={wi} act={act} effectivePct={effectivePct} isSubtask={isSubtask} todayWeekIdx={todayWeekIdx} diaHabil={diaHabil} issueMark={issueWeeks?.[wi]} extWeeks={ext?.extWeeks ?? 0} blockWeeks={ext?.blockWeeks ?? 0}/>
       ))}
     </tr>
@@ -656,7 +719,7 @@ function ActivityDrawer({ projectId, entregableId, actIdx, act, effectivePct, et
 
 // ─── EntregableSection ────────────────────────────────────────────────────────
 
-function EntregableSection({ block, projectId, sectionIdx, getActivityPct, setActivityPct, esPctManual, onActivityClick, onGoEstimaciones, todayWeekIdx, diaHabil = 5, getDoneDate, planStartDate, holidays, weekLabels, issues, changes, planKey, pesoModo = PESO_MODO_DEFAULT, planWeeks }: {
+function EntregableSection({ block, projectId, sectionIdx, getActivityPct, setActivityPct, esPctManual, onActivityClick, onGoEstimaciones, todayWeekIdx, diaHabil = 5, getDoneDate, getDoneDateISO, onDoneDateChange, planStartDate, holidays, weekLabels, issues, changes, planKey, pesoModo = PESO_MODO_DEFAULT, planWeeks }: {
   block: PlanEntregable; projectId: string; sectionIdx: number;
   getActivityPct: (i: number) => number;
   setActivityPct: (i: number, pct: number) => void;
@@ -669,6 +732,8 @@ function EntregableSection({ block, projectId, sectionIdx, getActivityPct, setAc
   /** Día hábil dentro de la semana en curso (1..5). */
   diaHabil?: number;
   getDoneDate?: (i: number) => string | undefined;
+  getDoneDateISO?: (i: number) => string | undefined;
+  onDoneDateChange?: (i: number, ymd: string | undefined) => void;
   planStartDate?: string;
   holidays?: Set<string>;
   weekLabels?: string[];
@@ -696,7 +761,7 @@ function EntregableSection({ block, projectId, sectionIdx, getActivityPct, setAc
       list.forEach(x => {
         const a = dateToBusinessWeekIdx(planStartDate, x.startDate, holidays);
         const b = dateToBusinessWeekIdx(planStartDate, x.endDate ?? todayISO, holidays);
-        for (let w = Math.max(0, a); w <= Math.max(a, b) && w < TOTAL_WEEKS; w++) {
+        for (let w = Math.max(0, a); w <= Math.max(a, b) && w < semanasGrid; w++) {
           if (x.type === 'bloqueante' || !weeks[w]) weeks[w] = x.type;
         }
       });
@@ -751,6 +816,9 @@ function EntregableSection({ block, projectId, sectionIdx, getActivityPct, setAc
   const diasFase = Math.round((finEfectivo - finBase) * 5);
   const diasPerdidos = extsFase.reduce((s, e) => s + e.days, 0);
   const tareasCorridas = extsFase.filter(e => e.days > 0).length;
+  // Columnas del Gantt: las semanas del plan y, si una extensión corrió el fin
+  // más allá, hasta donde llegue. Nunca una constante.
+  const semanasGrid = Math.max(1, semanasFase, finEfectivo);
   // La diferencia que se reporta es contra la línea base: es el compromiso.
   // El replanificado explica por qué, no sustituye a lo que se prometió.
   const dif = parseFloat((effectivePctReal - basePctExp).toFixed(1));
@@ -769,25 +837,32 @@ function EntregableSection({ block, projectId, sectionIdx, getActivityPct, setAc
             { label: sectionHasExt ? 'Esperado · base' : 'Esperado', val:`${basePctExp}%`, bg:'#4b5563' },
             { label:'Diferencia', val:fmt1(dif), bg:difBg(dif), c:difColor(dif) },
             ...(sectionHasExt ? [{
-              label:'Impacto', val: diasFase > 0 ? `+${diasFase} d` : 'cabe', bg:'#5b21b6',
-              t: `${diasFase > 0 ? `El fin de la fase se corre ${diasFase} día(s) hábil(es). ` : 'Las fechas corridas caben dentro de la fase. '}`
+              // El impacto se dice en la misma unidad siempre: 0 d es comparable
+              // con +5 d, y «cabe» no lo era. Lo que se perdió no desaparece,
+              // baja a la segunda línea: se absorbió con holgura, no es gratis.
+              label:'Impacto', val: diasFase > 0 ? `+${diasFase} d` : '0 d', bg:'#5b21b6',
+              sub: diasFase <= 0 && diasPerdidos > 0 ? `${diasPerdidos} d con holgura` : undefined,
+              t: `${diasFase > 0 ? `El fin de la fase se corre ${diasFase} día(s) hábil(es). ` : 'El fin de la fase no se mueve: las tareas corridas no son las que marcan el cierre. '}`
                  + `${diasPerdidos} d en ${tareasCorridas} tarea(s) por cambios y bloqueantes.`,
             }] : [])].map(b => (
             <div key={b.label} title={(b as { t?: string }).t} style={{ textAlign:'center', padding:'4px 12px', background: b.bg, borderRadius:7 }}>
               <div style={{ fontSize:8, color: (b as any).c ?? '#9ca3af', marginBottom:1 }}>{b.label}</div>
               <div style={{ fontSize:15, fontWeight:700, color: (b as any).c ?? '#fff' }}>{b.val}</div>
+              {(b as { sub?: string }).sub && (
+                <div style={{ fontSize:8, color:'#c4b5fd', marginTop:1 }}>{(b as { sub?: string }).sub}</div>
+              )}
             </div>
           ))}
         </div>
       </div>
       {block.activities.length > 0 ? (
         <div data-gantt-table style={{ overflowX: 'auto', borderRadius: 8, border: '0.5px solid #e2e8f0' }}>
-          <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 288 + TOTAL_WEEKS * CELL_W }}>
+          <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 288 + semanasGrid * CELL_W }}>
             <thead>
               <tr style={{ background: '#881337' }}>
                 <th style={{ padding:'6px 10px', textAlign:'left', fontSize:10, color:'#fff', fontWeight:600, minWidth:230 }}>Actividades / Avance</th>
                 <th style={{ padding:'6px', textAlign:'center', fontSize:10, color:'#fff', fontWeight:600, width:50 }}>%</th>
-                {WEEKS.map((w, i) => {
+                {weekCols(semanasGrid).map((w, i) => {
                   const isToday = todayWeekIdx !== undefined && todayWeekIdx >= 0 && i === todayWeekIdx;
                   // Fecha dinámica: si tenemos startDate la calculamos; si no, fallback a WEEKS[i].d
                   let dateLabel = w.d;
@@ -816,14 +891,16 @@ function EntregableSection({ block, projectId, sectionIdx, getActivityPct, setAc
                     onPctChange={v => setActivityPct(i, v)} pctManual={esPctManual?.(i) ?? false}
                     onActivityClick={() => onActivityClick(i, block.activities[i])}
                     todayWeekIdx={todayWeekIdx} diaHabil={diaHabil} doneDateLabel={getDoneDate?.(i)}
-                    issues={issuesFor(i).list} issueWeeks={issuesFor(i).weeks} changes={changesFor(i)} ext={extFor(i)}/>
+                    doneDateISO={getDoneDateISO?.(i)}
+                    onDoneDateChange={onDoneDateChange ? (v => onDoneDateChange(i, v)) : undefined}
+                    issues={issuesFor(i).list} issueWeeks={issuesFor(i).weeks} changes={changesFor(i)} ext={extFor(i)} weeks={semanasGrid}/>
                   {expanded.has(i) && act.subtasks?.map((sub, si) => (
-                    <GanttRow key={`sub-${si}`} act={{ name:sub.name, pct:sub.pct, pctExp:sub.pct, startWeek:act.startWeek, endWeek:act.endWeek, ...(sub.optional?{optional:true}as any:{}) }} effectivePct={sub.pct} idx={si} expanded={false} onToggle={() => {}} isSubtask/>
+                    <GanttRow key={`sub-${si}`} act={{ name:sub.name, pct:sub.pct, pctExp:sub.pct, startWeek:act.startWeek, endWeek:act.endWeek, ...(sub.optional?{optional:true}as any:{}) }} effectivePct={sub.pct} idx={si} expanded={false} onToggle={() => {}} isSubtask weeks={semanasGrid}/>
                   ))}
                 </React.Fragment>
               ))}
               <tr style={{ background: '#f8fafc' }}>
-                <td colSpan={2 + TOTAL_WEEKS} style={{ padding:'5px 10px' }}>
+                <td colSpan={2 + semanasGrid} style={{ padding:'5px 10px' }}>
                   <div style={{ display:'flex', gap:14, alignItems:'center', flexWrap:'wrap' }}>
                     {[
                       { sw:<div style={{ width:20, height:9, background:'#0d9488', borderRadius:2 }}/>, l:'Ejecutado' },
@@ -1362,7 +1439,7 @@ function saveNotes(projectId: string, data: { pasos:string[]; alertas:string[]; 
   persistSet(`timia_notes_${projectId}`, data);
 }
 
-function PlanDetail({ plan, getActivityPct: getActivityPctHoy, setActivityPct, esPctManual, onActivityClick, onGoEstimaciones, getDoneDate, holidays, issues: issuesHoy, onIssuesChange, userName, changes, outlines, canIssues = true, pctHistorial = [], pctsActuales = {} }: {
+function PlanDetail({ plan, getActivityPct: getActivityPctHoy, setActivityPct, esPctManual, onActivityClick, onGoEstimaciones, getDoneDate, getDoneDateISO, onDoneDateChange, holidays, issues: issuesHoy, onIssuesChange, userName, changes, outlines, canIssues = true, pctHistorial = [], pctsActuales = {} }: {
   plan: WorkPlan;
   canIssues?: boolean;
   issues: PlanIssue[];
@@ -1377,6 +1454,8 @@ function PlanDetail({ plan, getActivityPct: getActivityPctHoy, setActivityPct, e
   onGoEstimaciones?: () => void;
   holidays: Set<string>;
   getDoneDate?: (eid: string, ai: number) => string | undefined;
+  getDoneDateISO?: (eid: string, ai: number) => string | undefined;
+  onDoneDateChange?: (eid: string, ai: number, ymd: string | undefined) => void;
   /** Movimientos de % registrados: con ellos se reconstruye una fecha pasada. */
   pctHistorial?: CambioPct[];
   pctsActuales?: Record<string, number>;
@@ -1561,13 +1640,17 @@ function PlanDetail({ plan, getActivityPct: getActivityPctHoy, setActivityPct, e
             // movió la entrega N días» se entiende sin explicar nada, y era
             // justo lo que el esperado replanificado no conseguía decir.
             ...(planHasExt && changeSummary ? [{
-              label:'IMPACTO EN EL CRONOGRAMA',
-              val: changeSummary.diasCorridos > 0 ? `+${changeSummary.diasCorridos} d` : 'cabe',
+              // «Impacto en la entrega» y no «en el cronograma»: lo que el comité
+              // pregunta es si la fecha prometida se mueve, no si la rejilla cambió.
+              label:'IMPACTO EN LA ENTREGA',
+              val: changeSummary.diasCorridos > 0 ? `+${changeSummary.diasCorridos} d` : '0 d',
+              sub: changeSummary.diasCorridos <= 0 && changeSummary.daysTotal + changeSummary.blockTotal > 0
+                ? `${changeSummary.daysTotal + changeSummary.blockTotal} d con holgura` : undefined,
               bg:'#5b21b6', c:'#fff', sc:'#c4b5fd',
               t: [
                 changeSummary.diasCorridos > 0
                   ? `El fin del cronograma se corre ${changeSummary.diasCorridos} día(s) hábil(es)${changeSummary.newEndDate ? `: ${fmtCalDate(changeSummary.newEndDate)}` : ''}.`
-                  : 'Las fechas corridas caben dentro del plan: la entrega no se mueve.',
+                  : 'La entrega no se mueve: las tareas corridas no son las que marcan el cierre del cronograma.',
                 changeSummary.daysTotal > 0 ? `${changeSummary.daysTotal} d por cambios de alcance.` : '',
                 changeSummary.blockTotal > 0 ? `${changeSummary.blockTotal} d perdidos por bloqueantes.` : '',
                 changeSummary.tasks > 0 ? `${changeSummary.tasks} tarea(s) con fecha corrida.` : '',
@@ -1577,6 +1660,9 @@ function PlanDetail({ plan, getActivityPct: getActivityPctHoy, setActivityPct, e
             <div key={b.label} title={(b as { t?: string }).t} style={{ textAlign:'center', padding:'6px 16px', background:b.bg, borderRadius:8 }}>
               <div style={{ fontSize:8, color:b.sc, marginBottom:2, textTransform:'uppercase', letterSpacing:'.04em' }}>{b.label}</div>
               <div style={{ fontSize:20, fontWeight:700, color:b.c }}>{b.val}</div>
+              {(b as { sub?: string }).sub && (
+                <div style={{ fontSize:9, color:b.sc, marginTop:1 }}>{(b as { sub?: string }).sub}</div>
+              )}
             </div>
           ))}
         </div>
@@ -1682,7 +1768,7 @@ function PlanDetail({ plan, getActivityPct: getActivityPctHoy, setActivityPct, e
           <span style={{ marginLeft:'auto', fontSize:10, color: changeSummary.weeksShift > 0 ? '#dc2626' : '#15803d', fontWeight:600 }}>
             {changeSummary.weeksShift > 0
               ? `Fin del cronograma: ${changeSummary.newEndDate ? fmtCalDate(changeSummary.newEndDate) : ''} (+${changeSummary.weeksShift} sem vs. línea base${changeSummary.endDate ? ` ${fmtCalDate(changeSummary.endDate)}` : ''})`
-              : 'Fin del cronograma sin cambio — la extensión cabe dentro del plan'}
+              : 'Entrega sin mover — las fechas corridas se absorben con la holgura'}
           </span>
         </div>
       )}
@@ -1720,6 +1806,8 @@ function PlanDetail({ plan, getActivityPct: getActivityPctHoy, setActivityPct, e
             onGoEstimaciones={onGoEstimaciones}
             todayWeekIdx={todayWeekIdx}
             getDoneDate={getDoneDate ? (i => getDoneDate(e.id, i)) : undefined}
+            getDoneDateISO={getDoneDateISO ? (i => getDoneDateISO(e.id, i)) : undefined}
+            onDoneDateChange={onDoneDateChange ? ((i, v) => onDoneDateChange(e.id, i, v)) : undefined}
             planStartDate={plan.startDate}
             holidays={holidays}
             weekLabels={plan.weekLabels}
@@ -2169,7 +2257,7 @@ function ConsolidadoView({ plans, holidays, getActivityPct, onOpen, openIssues =
       sr += getActivityPct(p.planKey, e.id, i, a); se += computeActExpPct(a.startWeek, ex.effEndWeek, todayIdx); n++;
       extDays += ex.days; baseEndW = Math.max(baseEndW, a.endWeek); effEndW = Math.max(effEndW, ex.effEndWeek);
     }));
-    const weeks = Math.max(p.weekLabels?.length ?? Math.max(TOTAL_WEEKS, ...p.entregables.flatMap(e => e.activities.map(a => a.endWeek))), effEndW);
+    const weeks = Math.max(weeksOf(p), effEndW);
     const weeksShift = Math.max(0, effEndW - baseEndW);
     const start = weekToActualDate(p.startDate, 1, holidays);
     const end   = weekToActualDate(p.startDate, weeks + 1, holidays);
@@ -2457,19 +2545,7 @@ async function exportPlanPPTX(plan: WorkPlan, getActivityPct: (eid: string, ai: 
 
   // ── Semanas — dinámico basado en startDate del plan ──────────────────────
   const _holidays = new Set(adminStore.getHolidays().map(h => h.date));
-  const WKS: { l: string; d: string }[] = Array.from({ length: TOTAL_WEEKS }, (_, i) => {
-    let d = '';
-    if (plan.weekLabels && plan.weekLabels[i]) {
-      d = plan.weekLabels[i].replace(/^S\d+\s*[··]\s*/, '');
-    } else if (plan.startDate) {
-      const dt = weekToActualDate(plan.startDate, i + 1, _holidays);
-      d = dt ? `${dt.getDate()}/${dt.getMonth() + 1}` : `S${i + 1}`;
-    } else {
-      const fallback = ['26/01','02/02','09/02','16/02','23/02','02/03','09/03','16/03','24/03','31/03','09/04','16/04','23/04'];
-      d = fallback[i] ?? `S${i + 1}`;
-    }
-    return { l: `S${i + 1}`, d };
-  });
+  const WKS: { l: string; d: string }[] = weekColsFor(plan, _holidays);
 
   // ── Layout de la tabla ────────────────────────────────────────────────────
   const LM      = 0.18;       // left margin
@@ -2804,7 +2880,7 @@ export function getPlanSummaries(): PlanSummary[] {
       if (pct >= 100) done++; else if (end && end < today) late++; else if (todayIdx + 1 >= a.startWeek) inProg++;
     }));
     const mine = issues.filter(x => !x.endDate && issueImpacts(x).some(m => m.planKey === p.planKey) || (!x.endDate && x.planKey === p.planKey));
-    const weeks = Math.max(p.weekLabels?.length ?? TOTAL_WEEKS, maxEnd);
+    const weeks = Math.max(weeksOf(p), maxEnd);
     return { planKey: p.planKey, projectId: p.projectId, cronoName: p.cronoId ? (p.cronoName ?? p.cronoId) : CRONO_MAIN_NAME, startDate: p.startDate,
       real: n ? sr / n : 0, exp: n ? se / n : 0, nActs: n, done, late, inProgress: inProg,
       openBloq: mine.filter(x => x.type === 'bloqueante').length, openAlert: mine.filter(x => x.type === 'alerta').length,
@@ -3170,7 +3246,11 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
       const ML = 14, MR = 14;                           // márgenes laterales
       const CW = PW - ML - MR;                          // 269mm ancho útil
       const NAME_COL = 90, PCT_COL = 11;
-      const WEEK_COL = (CW - NAME_COL - PCT_COL) / TOTAL_WEEKS; // ~13mm
+      // Las semanas del PDF son las del plan; con 13 fijas un cronograma de 5
+      // semanas salía con 8 columnas vacías.
+      const SEMANAS = weeksOf(plan);
+      const WKS_PDF = weekColsFor(plan, new Set(adminStore.getHolidays().map(h => h.date)), SEMANAS);
+      const WEEK_COL = (CW - NAME_COL - PCT_COL) / SEMANAS;
       const HDR_H = 28, TBL_HDR_H = 8, ROW_H = 7.5;
 
       const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
@@ -3300,7 +3380,7 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
         pdf.text('Actividades / Avance', ML + 2, tY + 5.5);
         pdf.text('%', ML + NAME_COL + PCT_COL / 2, tY + 5.5, { align: 'center' });
 
-        WEEKS.forEach((w, wi) => {
+        WKS_PDF.forEach((w, wi) => {
           const wx = ML + NAME_COL + PCT_COL + wi * WEEK_COL;
           pdf.setDrawColor(255, 255, 255); pdf.setLineWidth(0.2);
           pdf.line(wx, tY, wx, tY + TBL_HDR_H);
@@ -3342,7 +3422,7 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
           pdf.text(`${rowPct.toFixed(0)}%`, ML + NAME_COL + PCT_COL / 2, ry + 5.2, { align: 'center' });
 
           // barras Gantt por semana
-          for (let wi = 0; wi < TOTAL_WEEKS; wi++) {
+          for (let wi = 0; wi < SEMANAS; wi++) {
             const wx = ML + NAME_COL + PCT_COL + wi * WEEK_COL;
             pdf.setDrawColor(226, 232, 240); pdf.setLineWidth(0.12);
             pdf.line(wx, ry, wx, ry + ROW_H);
@@ -3524,6 +3604,21 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
     return `finalizada ${d.getDate()} ${d.toLocaleDateString('es-CO', { month: 'short' })}`;
   }
 
+  function getDoneDateISO(projectId: string, entregableId: string, actIdx: number): string | undefined {
+    return activityDoneDates[`${projectId}-${entregableId}-${actIdx}`];
+  }
+
+  /** Corrige a mano la fecha de finalizada. Se guarda al mediodía local: con la
+   *  medianoche, el ISO cae en el día anterior según la zona y la fila mostraba
+   *  un día menos. Vacío quita la fecha. */
+  function setDoneDate(projectId: string, entregableId: string, actIdx: number, ymd: string | undefined) {
+    const k = `${projectId}-${entregableId}-${actIdx}`;
+    const next = { ...activityDoneDates };
+    if (ymd) next[k] = new Date(`${ymd}T12:00:00`).toISOString(); else delete next[k];
+    setActivityDoneDates(next);
+    adminStore.saveActivityDoneDates(next);
+  }
+
   // All active users for the search (not project-filtered — 100+ employees)
   const allUsers: AdminUser[] = adminStore.getUsers().filter(u => u.active);
 
@@ -3677,6 +3772,8 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
               onActivityClick={(eid,ai,a)=>setDrawer({projectId:plan.planKey,entregableId:eid,actIdx:ai,act:a})}
               onGoEstimaciones={onGoEstimaciones}
               getDoneDate={(eid,ai)=>getDoneDateLabel(plan.planKey,eid,ai)}
+              getDoneDateISO={(eid,ai)=>getDoneDateISO(plan.planKey,eid,ai)}
+              onDoneDateChange={canMark ? ((eid,ai,v)=>setDoneDate(plan.planKey,eid,ai,v)) : undefined}
               holidays={holidays}
               issues={issues}
               onIssuesChange={handleIssuesChange}
