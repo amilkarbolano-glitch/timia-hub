@@ -8,8 +8,9 @@
  * del usuario llegue al DOM. De paso, el front no gana dos dependencias.
  *
  * Soporta: títulos, negrita, cursiva, código en línea y en bloque, enlaces
- * (solo http y https), listas, casillas, citas y líneas. No soporta tablas ni
- * HTML embebido; si hacen falta tablas, se añaden aquí.
+ * (solo http y https), imágenes del propio API, listas, casillas, citas y
+ * líneas. No soporta tablas ni HTML embebido; si hacen falta tablas, se
+ * añaden aquí.
  */
 
 function escapar(t: string): string {
@@ -22,13 +23,34 @@ function urlSegura(u: string): string | null {
   return /^https?:\/\/[^\s<>"]+$/i.test(limpio) ? limpio : null;
 }
 
-function enLinea(texto: string): string {
+/**
+ * Para las imágenes solo se admite la ruta del propio API, direccionada por
+ * SHA. Permitir cualquier URL externa convertiría una nota compartida en un
+ * rastreador: quien la abre pediría una imagen a un servidor ajeno y le
+ * entregaría su IP y el momento en que la leyó.
+ */
+function urlDeImagen(u: string): string | null {
+  const limpio = u.trim();
+  return /^\/api\/notas\/imagenes\/[0-9a-f]{64}$/.test(limpio) ? limpio : null;
+}
+
+function enLinea(texto: string, baseApi: string): string {
   let t = escapar(texto);
   // El código en línea va primero: lo que hay dentro no se vuelve a formatear.
   const codigos: string[] = [];
   t = t.replace(/`([^`]+)`/g, (_m, c) => {
     codigos.push(c);
     return `\u0000${codigos.length - 1}\u0000`;
+  });
+  // Las imágenes van antes que los enlaces: `![pie](url)` contiene un enlace.
+  t = t.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (m, pie, url) => {
+    const ok = urlDeImagen(url);
+    if (!ok) return m;
+    const alt = pie || 'Imagen de la nota';
+    // La nota guarda solo la ruta; la base del API se pone al pintar. Así una
+    // nota no se rompe el día que el API cambie de dominio.
+    return `<figure class="md-img"><img src="${baseApi}${ok}" alt="${alt}" loading="lazy">`
+      + (pie ? `<figcaption>${pie}</figcaption>` : '') + '</figure>';
   });
   t = t.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (m, txt, url) => {
     const ok = urlSegura(url);
@@ -41,7 +63,7 @@ function enLinea(texto: string): string {
   return t;
 }
 
-export function markdownAHtml(src: string): string {
+export function markdownAHtml(src: string, baseApi = ''): string {
   const lineas = (src ?? '').replace(/\r\n/g, '\n').split('\n');
   const out: string[] = [];
   let lista: 'ul' | 'ol' | null = null;
@@ -64,39 +86,42 @@ export function markdownAHtml(src: string): string {
     if (titulo) {
       cerrarLista();
       const n = Math.min(titulo[1].length + 1, 5);   // # → h2, para no competir con el título de la nota
-      out.push(`<h${n}>${enLinea(titulo[2])}</h${n}>`);
+      out.push(`<h${n}>${enLinea(titulo[2], baseApi)}</h${n}>`);
       continue;
     }
 
     if (/^(-{3,}|\*{3,})$/.test(linea.trim())) { cerrarLista(); out.push('<hr>'); continue; }
 
     const cita = /^>\s?(.*)$/.exec(linea);
-    if (cita) { cerrarLista(); out.push(`<blockquote>${enLinea(cita[1])}</blockquote>`); continue; }
+    if (cita) { cerrarLista(); out.push(`<blockquote>${enLinea(cita[1], baseApi)}</blockquote>`); continue; }
 
     const tarea = /^\s*[-*]\s+\[([ xX])\]\s+(.*)$/.exec(linea);
     if (tarea) {
       if (lista !== 'ul') { cerrarLista(); out.push('<ul class="md-tareas">'); lista = 'ul'; }
       const hecha = tarea[1].toLowerCase() === 'x';
-      out.push(`<li class="${hecha ? 'md-hecha' : ''}"><input type="checkbox" disabled${hecha ? ' checked' : ''}> ${enLinea(tarea[2])}</li>`);
+      out.push(`<li class="${hecha ? 'md-hecha' : ''}"><input type="checkbox" disabled${hecha ? ' checked' : ''}> ${enLinea(tarea[2], baseApi)}</li>`);
       continue;
     }
 
     const punto = /^\s*[-*]\s+(.*)$/.exec(linea);
     if (punto) {
       if (lista !== 'ul') { cerrarLista(); out.push('<ul>'); lista = 'ul'; }
-      out.push(`<li>${enLinea(punto[1])}</li>`);
+      out.push(`<li>${enLinea(punto[1], baseApi)}</li>`);
       continue;
     }
 
     const num = /^\s*\d+[.)]\s+(.*)$/.exec(linea);
     if (num) {
       if (lista !== 'ol') { cerrarLista(); out.push('<ol>'); lista = 'ol'; }
-      out.push(`<li>${enLinea(num[1])}</li>`);
+      out.push(`<li>${enLinea(num[1], baseApi)}</li>`);
       continue;
     }
 
     cerrarLista();
-    out.push(`<p>${enLinea(linea)}</p>`);
+    // Una imagen sola en su línea va fuera del párrafo: <figure> dentro de <p>
+    // es HTML inválido y el navegador cierra el <p> por su cuenta.
+    if (/^!\[[^\]]*\]\([^)\s]+\)$/.test(linea.trim())) { out.push(enLinea(linea.trim(), baseApi)); continue; }
+    out.push(`<p>${enLinea(linea, baseApi)}</p>`);
   }
 
   if (enCodigo && codigo.length) out.push(`<pre><code>${escapar(codigo.join('\n'))}</code></pre>`);
@@ -108,6 +133,7 @@ export function markdownAHtml(src: string): string {
 export function resumenDeNota(src: string, max = 90): string {
   const plano = (src ?? '')
     .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')
     .replace(/^#{1,4}\s+/gm, '')
     .replace(/[*_`>~]/g, '')
     .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')

@@ -1,8 +1,10 @@
 import React, { useMemo, useState } from 'react';
-import { Plus, Search, Star, Trash2, Bold, Italic, List, ListChecks, Heading2, Link2, Code, Eye, Pencil, RotateCcw, X, BookOpen } from 'lucide-react';
+import { Plus, Search, Star, Trash2, Bold, Italic, List, ListChecks, Heading2, Link2, Code, Eye, Pencil, RotateCcw, BookOpen, Image as ImageIcon, Loader } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { adminStore, type Nota, type Cuaderno, type AdminProject } from '../lib/adminStore';
 import { markdownAHtml, resumenDeNota } from '../lib/markdownMini';
+import { subirImagen, marcaDeImagen } from '../lib/imagenesNota';
+import { apiBase } from '../lib/persist';
 
 // Paleta de los cuadernos: los mismos tonos que usa el resto de la herramienta.
 const COLORES = ['#1d9e75', '#534ab7', '#ba7517', '#d85a30', '#378add', '#d4537e', '#5f5e5a'];
@@ -39,6 +41,9 @@ export default function Notas() {
   const [q, setQ]                 = useState('');
   const [editando, setEditando]   = useState(false);
   const [nuevoCuaderno, setNuevoCuaderno] = useState('');
+  const [subiendo, setSubiendo]   = useState(0);
+  const [errorImg, setErrorImg]   = useState('');
+  const refCuerpo = React.useRef<HTMLTextAreaElement>(null);
 
   function guardarNotas(n: Nota[]) { setNotas(n); adminStore.saveNotas(n); }
   function guardarCuadernos(c: Cuaderno[]) { setCuadernos(c); adminStore.saveCuadernos(c); }
@@ -87,6 +92,31 @@ export default function Notas() {
     guardarCuadernos([...cuadernos, c]);
     setNuevoCuaderno('');
     setCuaderno(c.id);
+  }
+
+  /**
+   * Las imágenes no van en la nota: se suben al API, que las guarda por el
+   * SHA-256 de su contenido, y en el cuerpo queda la marca de markdown con esa
+   * URL. Si fueran parte de la nota, entrarían en la descarga completa del
+   * estado que el front hace al entrar y reventarían el cupo de localStorage.
+   */
+  async function insertarImagenes(id: string, archivos: (File | Blob)[], cuerpoActual: string) {
+    const imgs = archivos.filter(f => /^image\//.test((f as File).type || ''));
+    if (!imgs.length) return;
+    setErrorImg('');
+    setSubiendo(n => n + imgs.length);
+    let cuerpo = cuerpoActual;
+    for (const f of imgs) {
+      try {
+        const sub = await subirImagen(f);
+        cuerpo = `${cuerpo}${marcaDeImagen(sub.url)}`;
+        actualizar(id, { cuerpo });
+      } catch (e) {
+        setErrorImg(e instanceof Error ? e.message : 'no se pudo subir la imagen');
+      } finally {
+        setSubiendo(n => Math.max(0, n - 1));
+      }
+    }
   }
 
   const puedeEditar = !!sel && sel.ownerId === yo && !sel.borradaEn;
@@ -295,23 +325,41 @@ export default function Notas() {
                     {b.ic}
                   </button>
                 ))}
-                <span style={{ marginLeft: 'auto', fontSize: 10, color: '#64748b' }}>
-                  Markdown · las imágenes llegan en la siguiente entrega
-                </span>
+                <span style={{ width: 1, height: 18, background: '#e2e8f0', margin: '0 5px' }}/>
+                <label title="Insertar una imagen"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 600, color: '#0f6e56',
+                           background: '#e1f5ee', border: '0.5px solid #5dcaa5', borderRadius: 7, padding: '6px 10px', cursor: 'pointer' }}>
+                  {subiendo > 0 ? <Loader size={13}/> : <ImageIcon size={13}/>}
+                  {subiendo > 0 ? `Subiendo ${subiendo}…` : 'Imagen'}
+                  <input type="file" accept="image/*" multiple style={{ display: 'none' }}
+                    onChange={e => { const fs: File[] = e.target.files ? Array.from(e.target.files) : []; e.target.value = ''; insertarImagenes(sel.id, fs, sel.cuerpo); }}/>
+                </label>
+                {errorImg
+                  ? <span style={{ marginLeft: 'auto', fontSize: 10, color: '#a32d2d', fontWeight: 600 }}>{errorImg}</span>
+                  : <span style={{ marginLeft: 'auto', fontSize: 10, color: '#64748b' }}>Markdown · pega una captura con Ctrl+V o suéltala aquí</span>}
               </div>
             )}
 
             <div style={{ flex: 1, overflowY: 'auto', padding: '18px 24px' }}>
               {editando && puedeEditar ? (
-                <textarea value={sel.cuerpo} onChange={e => actualizar(sel.id, { cuerpo: e.target.value })}
-                  placeholder={'Escribe aquí.\n\n## Un título\n- una lista\n- [ ] algo por hacer'}
+                <textarea ref={refCuerpo} value={sel.cuerpo} onChange={e => actualizar(sel.id, { cuerpo: e.target.value })}
+                  onPaste={e => {
+                    const fs: File[] = e.clipboardData?.files ? Array.from(e.clipboardData.files) : [];
+                    if (fs.length) { e.preventDefault(); insertarImagenes(sel.id, fs, sel.cuerpo); }
+                  }}
+                  onDragOver={e => { if (e.dataTransfer?.types?.includes('Files')) e.preventDefault(); }}
+                  onDrop={e => {
+                    const fs: File[] = e.dataTransfer?.files ? Array.from(e.dataTransfer.files) : [];
+                    if (fs.length) { e.preventDefault(); insertarImagenes(sel.id, fs, sel.cuerpo); }
+                  }}
+                  placeholder={'Escribe aquí.\n\n## Un título\n- una lista\n- [ ] algo por hacer\n\nPega una captura con Ctrl+V.'}
                   aria-label="Cuerpo de la nota"
                   style={{ width: '100%', height: '100%', minHeight: 300, boxSizing: 'border-box', border: 'none', outline: 'none',
                            resize: 'none', fontSize: 13.5, lineHeight: 1.7, color: '#1e293b', fontFamily: 'inherit' }}/>
               ) : (
                 <div className="md-cuerpo" style={{ fontSize: 13.5, lineHeight: 1.7, color: '#1e293b', maxWidth: 760 }}
                   dangerouslySetInnerHTML={{ __html: sel.cuerpo.trim()
-                    ? markdownAHtml(sel.cuerpo)
+                    ? markdownAHtml(sel.cuerpo, apiBase() ?? '')
                     : '<p style="color:#94a3b8">Nota vacía. Pulsa Editar para escribir.</p>' }}/>
               )}
             </div>
@@ -334,6 +382,9 @@ export default function Notas() {
         .md-cuerpo blockquote { margin: 0 0 10px; padding: 6px 12px; border-left: 3px solid #cbd5e1; color: #475569; background: #f8fafc; }
         .md-cuerpo a { color: #0f6e56; }
         .md-cuerpo hr { border: none; border-top: 0.5px solid #e2e8f0; margin: 16px 0; }
+        .md-cuerpo figure.md-img { margin: 12px 0; }
+        .md-cuerpo figure.md-img img { max-width: 100%; height: auto; display: block; border: 0.5px solid #e2e8f0; border-radius: 10px; background: #f8fafc; }
+        .md-cuerpo figure.md-img figcaption { font-size: 11px; color: #64748b; margin-top: 5px; }
       `}</style>
     </div>
   );
