@@ -16,10 +16,10 @@ import {
   Link2,
   Package,
   Layers,
-  Activity, Factory } from 'lucide-react';
+  Activity, Factory, Mail } from 'lucide-react';
 import { TimiaMark, TimiaWordmark } from './TimiaLogo';
 
-export type View = 'setup-project' | 'setup-team' | 'setup-tasks' | 'dashboard' | 'standards' | 'analytics' | 'audit' | 'bank-status' | 'notifications' | 'roles-permissions' | 'project-templates' | 'admin' | 'circuitos-bbva' | 'bitacora' | 'estimaciones' | 'plan-trabajo' | 'imputaciones' | 'inventario' | 'links' | 'proyectos' | 'activity-report' | 'fabrica';
+export type View = 'correos' | 'setup-project' | 'setup-team' | 'setup-tasks' | 'dashboard' | 'standards' | 'analytics' | 'audit' | 'bank-status' | 'notifications' | 'roles-permissions' | 'project-templates' | 'admin' | 'circuitos-bbva' | 'bitacora' | 'estimaciones' | 'plan-trabajo' | 'imputaciones' | 'inventario' | 'links' | 'proyectos' | 'activity-report' | 'fabrica';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -65,6 +65,10 @@ export function menuDe(rol: string): (ItemMenu | GrupoMenu)[] {
       { view: 'bitacora',        label: 'Tareas',             icon: <Layers size={13}/> },
       { view: 'imputaciones',    label: 'Imputaciones Jira',  icon: <Layers size={13}/> },
       { view: 'activity-report', label: 'Activity Report (TR)', icon: <Layers size={13}/> },
+      // El correo del frente se gestiona en una cuenta que no se puede conectar
+      // a la herramienta, así que los hilos se registran a mano: esta pantalla
+      // es la que se abre antes del comité, ordenada por antigüedad.
+      { view: 'correos', label: 'Correos', icon: <Mail size={13}/>, perm: 'view_plan_trabajo' },
     ]),
 
     grupo('Recursos', 'Recursos del equipo', [

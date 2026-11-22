@@ -20,7 +20,8 @@ import Fabrica from './components/Fabrica';
 import ImputacionesJira from './components/ImputacionesJira';
 import ActivityReport from './components/ActivityReport';
 import Estimaciones from './components/Estimaciones';
-import PlanDeTrabajo from './components/PlanDeTrabajo';
+import PlanDeTrabajo, { planOutlines, holidaysSet } from './components/PlanDeTrabajo';
+import HilosCorreo from './components/HilosCorreo';
 import { INITIAL_TEMPLATES } from './lib/templates';
 import { pathFor, parsePath } from './lib/routes';
 import { ProjectTemplate } from './types';
@@ -229,6 +230,11 @@ function AppInner() {
       case 'plan-trabajo':
         return canAccess(role, 'view_plan_trabajo')
           ? <div style={{ padding: '28px 36px' }}><PlanDeTrabajo onGoEstimaciones={() => navigate('estimaciones')} /></div>
+          : <AccessDenied onBack={goHome}/>;
+
+      case 'correos':
+        return canAccess(role, 'view_plan_trabajo')
+          ? <HilosCorreo plans={planOutlines()} holidays={holidaysSet()} />
           : <AccessDenied onBack={goHome}/>;
 
       case 'audit':
