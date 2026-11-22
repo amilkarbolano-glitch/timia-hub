@@ -346,6 +346,47 @@ export interface MailHilo {
   creadoEn: string;                // ISO timestamp
 }
 
+/** Un cuaderno: una carpeta con nombre y color, nada más. Dos niveles bastan. */
+export interface Cuaderno {
+  id: string;
+  nombre: string;
+  color: string;
+  ownerId: string;
+  creadoEn: string;
+}
+
+/**
+ * Una nota.
+ *
+ * El cuerpo es markdown, no bloques: un editor de bloques son semanas y una
+ * dependencia pesada, y markdown da títulos, listas, casillas y código desde
+ * el primer día, además de sobrevivir a un cambio de editor.
+ *
+ * `visibilidad` es de interfaz, no de servidor: el API devuelve la colección
+ * completa a cualquier usuario con sesión, así que «privada» significa que
+ * nadie más la ve en la herramienta, no que nadie más pueda leerla. Para que
+ * sea privacidad de verdad hace falta un endpoint propio que filtre por
+ * usuario en el servidor.
+ */
+export interface Nota {
+  id: string;
+  titulo: string;
+  cuerpo: string;
+  cuadernoId?: string;
+  etiquetas?: string[];
+  visibilidad: 'privada' | 'equipo' | 'proyecto';
+  /** Solo si visibilidad es 'proyecto'. */
+  projectId?: string;
+  ownerId: string;
+  ownerNombre: string;
+  favorita?: boolean;
+  /** Borrado lógico: por el API un borrado es definitivo y sin vuelta. */
+  borradaEn?: string;
+  creadaEn: string;
+  actualizadaEn: string;
+  actualizadaPor?: string;
+}
+
 /** Normaliza los impactos de un issue (soporta el formato antiguo de impacto único) */
 export function issueImpacts(i: PlanIssue): PlanImpact[] {
   if (i.impacts && i.impacts.length) return i.impacts;
@@ -744,6 +785,11 @@ export const adminStore = {
 
   getMailHilos:  (): MailHilo[]       => load('mail_hilos', []),
   saveMailHilos: (h: MailHilo[])      => save('mail_hilos', h),
+
+  getNotas:      (): Nota[]           => load('notas', []),
+  saveNotas:     (n: Nota[])          => save('notas', n),
+  getCuadernos:  (): Cuaderno[]       => load('cuadernos', []),
+  saveCuadernos: (c: Cuaderno[])      => save('cuadernos', c),
 
   // Siguientes pasos (se resuelven, no se borran)
   getPlanPasos:  (): PasoPlan[]       => load('plan_pasos', []),
