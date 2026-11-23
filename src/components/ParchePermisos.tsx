@@ -21,7 +21,7 @@
 // añade ese prefijo derivado a los proyectos de las personas afectadas. Es un id
 // que no existe: no da acceso a ningún proyecto real, solo satisface esa línea.
 // Cuando el API esté desplegado queda inerte y se puede quitar con el mismo botón.
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { adminStore, type AdminUser } from '../lib/adminStore';
 import { hasPermission } from '../lib/permissions';
 import { persist } from '../lib/persist';
@@ -42,7 +42,7 @@ export function fantasmasDe(projectId: string): string[] {
 
 interface Pendiente { user: AdminUser; projectId: string; fantasmas: string[] }
 
-export default function ParchePermisos() {
+export default function ParchePermisos({ global = false }: { global?: boolean }) {
   const [estado, setEstado] = useState<'listo' | 'aplicando' | 'hecho' | { error: string }>('listo');
   const [recargar, setRecargar] = useState(0);
 
@@ -112,7 +112,18 @@ export default function ParchePermisos() {
     escribir(siguiente, g => [...(fuera.get(g.id) ?? [])].every(f => !(g.projectIds ?? []).includes(f)));
   }
 
-  if (!pendientes.length && !aplicados.length) return null;
+  // Se aplica solo en cuanto un administrador abre la app: el botón escondido en
+  // Administración no sirve de nada si nadie lo encuentra. Es idempotente —cuando
+  // no queda nada pendiente no vuelve a escribir— y el servidor sigue exigiendo
+  // team.manage, así que a quien no lo tenga no le hace nada.
+  const yaIntentado = useRef(false);
+  useEffect(() => {
+    if (!global || yaIntentado.current || !pendientes.length) return;   // solo la copia global escribe: la de Administración queda manual
+    yaIntentado.current = true;
+    aplicar();
+  }, [global, pendientes]);
+
+  if (!pendientes.length && (global || !aplicados.length)) return null;
 
   const err = typeof estado === 'object' ? estado.error : null;
   const ocupado = estado === 'aplicando';
@@ -137,11 +148,11 @@ export default function ParchePermisos() {
             ))}
           </ul>
           <div style={{ marginBottom: 10, color: '#78716c' }}>
-            Ese id no existe en el catálogo: no abre ningún proyecto real, no cambia roles y se quita desde aquí mismo
-            cuando esté desplegado el arreglo del API.
+            Se está aplicando solo. Ese id no existe en el catálogo: no abre ningún proyecto real, no cambia roles, y se
+            quita desde Administración cuando esté desplegado el arreglo del API.
           </div>
           <button onClick={aplicar} disabled={ocupado} style={boton('#b45309')}>
-            {ocupado ? 'Aplicando…' : 'Aplicar y dejarlos guardar'}
+            {ocupado ? 'Aplicando…' : global ? 'Reintentar' : 'Aplicar y dejarlos guardar'}
           </button>
         </>
       ) : (
