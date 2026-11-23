@@ -10,6 +10,7 @@ import {
 import { PROJECTS, useAuth, canAccess } from '../contexts/AuthContext';
 import { persistSet } from '../lib/persist';
 import { allRoleMeta } from '../lib/permissions';
+import ParchePermisos from './ParchePermisos';
 
 // ─── Paleta colores ────────────────────────────────────────────────────────────
 const COLORS = ['#dc2626','#7c3aed','#2563eb','#0891b2','#059669','#d97706','#be185d','#0369a1','#0f766e','#4f46e5','#b45309','#7e22ce'];
@@ -835,6 +836,10 @@ export default function AdminPanel({ onViewChange }: { onViewChange?: (view: str
             : 'Gestión de equipos de tus proyectos asignados — Líder Técnico'}
         </p>
       </div>
+
+      {/* Proyectos con guion en el id: el API desplegado no deja guardar a quien
+          no ve todos los proyectos. Se aplica desde aquí y se quita igual. */}
+      {isPM && <ParchePermisos/>}
 
       {/* Nav tabs — solo se muestran los tabs que el rol puede ver */}
       {visibleTabs.length > 1 && (
