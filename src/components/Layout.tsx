@@ -18,6 +18,7 @@ import {
   Layers,
   Activity, Factory, Mail, NotebookPen } from 'lucide-react';
 import { TimiaMark, TimiaWordmark } from './TimiaLogo';
+import ParchePermisos from './ParchePermisos';
 
 export type View = 'correos' | 'notas' | 'setup-project' | 'setup-team' | 'setup-tasks' | 'dashboard' | 'standards' | 'analytics' | 'audit' | 'bank-status' | 'notifications' | 'roles-permissions' | 'project-templates' | 'admin' | 'circuitos-bbva' | 'bitacora' | 'estimaciones' | 'plan-trabajo' | 'imputaciones' | 'inventario' | 'links' | 'proyectos' | 'activity-report' | 'fabrica';
 
@@ -261,6 +262,9 @@ export default function Layout({ children, currentView, onViewChange, userRole }
 
         {/* Main Content */}
         <main className="flex-1 overflow-auto">
+          {/* Repara los permisos de proyectos con guion en el id en cuanto entre
+              alguien que gestione el equipo; invisible si no hay nada que hacer. */}
+          <ParchePermisos global/>
           {children}
         </main>
       </div>
