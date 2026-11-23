@@ -1,9 +1,10 @@
 import React, { useMemo, useState } from 'react';
-import { Plus, Search, Star, Trash2, Bold, Italic, List, ListChecks, Heading2, Link2, Code, Eye, Pencil, RotateCcw, BookOpen, Image as ImageIcon, Loader } from 'lucide-react';
+import { Plus, Search, Star, Trash2, Bold, Italic, List, ListChecks, Heading2, Link2, Code, Eye, Pencil, RotateCcw, BookOpen, Image as ImageIcon, Loader, X } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { adminStore, type Nota, type Cuaderno, type AdminProject } from '../lib/adminStore';
 import { markdownAHtml, resumenDeNota } from '../lib/markdownMini';
-import { subirImagen, marcaDeImagen } from '../lib/imagenesNota';
+import { subirImagen, marcaDeImagen, conAnchoDeImagen } from '../lib/imagenesNota';
+import { leerLocal } from '../lib/imgLocal';
 import { apiBase } from '../lib/persist';
 
 // Paleta de los cuadernos: los mismos tonos que usa el resto de la herramienta.
@@ -43,9 +44,69 @@ export default function Notas() {
   const [nuevoCuaderno, setNuevoCuaderno] = useState('');
   const [subiendo, setSubiendo]   = useState(0);
   const [errorImg, setErrorImg]   = useState('');
+  const [avisoLocal, setAvisoLocal] = useState(false);
+  const [imgSel, setImgSel]       = useState<{ sha: string; idx: number; ancho: number; top: number; left: number } | null>(null);
   const refCuerpo = React.useRef<HTMLTextAreaElement>(null);
+  const refLectura = React.useRef<HTMLDivElement>(null);
 
   function guardarNotas(n: Nota[]) { setNotas(n); adminStore.saveNotas(n); }
+
+  /**
+   * Las imágenes que quedaron solo en este navegador (sin API detrás) no las
+   * puede traer el `src`: se buscan en IndexedDB por su sha y se cambian por
+   * una URL de blob. Y de paso cada imagen queda clicable para cambiar su
+   * tamaño sin salir de la nota.
+   */
+  React.useEffect(() => {
+    const cont = refLectura.current;
+    if (!cont) return;
+    const imgs = [...cont.querySelectorAll<HTMLImageElement>('img[data-sha]')];
+    const blobs: string[] = [];
+    let vivo = true;
+
+    const porSha = new Map<string, number>();
+    imgs.forEach(img => {
+      const sha = img.dataset.sha ?? '';
+      const idx = porSha.get(sha) ?? 0;
+      porSha.set(sha, idx + 1);
+      img.dataset.idx = String(idx);
+      img.style.cursor = 'zoom-in';
+
+      // Si falla la carga desde el API, puede estar guardada aquí.
+      const intentarLocal = async () => {
+        const b = await leerLocal(sha);
+        if (!vivo || !b) return;
+        const u = URL.createObjectURL(b);
+        blobs.push(u);
+        img.src = u;
+        img.dataset.local = '1';
+      };
+      img.addEventListener('error', intentarLocal, { once: true });
+      if (!img.complete || img.naturalWidth === 0) void intentarLocal();
+    });
+
+    const alHacerClic = (e: Event) => {
+      const img = (e.target as HTMLElement).closest('img[data-sha]') as HTMLImageElement | null;
+      if (!img) { setImgSel(null); return; }
+      const r = img.getBoundingClientRect();
+      setImgSel({ sha: img.dataset.sha ?? '', idx: Number(img.dataset.idx ?? 0),
+                  ancho: Number(img.dataset.ancho ?? Math.round(r.width)),
+                  top: r.bottom + 6, left: r.left });
+    };
+    cont.addEventListener('click', alHacerClic);
+
+    return () => {
+      vivo = false;
+      cont.removeEventListener('click', alHacerClic);
+      blobs.forEach(u => URL.revokeObjectURL(u));
+    };
+  }, [selId, notas, editando]);
+
+  function ponerAncho(ancho: number | null) {
+    if (!sel || !imgSel) return;
+    actualizar(sel.id, { cuerpo: conAnchoDeImagen(sel.cuerpo, imgSel.sha, imgSel.idx, ancho) });
+    setImgSel(null);
+  }
   function guardarCuadernos(c: Cuaderno[]) { setCuadernos(c); adminStore.saveCuadernos(c); }
 
   // Lo que cada uno ve: lo suyo, más lo que otros compartieron con el equipo o
@@ -109,6 +170,7 @@ export default function Notas() {
     for (const f of imgs) {
       try {
         const sub = await subirImagen(f);
+        if (sub.local) setAvisoLocal(true);
         cuerpo = `${cuerpo}${marcaDeImagen(sub.url)}`;
         actualizar(id, { cuerpo });
       } catch (e) {
@@ -357,7 +419,7 @@ export default function Notas() {
                   style={{ width: '100%', height: '100%', minHeight: 300, boxSizing: 'border-box', border: 'none', outline: 'none',
                            resize: 'none', fontSize: 13.5, lineHeight: 1.7, color: '#1e293b', fontFamily: 'inherit' }}/>
               ) : (
-                <div className="md-cuerpo" style={{ fontSize: 13.5, lineHeight: 1.7, color: '#1e293b', maxWidth: 760 }}
+                <div ref={refLectura} className="md-cuerpo" style={{ fontSize: 13.5, lineHeight: 1.7, color: '#1e293b', maxWidth: 760 }}
                   dangerouslySetInnerHTML={{ __html: sel.cuerpo.trim()
                     ? markdownAHtml(sel.cuerpo, apiBase() ?? '')
                     : '<p style="color:#94a3b8">Nota vacía. Pulsa Editar para escribir.</p>' }}/>
@@ -366,6 +428,50 @@ export default function Notas() {
           </>
         )}
       </div>
+
+      {imgSel && (
+        <div role="group" aria-label="Tamaño de la imagen"
+          style={{ position: 'fixed', top: imgSel.top, left: imgSel.left, zIndex: 40, display: 'flex', alignItems: 'center', gap: 4,
+                   background: '#fff', border: '0.5px solid #e2e8f0', borderRadius: 9, padding: 5, boxShadow: '0 6px 20px rgba(15,23,42,.14)' }}>
+          <span style={{ fontSize: 10, color: '#64748b', padding: '0 4px' }}>Tamaño</span>
+          {[{ l: 'S', w: 320 }, { l: 'M', w: 560 }, { l: 'L', w: 860 }].map(o => (
+            <button key={o.l} onClick={() => ponerAncho(o.w)} title={`${o.w} px de ancho`}
+              style={{ fontSize: 11, fontWeight: 700, width: 30, height: 30, borderRadius: 7, cursor: 'pointer',
+                       border: `0.5px solid ${imgSel.ancho === o.w ? '#5dcaa5' : '#e2e8f0'}`,
+                       background: imgSel.ancho === o.w ? '#e1f5ee' : '#fff',
+                       color: imgSel.ancho === o.w ? '#0f6e56' : '#334155' }}>{o.l}</button>
+          ))}
+          <button onClick={() => ponerAncho(null)} title="Ancho completo de la nota"
+            style={{ fontSize: 11, fontWeight: 600, padding: '0 10px', height: 30, borderRadius: 7, cursor: 'pointer', border: '0.5px solid #e2e8f0', background: '#fff', color: '#334155' }}>
+            Completo
+          </button>
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginLeft: 2 }}>
+            <span style={{ fontSize: 10, color: '#64748b' }}>px</span>
+            <input type="number" min={80} max={2000} step={20} defaultValue={imgSel.ancho} aria-label="Ancho en píxeles"
+              onKeyDown={e => { if (e.key === 'Enter') ponerAncho(Math.min(2000, Math.max(80, Number((e.target as HTMLInputElement).value)))); }}
+              style={{ width: 62, fontSize: 11, padding: '6px 7px', border: '0.5px solid #e2e8f0', borderRadius: 7, color: '#1e293b' }}/>
+          </label>
+          <button onClick={() => setImgSel(null)} aria-label="Cerrar"
+            style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#64748b', padding: '0 4px', display: 'flex', alignItems: 'center' }}>
+            <X size={14}/>
+          </button>
+        </div>
+      )}
+
+      {avisoLocal && (
+        <div style={{ position: 'fixed', bottom: 16, right: 16, zIndex: 40, maxWidth: 380, display: 'flex', alignItems: 'flex-start', gap: 9,
+                      background: '#faeeda', border: '0.5px solid #ef9f27', borderRadius: 10, padding: '10px 12px', boxShadow: '0 6px 20px rgba(15,23,42,.14)' }}>
+          <ImageIcon size={14} color="#854f0b" style={{ flexShrink: 0, marginTop: 1 }}/>
+          <div style={{ fontSize: 11, color: '#854f0b', lineHeight: 1.5 }}>
+            <strong>La imagen quedó solo en este navegador.</strong> Esta copia del Hub no tiene API detrás, así que no se pudo subir.
+            La nota ya apunta a su URL definitiva: cuando el API esté arriba, se sube y la nota no cambia.
+          </div>
+          <button onClick={() => setAvisoLocal(false)} aria-label="Entendido"
+            style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#854f0b', display: 'flex', flexShrink: 0 }}>
+            <X size={13}/>
+          </button>
+        </div>
+      )}
 
       <style>{`
         .md-cuerpo h2 { font-size: 16px; font-weight: 600; margin: 18px 0 8px; color: #111827; }

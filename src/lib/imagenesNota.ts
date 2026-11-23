@@ -15,6 +15,7 @@
  * 1440 y para imprimir en A4.
  */
 import { apiBase } from './persist';
+import { guardarLocal, sha256 } from './imgLocal';
 
 export const LADO_MAX = 2000;
 export const CALIDAD = 0.9;
@@ -23,7 +24,18 @@ export const CALIDAD = 0.9;
  *  nada y sí puede perder nitidez. */
 const PNG_INTOCABLE = 200 * 1024;
 
-export interface ImagenSubida { id: string; url: string; len: number }
+export interface ImagenSubida {
+  id: string;
+  /** Siempre la ruta del API, con o sin API detrás: una nota escrita sin
+   *  servidor queda apuntando a la URL definitiva. */
+  url: string;
+  len: number;
+  /** true = quedó solo en este navegador porque el API no la aceptó. */
+  local: boolean;
+}
+
+/** Ruta canónica de una imagen. La base del API se añade al pintar. */
+export function rutaDeImagen(sha: string): string { return `/api/notas/imagenes/${sha}`; }
 
 function leerComoImagen(file: Blob): Promise<HTMLImageElement> {
   return new Promise((ok, err) => {
@@ -82,27 +94,70 @@ export async function prepararImagen(file: File | Blob): Promise<{ blob: Blob; m
 }
 
 /**
- * Sube la imagen y devuelve su URL. El id es el SHA-256 del contenido, así que
- * la misma captura pegada dos veces se guarda una sola vez.
+ * Guarda la imagen y devuelve su ruta. El id es el SHA-256 del contenido, así
+ * que la misma captura pegada dos veces no se duplica.
+ *
+ * Intenta el API y, si no hay API detrás, cae a IndexedDB. Los códigos que
+ * disparan el respaldo son los de «aquí no hay un API»: 404 y 405 los da un
+ * host estático —Pages devuelve 405 a cualquier POST—, 501 un proxy sin ruta,
+ * y un fetch que revienta es que no hay nada escuchando. Un 401 o un 413 NO
+ * caen al respaldo: ahí el API sí existe y está diciendo algo que hay que
+ * leer.
  */
 export async function subirImagen(file: File | Blob): Promise<ImagenSubida> {
   const { blob, mime } = await prepararImagen(file);
+  const sha = await sha256(blob);
   const base = apiBase();
-  if (base === null) throw new Error('sin API: las imágenes necesitan sesión en el servidor');
-  const r = await fetch(`${base}/api/notas/imagenes`, {
-    method: 'POST', credentials: 'include',
-    headers: { 'Content-Type': mime },
-    body: blob,
-  });
-  if (!r.ok) {
-    const detalle = await r.text().catch(() => '');
-    throw new Error(r.status === 413 ? 'la imagen es demasiado grande' : `no se pudo subir (${r.status}) ${detalle.slice(0, 120)}`);
+
+  if (base !== null) {
+    try {
+      const r = await fetch(`${base}/api/notas/imagenes`, {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': mime },
+        body: blob,
+      });
+      if (r.ok) {
+        const j = await r.json();
+        return { id: j.id, url: j.url as string, len: j.len as number, local: false };
+      }
+      if (r.status === 401) throw new Error('la sesión caducó: vuelve a entrar y repite');
+      if (r.status === 413) throw new Error('la imagen es demasiado grande incluso reducida');
+      if (r.status === 415) throw new Error('ese formato de imagen no se admite');
+      if (![404, 405, 501].includes(r.status)) {
+        const detalle = await r.text().catch(() => '');
+        throw new Error(`el API respondió ${r.status} ${detalle.slice(0, 100)}`);
+      }
+      // 404 / 405 / 501: no hay API al otro lado. Sigue al respaldo local.
+    } catch (e) {
+      // Un Error que ya trae mensaje propio es del API y se respeta.
+      if (e instanceof Error && /sesión|grande|formato|respondió/.test(e.message)) throw e;
+    }
   }
-  const j = await r.json();
-  return { id: j.id, url: j.url as string, len: j.len as number };
+
+  const ok = await guardarLocal(sha, blob);
+  if (!ok) throw new Error('no se pudo guardar la imagen en este navegador');
+  return { id: sha, url: rutaDeImagen(sha), len: blob.size, local: true };
 }
 
-/** El markdown que se inserta en la nota. */
-export function marcaDeImagen(url: string, pie = ''): string {
-  return `\n![${pie}](${url})\n`;
+/**
+ * El markdown que se inserta en la nota. El ancho va dentro del pie, tras una
+ * barra (`![pie|540](ruta)`), para no inventar sintaxis fuera del markdown:
+ * cualquier otro visor lo seguirá leyendo como una imagen con un pie raro, no
+ * como algo roto.
+ */
+export function marcaDeImagen(url: string, pie = '', ancho?: number): string {
+  const alt = ancho ? `${pie}|${ancho}` : pie;
+  return `\n![${alt}](${url})\n`;
+}
+
+/** Reescribe el ancho de la n-ésima imagen con ese sha dentro del cuerpo. */
+export function conAnchoDeImagen(cuerpo: string, sha: string, indice: number, ancho: number | null): string {
+  const re = new RegExp(`!\\[([^\\]]*)\\]\\((\\/api\\/notas\\/imagenes\\/${sha})\\)`, 'g');
+  let i = -1;
+  return cuerpo.replace(re, (m, alt: string, ruta: string) => {
+    i++;
+    if (i !== indice) return m;
+    const pie = /\|\d{2,4}$/.test(alt) ? alt.replace(/\|\d{2,4}$/, '') : alt;
+    return `![${ancho ? `${pie}|${ancho}` : pie}](${ruta})`;
+  });
 }

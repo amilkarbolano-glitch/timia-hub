@@ -43,13 +43,21 @@ function enLinea(texto: string, baseApi: string): string {
     return `\u0000${codigos.length - 1}\u0000`;
   });
   // Las imágenes van antes que los enlaces: `![pie](url)` contiene un enlace.
-  t = t.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (m, pie, url) => {
+  t = t.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (m, alt0: string, url: string) => {
     const ok = urlDeImagen(url);
     if (!ok) return m;
+    // El ancho viaja al final del pie: `![pie|540](ruta)`. Solo dígitos, y
+    // acotado, para que un ancho inventado no deforme la nota.
+    const conAncho = /^(.*)\|(\d{2,4})$/.exec(alt0);
+    const pie = conAncho ? conAncho[1] : alt0;
+    const n = conAncho ? Math.min(2000, Math.max(80, Number(conAncho[2]))) : 0;
+    const sha = ok.slice(ok.lastIndexOf('/') + 1);
     const alt = pie || 'Imagen de la nota';
+    const estilo = n ? `width:${n}px;max-width:100%` : 'max-width:100%';
     // La nota guarda solo la ruta; la base del API se pone al pintar. Así una
     // nota no se rompe el día que el API cambie de dominio.
-    return `<figure class="md-img"><img src="${baseApi}${ok}" alt="${alt}" loading="lazy">`
+    return `<figure class="md-img"><img src="${baseApi}${ok}" alt="${alt}" loading="lazy"`
+      + ` data-sha="${sha}"${n ? ` data-ancho="${n}"` : ''} style="${estilo}">`
       + (pie ? `<figcaption>${pie}</figcaption>` : '') + '</figure>';
   });
   t = t.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (m, txt, url) => {
