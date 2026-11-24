@@ -11,6 +11,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { X, Copy, Download, Check } from 'lucide-react';
 import { adminStore, type AdminProject, type PlanIssue } from '../lib/adminStore';
 import { realFase, type AvanceFase, type PesoModo } from '../lib/avance';
+import { rellenarPlantilla, guardarPlantilla, leerPlantilla, type PlantillaGuardada } from '../lib/plantillaPptx';
 
 const VINO = '#9a003d';   // el de la barra bajo la A del logo, muestreado del propio archivo
 const TINTA = '#1f2937';
@@ -80,6 +81,9 @@ export default function GenerarCorreo({ datos, onClose }: { datos: DatosCorreo; 
   /** Logo y marca de agua salen de la plantilla real de TIMIA, no redibujados:
    *  así el correo no se parece al formato del banco, es ese formato. */
   const [marca, setMarca] = useState<{ logo?: HTMLImageElement; agua?: HTMLImageElement }>({});
+  const [plantilla, setPlantilla] = useState<PlantillaGuardada | null>(null);
+  const [pptx, setPptx] = useState<string>('');
+  useEffect(() => { leerPlantilla().then(setPlantilla); }, []);
   const lienzo = useRef<HTMLCanvasElement | null>(null);
 
   const abiertas = datos.issues.filter(i => !i.endDate);
@@ -303,6 +307,54 @@ export default function GenerarCorreo({ datos, onClose }: { datos: DatosCorreo; 
     catch { setCopiado('error'); }
   }
 
+  const MES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  function valoresPlantilla(): Record<string, string> {
+    const d = new Date(datos.fechaCorte + 'T12:00:00');
+    const v: Record<string, string> = {
+      FECHA: `${d.getDate()} ${MES[d.getMonth()]} ${d.getFullYear()}`,
+      TITULO: titulo,
+      REAL: un(datos.real), ESP: un(datos.esperado),
+      DIF: `${dif >= 0 ? '+' : '-'}${Math.abs(dif).toFixed(1)}%`,
+      RESP_BBVA: respBBVA || '—', RESP_TIMIA: respTimia || '—',
+      ALERTAS: alertas.length
+        ? alertas.map((i, n) => `${n + 1}. ${[i.title, i.detail].filter(Boolean).join(' ')}${i.responsable ? ` Responsable: ${i.responsable}` : ''}`).join('\n\n')
+        : 'No se tienen alertas por el momento',
+      BLOQUEANTES: bloqueantes.length
+        ? bloqueantes.map((i, n) => `${n + 1}. ${[i.title, i.detail].filter(Boolean).join(' ')}${i.responsable ? ` Responsable: ${i.responsable}` : ''}`).join('\n\n')
+        : 'No se tienen bloqueantes por el momento',
+    };
+    // La plantilla tiene siete filas fijas. Si el plan trae menos, las que
+    // sobran quedan en blanco en vez de con el texto de la semana pasada.
+    for (let i = 0; i < 7; i++) {
+      v[`E${i + 1}`] = fases[i]?.label ?? '';
+      v[`P${i + 1}`] = fases[i] ? un(fases[i].pct) : '';
+    }
+    return v;
+  }
+
+  async function subirPlantilla(f: File) {
+    try {
+      await guardarPlantilla(f.name, await f.arrayBuffer());
+      setPlantilla(await leerPlantilla());
+      setPptx('');
+    } catch (e) { setPptx(`No pude guardar la plantilla: ${e}`); }
+  }
+
+  async function descargarPptx() {
+    if (!plantilla) return;
+    setPptx('generando');
+    try {
+      const { blob, reemplazos } = await rellenarPlantilla(plantilla.datos, valoresPlantilla());
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `Seguimiento-${datos.projectId}-${datos.fechaCorte}.pptx`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      recordar();
+      setPptx(`Listo · ${reemplazos} valores puestos`);
+    } catch (e) { setPptx(String(e instanceof Error ? e.message : e)); }
+  }
+
   const campo = { fontSize: 11, padding: '5px 8px', border: `0.5px solid ${LINEA}`, borderRadius: 6, width: '100%', boxSizing: 'border-box' as const };
   const boton = (fondo: string, tinta: string) => ({ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 600,
     padding: '7px 12px', borderRadius: 7, border: 'none', background: fondo, color: tinta, cursor: 'pointer' });
@@ -342,6 +394,43 @@ export default function GenerarCorreo({ datos, onClose }: { datos: DatosCorreo; 
           <button onClick={descargar} style={boton('#f1f5f9', TINTA)}>
             {copiado === 'png' ? <Check size={13}/> : <Download size={13}/>}PNG
           </button>
+        </div>
+
+        <div style={{ border: `0.5px solid ${LINEA}`, borderRadius: 10, padding: 12, marginBottom: 14, background: '#fafafa' }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: TINTA, marginBottom: 4 }}>Presentación adjunta</div>
+          {plantilla ? (
+            <>
+              <div style={{ fontSize: 10.5, color: GRIS, marginBottom: 8 }}>
+                Plantilla: <b style={{ color: TINTA }}>{plantilla.nombre}</b> · guardada el {plantilla.guardadaEn.slice(0, 10)}.
+                Se rellenan la portada y el resumen; las láminas de Gantt quedan como estén en la plantilla.
+              </div>
+              <div className="gc-acciones">
+                <button onClick={descargarPptx} style={boton(VINO, '#fff')}>
+                  <Download size={13}/>{pptx === 'generando' ? 'Generando…' : 'Descargar presentación'}
+                </button>
+                <label style={{ ...boton('#f1f5f9', TINTA), cursor: 'pointer' }}>
+                  Cambiar plantilla
+                  <input type="file" accept=".pptx" style={{ display: 'none' }}
+                    onChange={e => { const f = e.target.files?.[0]; if (f) subirPlantilla(f); }}/>
+                </label>
+              </div>
+            </>
+          ) : (
+            <>
+              <div style={{ fontSize: 10.5, color: GRIS, marginBottom: 8 }}>
+                Sube una vez la plantilla con marcadores y queda guardada en este navegador. No se sube a ningún
+                servidor ni al repositorio: es la presentación del banco.
+              </div>
+              <label style={{ ...boton(VINO, '#fff'), cursor: 'pointer' }}>
+                Subir plantilla (.pptx)
+                <input type="file" accept=".pptx" style={{ display: 'none' }}
+                  onChange={e => { const f = e.target.files?.[0]; if (f) subirPlantilla(f); }}/>
+              </label>
+            </>
+          )}
+          {pptx && pptx !== 'generando' && (
+            <div style={{ marginTop: 8, fontSize: 10.5, color: pptx.startsWith('Listo') ? '#047857' : '#b91c1c', fontWeight: 600 }}>{pptx}</div>
+          )}
         </div>
 
         <div style={{ fontSize: 10, color: GRIS, marginBottom: 4 }}>Texto — va debajo de la imagen</div>

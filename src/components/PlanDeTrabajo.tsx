@@ -3830,10 +3830,6 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
               <div style={{ display:'flex', gap:8, flexWrap:'wrap', justifyContent:'flex-end' }}>
                 {/* Estas dos construyen el archivo en código. La impresión del
                     navegador depende del motor de cada equipo y salía girada. */}
-                <button onClick={handleExportPdf} disabled={exportingPdf}
-                  style={{ display:'flex', alignItems:'center', gap:5, padding:'8px 14px', fontSize:12, background: exportingPdf ? '#94a3b8' : '#0d9488', color:'#fff', border:'none', borderRadius:8, cursor: exportingPdf ? 'default' : 'pointer', fontWeight:500 }}>
-                  <FileDown size={13}/> {exportingPdf ? 'Generando PDF…' : 'Descargar PDF'}
-                </button>
                 <button onClick={handleExportPptx} disabled={exportingPptx}
                   style={{ display:'flex', alignItems:'center', gap:5, padding:'8px 14px', fontSize:12, background:'#fff', color:'#334155', border:'0.5px solid #cbd5e1', borderRadius:8, cursor: exportingPptx ? 'default' : 'pointer', fontWeight:500 }}>
                   <FileDown size={13}/> {exportingPptx ? 'Generando PPTX…' : 'Descargar PPTX'}
