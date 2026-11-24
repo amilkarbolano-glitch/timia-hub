@@ -344,17 +344,14 @@ export default function GenerarCorreo({ datos, onClose }: { datos: DatosCorreo; 
     if (!plantilla) return;
     setPptx('generando');
     try {
-      const { blob, reemplazos, filasEntregable } = await rellenarPlantilla(plantilla.datos, valoresPlantilla());
+      const { blob, reemplazos, filasEntregable } = await rellenarPlantilla(plantilla.datos, valoresPlantilla(), fases.length);
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
       a.download = `Seguimiento-${datos.projectId}-${datos.fechaCorte}.pptx`;
       a.click();
       URL.revokeObjectURL(a.href);
       recordar();
-      const faltan = fases.length - filasEntregable;
-      setPptx(faltan > 0
-        ? `Listo · ${reemplazos} valores puestos. OJO: el plan tiene ${fases.length} entregables y la plantilla ${filasEntregable} filas, así que ${faltan} no salieron.`
-        : `Listo · ${reemplazos} valores puestos`);
+      setPptx(`Listo · ${reemplazos} valores puestos · tabla ajustada a ${filasEntregable} entregables`);
     } catch (e) { setPptx(String(e instanceof Error ? e.message : e)); }
   }
 
@@ -406,7 +403,8 @@ export default function GenerarCorreo({ datos, onClose }: { datos: DatosCorreo; 
               <div style={{ fontSize: 10.5, color: GRIS, marginBottom: 8 }}>
                 Plantilla: <b style={{ color: TINTA }}>{plantilla.nombre}</b> · guardada el {plantilla.guardadaEn.slice(0, 10)}.
                 Se rellenan la portada y el resumen; las láminas de Gantt quedan como estén en la plantilla.
-                {fases.length > 7 && <b style={{ color: '#b45309' }}> Este plan tiene {fases.length} entregables y la plantilla suele traer 7: revisa el aviso al generar.</b>}
+                La tabla se ajusta a los {fases.length} entregables del plan sin cambiar de alto, y el texto de alertas
+                se encoge si no cabe.
               </div>
               <div className="gc-acciones">
                 <button onClick={descargarPptx} style={boton(VINO, '#fff')}>

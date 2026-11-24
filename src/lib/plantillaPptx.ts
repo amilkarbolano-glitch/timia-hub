@@ -58,12 +58,105 @@ export async function borrarPlantilla(projectId: string): Promise<void> {
   db.close();
 }
 
-/** Texto seguro dentro de un <a:t>. Los saltos de línea se convierten en saltos
- *  de PowerPoint: dejarlos crudos los perdería al abrir el archivo. */
+/** Texto seguro dentro de un <a:t>. */
 function paraXml(v: string): string {
-  return v
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/\r?\n/g, '</a:t><a:br/><a:t>');
+  return v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+/**
+ * Reemplaza un marcador por un texto de varias líneas.
+ *
+ * No vale meter <a:br/> dentro del <a:t>: un run admite un solo <a:t> y el
+ * archivo queda inválido — el texto se perdía a partir del primer salto. Hay
+ * que partir en varios runs con el mismo formato y un <a:br/> entre ellos.
+ */
+export function ponerMultilinea(xml: string, clave: string, texto: string): string {
+  const re = new RegExp(`<a:r>(?:(?!</a:r>)[\\s\\S])*?\\{\\{${clave}\\}\\}(?:(?!</a:r>)[\\s\\S])*?</a:r>`);
+  return xml.replace(re, run => {
+    const rPr = /<a:rPr\b[^>]*\/>|<a:rPr\b[\s\S]*?<\/a:rPr>/.exec(run)?.[0] ?? '';
+    return texto.split(/\r?\n/)
+      .map(l => `<a:r>${rPr}<a:t>${paraXml(l)}</a:t></a:r>`)
+      .join('<a:br/>');
+  });
+}
+
+
+/** Alto total de las filas de entregable, para repartirlo entre las que haya. */
+const altoDe = (tr: string): number => {
+  const m = /<a:tr\b[^>]*\bh="(\d+)"/.exec(tr);
+  return m ? parseInt(m[1], 10) : 0;
+};
+
+/**
+ * Ajusta la tabla de entregables al número real del plan.
+ *
+ * La plantilla trae un número fijo de filas. Con más entregables se perdían en
+ * silencio y con menos quedaban filas vacías: las dos cosas descuadran la
+ * lámina. Aquí se clona o se quita la fila patrón y, sobre todo, se reparte el
+ * alto original entre las filas que queden, así la tabla ocupa exactamente el
+ * mismo espacio y nada se corre.
+ */
+export function ajustarFilas(xml: string, cuantos: number): string {
+  const tablas = xml.match(/<a:tbl>[\s\S]*?<\/a:tbl>/g);
+  if (!tablas) return xml;
+  const tabla = tablas.find(t => /\{\{E1\}\}/.test(t));
+  if (!tabla) return xml;
+
+  const filas = tabla.match(/<a:tr\b[^>]*>[\s\S]*?<\/a:tr>/g) ?? [];
+  const esEnt = (tr: string) => /\{\{E\d+\}\}/.test(tr);
+  const idx = filas.map((f, i) => (esEnt(f) ? i : -1)).filter(i => i >= 0);
+  if (!idx.length) return xml;
+
+  const altoTotal = idx.reduce((s, i) => s + altoDe(filas[i]), 0);
+  const patron = filas[idx[idx.length - 1]];
+  const n = Math.max(1, cuantos);
+  const altoFila = Math.floor(altoTotal / n);
+
+  const nuevas: string[] = [];
+  for (let k = 1; k <= n; k++) {
+    const base = k <= idx.length ? filas[idx[k - 1]] : patron;
+    nuevas.push(
+      base.replace(/\{\{E\d+\}\}/g, `{{E${k}}}`)
+          .replace(/\{\{P\d+\}\}/g, `{{P${k}}}`)
+          .replace(/(<a:tr\b[^>]*\bh=")\d+(")/, `$1${altoFila}$2`),
+    );
+  }
+
+  const antes = filas.slice(0, idx[0]);
+  const despues = filas.slice(idx[idx.length - 1] + 1);
+  let i = 0;
+  const tablaNueva = tabla.replace(/<a:tr\b[^>]*>[\s\S]*?<\/a:tr>/g, () => {
+    const pos = i++;
+    if (pos < antes.length) return antes[pos];
+    if (pos === antes.length) return nuevas.join('');   // todas las de entregable, de una
+    if (pos > idx[idx.length - 1]) return despues[pos - idx[idx.length - 1] - 1];
+    return '';                                          // las demás de entregable, fuera
+  });
+  return xml.replace(tabla, tablaNueva);
+}
+
+/**
+ * Encoge el texto de un marcador cuando es largo, para que no se salga de su
+ * caja. PowerPoint solo recalcula su propio autoajuste al editar, así que el
+ * tamaño se fija aquí y el archivo se ve igual se abra donde se abra.
+ */
+export function ajustarTamano(xml: string, clave: string, texto: string, baseP = 12, minP = 7.5): string {
+  // La caja de alertas mide 5,6 × 3,33 pulgadas. A 12 pt entran unos 65
+  // caracteres por línea y unas 14 líneas; a partir de ahí hay que encoger o
+  // el texto se sale por abajo.
+  const porLinea = 65, cabenSinEncoger = 14;
+  const lineas = texto.split('\n').reduce((s, l) => s + Math.max(1, Math.ceil(l.length / porLinea)), 0);
+  if (lineas <= cabenSinEncoger) return xml;
+  const pt = Math.max(minP, Math.round((baseP * cabenSinEncoger / lineas) * 2) / 2);
+  const sz = Math.round(pt * 100);
+  const re = new RegExp(`<a:r>(?:(?!</a:r>)[\\s\\S])*\\{\\{${clave}\\}\\}(?:(?!</a:r>)[\\s\\S])*</a:r>`);
+  return xml.replace(re, run => {
+    if (/sz="\d+"/.test(run)) return run.replace(/sz="\d+"/, `sz="${sz}"`);
+    if (/<a:rPr\b/.test(run)) return run.replace(/<a:rPr\b/, `<a:rPr sz="${sz}"`);
+    // Los runs de la plantilla no traen rPr: el formato viene del párrafo. Hay
+    // que crearlo para poder fijar el tamaño.
+    return run.replace('<a:r>', `<a:r><a:rPr lang="es-CO" sz="${sz}" dirty="0"/>`);
+  });
 }
 
 export interface ResultadoRelleno {
@@ -77,7 +170,7 @@ export interface ResultadoRelleno {
 }
 
 /** Cambia los {{MARCADORES}} de todas las láminas por sus valores. */
-export async function rellenarPlantilla(plantilla: ArrayBuffer, valores: Record<string, string>): Promise<ResultadoRelleno> {
+export async function rellenarPlantilla(plantilla: ArrayBuffer, valores: Record<string, string>, entregables?: number): Promise<ResultadoRelleno> {
   const zip = await JSZip.loadAsync(plantilla);
   const laminas = Object.keys(zip.files).filter(f => /^ppt\/slides\/slide\d+\.xml$/.test(f));
   if (!laminas.length) throw new Error('Ese archivo no parece una presentación: no encontré láminas dentro.');
@@ -85,7 +178,13 @@ export async function rellenarPlantilla(plantilla: ArrayBuffer, valores: Record<
   const vistos = new Set<string>();
   let reemplazos = 0;
   for (const ruta of laminas) {
-    const xml = await zip.file(ruta)!.async('string');
+    let xml = await zip.file(ruta)!.async('string');
+    if (entregables !== undefined && /\{\{E1\}\}/.test(xml)) xml = ajustarFilas(xml, entregables);
+    for (const [k, v] of Object.entries(valores)) {
+      if (!xml.includes(`{{${k}}}`)) continue;
+      if (k === 'ALERTAS' || k === 'BLOQUEANTES') xml = ajustarTamano(xml, k, v);
+      if (/\r?\n/.test(v)) { xml = ponerMultilinea(xml, k, v); vistos.add(k); reemplazos++; }
+    }
     const nuevo = xml.replace(/\{\{([A-Z_0-9]+)\}\}/g, (coincide, clave: string) => {
       vistos.add(clave);
       const v = valores[clave];
