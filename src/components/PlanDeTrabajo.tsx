@@ -7,6 +7,7 @@ import {
 import { PROJECTS, useAuth, canAccess, canInProject } from '../contexts/AuthContext';
 import { FlowStepper } from './SetupProject';
 import ImpactPicker, { ImpactChips, impactLabel, type PlanOutline } from './ImpactPicker';
+import { HiloBadge, HiloPanel, HiloForm, hilosDeActividad } from './HilosCorreo';
 import { persistSet } from '../lib/persist';
 import { snapToBusinessDay, addBusinessDays, computeBusinessWeekIdx, dateToBusinessWeekIdx, businessDaysBetween, diaHabilDeSemana } from '../lib/businessDays';
 import { sincronizarAsignados, reconciliarTablero, type MetaActividad } from '../lib/planTablero';
@@ -15,7 +16,7 @@ import {
   type PlanEtapa, type EtapaStates, type PlanHistorialEntry, RESP_ETIQUETA,
   type ActivityAssignees, type AdminUser, type AdminProject, type PlanConfig, type PlanIssue, type PlanImpact, type BitacoraEntry,
   issueImpacts, aplicarEdicionIssue, escalarAlerta, migrarPasos, type PasoPlan, type TipoPaso,
-  changeExtensionDays, makePlanKey, splitPlanKey, planKeyOf, CRONO_MAIN_NAME,
+  changeExtensionDays, makePlanKey, splitPlanKey, planKeyOf, CRONO_MAIN_NAME, type MailHilo,
 } from '../lib/adminStore';
 import {
   type CambioPct, nuevoCambio, pctsEnFecha, finDelDia, alcanzaElHistorial,
@@ -240,7 +241,7 @@ function GanttCell({ wi, act, effectivePct, isSubtask, todayWeekIdx, diaHabil = 
 
 // ─── GanttRow ─────────────────────────────────────────────────────────────────
 
-function GanttRow({ act, effectivePct, idx, expanded, onToggle, isSubtask = false, onPctChange, pctManual = false, onActivityClick, todayWeekIdx, diaHabil = 5, doneDateLabel, doneDateISO, onDoneDateChange, issues = [], issueWeeks, changes, ext, weeks }: {
+function GanttRow({ act, effectivePct, idx, expanded, onToggle, isSubtask = false, onPctChange, pctManual = false, onActivityClick, todayWeekIdx, diaHabil = 5, doneDateLabel, doneDateISO, onDoneDateChange, issues = [], issueWeeks, changes, ext, weeks, hilos = [], holidays, onHiloClick }: {
   act: PlanActivity; effectivePct: number; idx: number; expanded: boolean;
   onToggle: () => void; isSubtask?: boolean;
   onPctChange?: (n: number) => void; pctManual?: boolean; onActivityClick?: () => void;
@@ -251,6 +252,10 @@ function GanttRow({ act, effectivePct, idx, expanded, onToggle, isSubtask = fals
   onDoneDateChange?: (ymd: string | undefined) => void;
   /** Columnas de semana a pintar; sin esto cae al respaldo de 13. */
   weeks?: number;
+  /** Hilos de correo abiertos que frenan esta actividad. */
+  hilos?: MailHilo[];
+  holidays?: Set<string>;
+  onHiloClick?: (h: MailHilo) => void;
   /** Alertas/bloqueantes abiertos que impactan esta actividad */
   issues?: PlanIssue[];
   /** Por índice de semana (0-based), la marca a dibujar en la celda */
@@ -340,6 +345,9 @@ function GanttRow({ act, effectivePct, idx, expanded, onToggle, isSubtask = fals
               style={{ fontSize: 8, padding: '1px 5px', borderRadius: 3, background: '#fee2e2', color: '#b91c1c', fontWeight: 700, flexShrink: 0, whiteSpace: 'nowrap', cursor: 'help', border: '0.5px solid #fca5a5' }}>
               ⛔ +{ext.blockDays}d{(ext.blockers ?? []).every(b => b.endDate) ? ' · resuelto' : ''}
             </span>
+          )}
+          {hilos.length > 0 && holidays && onHiloClick && (
+            <HiloBadge hilos={hilos} holidays={holidays} onClick={() => onHiloClick(hilos[0])}/>
           )}
           {hasEtapas && !isSubtask && <LayoutList size={10} color="#0d9488" style={{ flexShrink: 0 }}/>}
         </div>
@@ -719,7 +727,7 @@ function ActivityDrawer({ projectId, entregableId, actIdx, act, effectivePct, et
 
 // ─── EntregableSection ────────────────────────────────────────────────────────
 
-function EntregableSection({ block, projectId, sectionIdx, getActivityPct, setActivityPct, esPctManual, onActivityClick, onGoEstimaciones, todayWeekIdx, diaHabil = 5, getDoneDate, getDoneDateISO, onDoneDateChange, planStartDate, holidays, weekLabels, issues, changes, planKey, pesoModo = PESO_MODO_DEFAULT, planWeeks }: {
+function EntregableSection({ block, projectId, sectionIdx, getActivityPct, setActivityPct, esPctManual, onActivityClick, onGoEstimaciones, todayWeekIdx, diaHabil = 5, getDoneDate, getDoneDateISO, onDoneDateChange, getHilos, onHiloClick, planStartDate, holidays, weekLabels, issues, changes, planKey, pesoModo = PESO_MODO_DEFAULT, planWeeks }: {
   block: PlanEntregable; projectId: string; sectionIdx: number;
   getActivityPct: (i: number) => number;
   setActivityPct: (i: number, pct: number) => void;
@@ -734,6 +742,8 @@ function EntregableSection({ block, projectId, sectionIdx, getActivityPct, setAc
   getDoneDate?: (i: number) => string | undefined;
   getDoneDateISO?: (i: number) => string | undefined;
   onDoneDateChange?: (i: number, ymd: string | undefined) => void;
+  getHilos?: (i: number) => MailHilo[];
+  onHiloClick?: (h: MailHilo) => void;
   planStartDate?: string;
   holidays?: Set<string>;
   weekLabels?: string[];
@@ -892,6 +902,7 @@ function EntregableSection({ block, projectId, sectionIdx, getActivityPct, setAc
                     onActivityClick={() => onActivityClick(i, block.activities[i])}
                     todayWeekIdx={todayWeekIdx} diaHabil={diaHabil} doneDateLabel={getDoneDate?.(i)}
                     doneDateISO={getDoneDateISO?.(i)}
+                    hilos={getHilos?.(i) ?? []} holidays={holidays} onHiloClick={onHiloClick}
                     onDoneDateChange={onDoneDateChange ? (v => onDoneDateChange(i, v)) : undefined}
                     issues={issuesFor(i).list} issueWeeks={issuesFor(i).weeks} changes={changesFor(i)} ext={extFor(i)} weeks={semanasGrid}/>
                   {expanded.has(i) && act.subtasks?.map((sub, si) => (
@@ -1439,7 +1450,7 @@ function saveNotes(projectId: string, data: { pasos:string[]; alertas:string[]; 
   persistSet(`timia_notes_${projectId}`, data);
 }
 
-function PlanDetail({ plan, getActivityPct: getActivityPctHoy, setActivityPct, esPctManual, onActivityClick, onGoEstimaciones, getDoneDate, getDoneDateISO, onDoneDateChange, holidays, issues: issuesHoy, onIssuesChange, userName, changes, outlines, canIssues = true, pctHistorial = [], pctsActuales = {} }: {
+function PlanDetail({ plan, getActivityPct: getActivityPctHoy, setActivityPct, esPctManual, onActivityClick, onGoEstimaciones, getDoneDate, getDoneDateISO, onDoneDateChange, hilos: hilosPlan = [], onHiloClick, holidays, issues: issuesHoy, onIssuesChange, userName, changes, outlines, canIssues = true, pctHistorial = [], pctsActuales = {} }: {
   plan: WorkPlan;
   canIssues?: boolean;
   issues: PlanIssue[];
@@ -1456,6 +1467,8 @@ function PlanDetail({ plan, getActivityPct: getActivityPctHoy, setActivityPct, e
   getDoneDate?: (eid: string, ai: number) => string | undefined;
   getDoneDateISO?: (eid: string, ai: number) => string | undefined;
   onDoneDateChange?: (eid: string, ai: number, ymd: string | undefined) => void;
+  hilos?: MailHilo[];
+  onHiloClick?: (h: MailHilo) => void;
   /** Movimientos de % registrados: con ellos se reconstruye una fecha pasada. */
   pctHistorial?: CambioPct[];
   pctsActuales?: Record<string, number>;
@@ -1807,6 +1820,8 @@ function PlanDetail({ plan, getActivityPct: getActivityPctHoy, setActivityPct, e
             todayWeekIdx={todayWeekIdx}
             getDoneDate={getDoneDate ? (i => getDoneDate(e.id, i)) : undefined}
             getDoneDateISO={getDoneDateISO ? (i => getDoneDateISO(e.id, i)) : undefined}
+            getHilos={i => hilosDeActividad(hilosPlan, plan.planKey, e.id, i)}
+            onHiloClick={onHiloClick}
             onDoneDateChange={onDoneDateChange ? ((i, v) => onDoneDateChange(e.id, i, v)) : undefined}
             planStartDate={plan.startDate}
             holidays={holidays}
@@ -2805,6 +2820,22 @@ interface DrawerState { projectId: string; entregableId: string; actIdx: number;
 // ─── Planes efectivos (módulo) ─────────────────────────────────────────────────
 // ── Planes efectivos: WORK_PLANS estáticos + planes generados desde Estimaciones ──
 // Si existe un plan generado para un proyecto estático, lo sobreescribe (permite generar NGA, CRONOS, etc.)
+/** Los cronogramas vigentes en la forma reducida que usan el selector de tareas
+ *  impactadas y la vista de Correos. Exportada para no duplicar el armado. */
+export function planOutlines(): PlanOutline[] {
+  return buildEffectivePlans().map(p => ({
+    planKey: p.planKey, projectId: p.projectId, cronoId: p.cronoId, cronoName: p.cronoName, startDate: p.startDate,
+    entregables: p.entregables.map(e => ({ id: e.id, name: e.name,
+      activities: e.activities.map(a => ({ name: a.name, startWeek: a.startWeek, endWeek: a.endWeek,
+        etapas: a.etapas?.map(x => ({ id: x.id, label: x.label })) })) })),
+  }));
+}
+
+/** Los festivos como set de ISO, que es lo que piden los cálculos de días hábiles. */
+export function holidaysSet(): Set<string> {
+  return new Set(adminStore.getHolidays().map(h => h.date));
+}
+
 function buildEffectivePlans(): WorkPlan[] {
   const storedConfigs = adminStore.getPlanConfigs();
   // Fechas de inicio overrides desde db.json → localStorage
@@ -2930,6 +2961,17 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
   const [activityJiras,     setActivityJiras]     = useState<Record<string,string>>(()=> adminStore.getActivityJiras());
   const [activityDoneDates, setActivityDoneDates] = useState<Record<string,string>>(()=> adminStore.getActivityDoneDates());
   const [issues,            setIssues]            = useState<PlanIssue[]>(() => adminStore.getPlanIssues());
+  // Hilos de correo: viven aparte de los issues porque no son un problema del
+  // plan, son una conversación con el banco que puede acabar en uno.
+  const [mailHilos,         setMailHilos]         = useState<MailHilo[]>(() => adminStore.getMailHilos());
+  const [hiloAbierto,       setHiloAbierto]       = useState<MailHilo | null>(null);
+  const [hiloNuevo,         setHiloNuevo]         = useState<PlanImpact[] | null>(null);
+  function guardarHilo(h: MailHilo) {
+    const next = mailHilos.some(x => x.id === h.id) ? mailHilos.map(x => (x.id === h.id ? h : x)) : [...mailHilos, h];
+    setMailHilos(next);
+    adminStore.saveMailHilos(next);
+    setHiloAbierto(prev => (prev && prev.id === h.id ? h : prev));
+  }
   // Cambios funcionales (vista Tareas) con impactos sobre el plan
   const changes = React.useMemo(() => adminStore.getBitacora().filter(c => (c.impacts?.length ?? 0) > 0), []);
   const outlines = React.useMemo(() => effectivePlans.map(p => ({ planKey: p.planKey, projectId: p.projectId, cronoId: p.cronoId, cronoName: p.cronoName,
@@ -3773,6 +3815,8 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
               onGoEstimaciones={onGoEstimaciones}
               getDoneDate={(eid,ai)=>getDoneDateLabel(plan.planKey,eid,ai)}
               getDoneDateISO={(eid,ai)=>getDoneDateISO(plan.planKey,eid,ai)}
+              hilos={mailHilos}
+              onHiloClick={setHiloAbierto}
               onDoneDateChange={canMark ? ((eid,ai,v)=>setDoneDate(plan.planKey,eid,ai,v)) : undefined}
               holidays={holidays}
               issues={issues}
@@ -3811,6 +3855,16 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
           onJiraSave={handleJiraSave}
           onClose={() => setDrawer(null)}
         />
+      )}
+
+      {hiloAbierto && (
+        <HiloPanel hilo={hiloAbierto} plans={outlines} holidays={holidays}
+          puedeEditar={!!user && canInProject(user, 'plan.manage_issues', hiloAbierto.projectId)}
+          onSave={guardarHilo} onClose={() => setHiloAbierto(null)}/>
+      )}
+      {hiloNuevo && (
+        <HiloForm plans={outlines} planKey={selected} impactsIniciales={hiloNuevo}
+          onSave={h => { guardarHilo(h); setHiloNuevo(null); }} onClose={() => setHiloNuevo(null)}/>
       )}
     </div>
     </div>

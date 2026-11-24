@@ -16,11 +16,11 @@ import {
   Link2,
   Package,
   Layers,
-  Activity, Factory } from 'lucide-react';
+  Activity, Factory, Mail, NotebookPen } from 'lucide-react';
 import { TimiaMark, TimiaWordmark } from './TimiaLogo';
 import ParchePermisos from './ParchePermisos';
 
-export type View = 'setup-project' | 'setup-team' | 'setup-tasks' | 'dashboard' | 'standards' | 'analytics' | 'audit' | 'bank-status' | 'notifications' | 'roles-permissions' | 'project-templates' | 'admin' | 'circuitos-bbva' | 'bitacora' | 'estimaciones' | 'plan-trabajo' | 'imputaciones' | 'inventario' | 'links' | 'proyectos' | 'activity-report' | 'fabrica';
+export type View = 'correos' | 'notas' | 'setup-project' | 'setup-team' | 'setup-tasks' | 'dashboard' | 'standards' | 'analytics' | 'audit' | 'bank-status' | 'notifications' | 'roles-permissions' | 'project-templates' | 'admin' | 'circuitos-bbva' | 'bitacora' | 'estimaciones' | 'plan-trabajo' | 'imputaciones' | 'inventario' | 'links' | 'proyectos' | 'activity-report' | 'fabrica';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -66,12 +66,19 @@ export function menuDe(rol: string): (ItemMenu | GrupoMenu)[] {
       { view: 'bitacora',        label: 'Tareas',             icon: <Layers size={13}/> },
       { view: 'imputaciones',    label: 'Imputaciones Jira',  icon: <Layers size={13}/> },
       { view: 'activity-report', label: 'Activity Report (TR)', icon: <Layers size={13}/> },
+      // El correo del frente se gestiona en una cuenta que no se puede conectar
+      // a la herramienta, así que los hilos se registran a mano: esta pantalla
+      // es la que se abre antes del comité, ordenada por antigüedad.
+      { view: 'correos', label: 'Correos', icon: <Mail size={13}/>, perm: 'view_plan_trabajo' },
     ]),
 
     grupo('Recursos', 'Recursos del equipo', [
       { view: 'inventario', label: 'Inventario',        icon: <Package size={13}/> },
       { view: 'fabrica',    label: 'Fábrica · estatus', icon: <Factory size={13}/>, perm: 'fabrica.view' },
       { view: 'links',      label: 'Links importantes', icon: <Link2 size={13}/> },
+      // Cuaderno personal dentro de la herramienta: lo que uno escribe para sí
+      // mismo no tiene por qué vivir en otra pestaña.
+      { view: 'notas',      label: 'Notas',             icon: <NotebookPen size={13}/> },
     ]),
 
     grupo('Admin', 'Administración', [

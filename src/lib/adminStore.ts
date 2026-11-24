@@ -293,6 +293,100 @@ export interface PasoPlan {
   creadoEn: string;                // ISO timestamp
 }
 
+/**
+ * De quién depende mover un hilo de correo.
+ *
+ * El correo del frente se gestiona en una cuenta aparte (contractor del banco)
+ * que no se puede conectar a la herramienta, así que el hilo no se sincroniza:
+ * se registra. Lo que importa operativamente no es el contenido del correo
+ * —eso vive en el buzón— sino de quién es la pelota y desde cuándo.
+ *
+ * El responsable se elige de dos formas distintas a propósito: si es de Timia
+ * sale de la lista de usuarios, porque está en la plataforma y así queda
+ * trazable; si es de BBVA se escribe a mano, porque casi nunca tiene cuenta
+ * aquí y un desplegable dejaría sin responsable justo los casos que se atascan.
+ */
+export interface MailResponsable {
+  lado: 'TIMIA' | 'BBVA';
+  /** Solo si lado es TIMIA: el usuario de la plataforma. */
+  userId?: string;
+  /** El nombre que se muestra: de la lista en Timia, escrito a mano en BBVA. */
+  nombre: string;
+}
+
+/** Un movimiento del hilo. Se añaden, no se editan: la historia es el valor. */
+export interface MailMovimiento {
+  fecha: string;                   // ISO yyyy-mm-dd
+  por: string;                     // quién lo registró
+  nota: string;
+  /** En qué mano queda el hilo después de este movimiento. */
+  responsable: MailResponsable;
+}
+
+/** Un hilo de correo con BBVA, asociado a las tareas que frena. */
+export interface MailHilo {
+  id: string;
+  planKey: string;                 // projectId o projectId::cronoId
+  projectId: string;               // lo exige el alcance por proyecto del API
+  asunto: string;
+  resumen?: string;
+  estado: 'abierto' | 'resuelto';
+  /** En mano de quién está ahora. */
+  responsable: MailResponsable;
+  /** Desde cuándo está en esa mano — de aquí sale la antigüedad en días hábiles. */
+  desde: string;                   // ISO yyyy-mm-dd
+  abiertoEl: string;               // ISO yyyy-mm-dd
+  cerradoEl?: string;              // ISO yyyy-mm-dd
+  notaCierre?: string;
+  seguimiento: MailMovimiento[];
+  /** Tareas que frena. Un mismo correo suele frenar varias. */
+  impacts?: PlanImpact[];
+  jira?: string;
+  creadoPor: string;
+  creadoEn: string;                // ISO timestamp
+}
+
+/** Un cuaderno: una carpeta con nombre y color, nada más. Dos niveles bastan. */
+export interface Cuaderno {
+  id: string;
+  nombre: string;
+  color: string;
+  ownerId: string;
+  creadoEn: string;
+}
+
+/**
+ * Una nota.
+ *
+ * El cuerpo es markdown, no bloques: un editor de bloques son semanas y una
+ * dependencia pesada, y markdown da títulos, listas, casillas y código desde
+ * el primer día, además de sobrevivir a un cambio de editor.
+ *
+ * `visibilidad` es de interfaz, no de servidor: el API devuelve la colección
+ * completa a cualquier usuario con sesión, así que «privada» significa que
+ * nadie más la ve en la herramienta, no que nadie más pueda leerla. Para que
+ * sea privacidad de verdad hace falta un endpoint propio que filtre por
+ * usuario en el servidor.
+ */
+export interface Nota {
+  id: string;
+  titulo: string;
+  cuerpo: string;
+  cuadernoId?: string;
+  etiquetas?: string[];
+  visibilidad: 'privada' | 'equipo' | 'proyecto';
+  /** Solo si visibilidad es 'proyecto'. */
+  projectId?: string;
+  ownerId: string;
+  ownerNombre: string;
+  favorita?: boolean;
+  /** Borrado lógico: por el API un borrado es definitivo y sin vuelta. */
+  borradaEn?: string;
+  creadaEn: string;
+  actualizadaEn: string;
+  actualizadaPor?: string;
+}
+
 /** Normaliza los impactos de un issue (soporta el formato antiguo de impacto único) */
 export function issueImpacts(i: PlanIssue): PlanImpact[] {
   if (i.impacts && i.impacts.length) return i.impacts;
@@ -688,6 +782,14 @@ export const adminStore = {
   // Alertas / bloqueantes con fechas e impacto
   getPlanIssues:  (): PlanIssue[]     => load('plan_issues', []),
   savePlanIssues: (i: PlanIssue[])    => save('plan_issues', i),
+
+  getMailHilos:  (): MailHilo[]       => load('mail_hilos', []),
+  saveMailHilos: (h: MailHilo[])      => save('mail_hilos', h),
+
+  getNotas:      (): Nota[]           => load('notas', []),
+  saveNotas:     (n: Nota[])          => save('notas', n),
+  getCuadernos:  (): Cuaderno[]       => load('cuadernos', []),
+  saveCuadernos: (c: Cuaderno[])      => save('cuadernos', c),
 
   // Siguientes pasos (se resuelven, no se borran)
   getPlanPasos:  (): PasoPlan[]       => load('plan_pasos', []),

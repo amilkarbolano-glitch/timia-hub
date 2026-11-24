@@ -48,6 +48,10 @@ export const persist = {
 };
 function notify() { state.listeners.forEach(fn => { try { fn(); } catch {} }); }
 
+/** La base de la API ('' si comparte dominio, null si no hay API configurada).
+ *  La necesitan las subidas que no pasan por el almacén de estado. */
+export function apiBase(): string | null { return state.base; }
+
 function headers(): Record<string, string> {
   const h: Record<string, string> = { 'Content-Type': 'application/json' };
   if (state.apiKey) h['X-API-Key'] = state.apiKey;
