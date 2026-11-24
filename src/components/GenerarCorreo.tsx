@@ -50,6 +50,24 @@ export interface DatosCorreo {
   issues: PlanIssue[];           // ya filtradas al corte por el plan
 }
 
+/** Estilos con media query: el diálogo se usa igual desde el escritorio y desde
+ *  el teléfono, y en línea no se pueden escribir puntos de corte. */
+const CSS = `
+.gc-fondo{position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:70;display:flex;align-items:center;justify-content:center;padding:16px}
+.gc-modal{background:#fff;border-radius:14px;width:min(1180px,96vw);max-height:92vh;overflow-y:auto;padding:18px 22px 22px}
+.gc-campos{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:8px;margin-bottom:14px}
+.gc-lienzo{overflow-x:auto;border:0.5px solid ${LINEA};border-radius:10px;padding:10px;margin-bottom:10px;background:#fafafa}
+.gc-lienzo canvas{display:block;width:100%;min-width:640px;height:auto;border-radius:6px;border:0.5px solid ${LINEA};background:#fff}
+.gc-acciones{display:flex;gap:7px;flex-wrap:wrap}
+@media (max-width:760px){
+  .gc-fondo{padding:0}
+  .gc-modal{width:100vw;max-width:100vw;max-height:100vh;border-radius:0;padding:14px}
+  .gc-campos input{font-size:16px}
+  .gc-lienzo canvas{min-width:560px}
+  .gc-acciones button{flex:1 1 auto;justify-content:center}
+}
+`;
+
 export default function GenerarCorreo({ datos, onClose }: { datos: DatosCorreo; onClose: () => void }) {
   const proyectos = adminStore.getProjects();
   const proyecto = proyectos.find(p => p.id === datos.projectId);
@@ -258,8 +276,9 @@ export default function GenerarCorreo({ datos, onClose }: { datos: DatosCorreo; 
     padding: '7px 12px', borderRadius: 7, border: 'none', background: fondo, color: tinta, cursor: 'pointer' });
 
   return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.45)', zIndex: 70, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-      <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, width: 'min(960px, 100%)', maxHeight: '92vh', overflowY: 'auto', padding: '18px 22px 22px' }}>
+    <div onClick={onClose} className="gc-fondo">
+      <style>{CSS}</style>
+      <div onClick={e => e.stopPropagation()} className="gc-modal">
 
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
           <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: TINTA }}>Generar correo de status</h3>
@@ -269,7 +288,7 @@ export default function GenerarCorreo({ datos, onClose }: { datos: DatosCorreo; 
           Corte del {fechaLarga(datos.fechaCorte)} — las cifras son las que muestra el plan en pantalla con ese corte.
         </p>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 8, marginBottom: 14 }}>
+        <div className="gc-campos">
           <label style={{ fontSize: 10, color: GRIS }}>Código del proyecto
             <input value={sda} onChange={e => setSda(e.target.value)} onBlur={recordar} placeholder="SDATOOL-54364" style={campo}/></label>
           <label style={{ fontSize: 10, color: GRIS }}>Asunto del correo de alcance
@@ -280,11 +299,11 @@ export default function GenerarCorreo({ datos, onClose }: { datos: DatosCorreo; 
             <input value={respTimia} onChange={e => setRespTimia(e.target.value)} onBlur={recordar} placeholder="Nombre y apellido" style={campo}/></label>
         </div>
 
-        <div style={{ border: `0.5px solid ${LINEA}`, borderRadius: 10, padding: 10, marginBottom: 10, background: '#fafafa' }}>
-          <canvas ref={el => { lienzo.current = el; }} style={{ width: '100%', height: 'auto', borderRadius: 6, border: `0.5px solid ${LINEA}`, background: '#fff' }}/>
+        <div className="gc-lienzo">
+          <canvas ref={el => { lienzo.current = el; }}/>
         </div>
 
-        <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', marginBottom: 14 }}>
+        <div className="gc-acciones" style={{ marginBottom: 14 }}>
           <button onClick={copiarImagen} style={boton(VINO, '#fff')}>
             {copiado === 'imagen' ? <Check size={13}/> : <Copy size={13}/>}{copiado === 'imagen' ? 'Imagen copiada' : 'Copiar imagen'}
           </button>
@@ -296,7 +315,7 @@ export default function GenerarCorreo({ datos, onClose }: { datos: DatosCorreo; 
         <div style={{ fontSize: 10, color: GRIS, marginBottom: 4 }}>Texto — va debajo de la imagen</div>
         <textarea readOnly value={texto} rows={10}
           style={{ width: '100%', boxSizing: 'border-box', fontSize: 11, lineHeight: 1.6, padding: '9px 11px', border: `0.5px solid ${LINEA}`, borderRadius: 8, resize: 'vertical', color: TINTA, background: '#fff' }}/>
-        <div style={{ display: 'flex', gap: 7, marginTop: 8 }}>
+        <div className="gc-acciones" style={{ marginTop: 8 }}>
           <button onClick={copiarTexto} style={boton(VINO, '#fff')}>
             {copiado === 'texto' ? <Check size={13}/> : <Copy size={13}/>}{copiado === 'texto' ? 'Texto copiado' : 'Copiar texto'}
           </button>
