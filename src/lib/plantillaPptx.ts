@@ -8,6 +8,7 @@
 // repositorio es público. Se sube una vez desde la app y se guarda en este
 // navegador.
 import JSZip from 'jszip';
+import { persistSet } from './persist';
 
 const MIME = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
 const BD = 'timia-plantillas', ALMACEN = 'pptx';
@@ -15,7 +16,52 @@ const BD = 'timia-plantillas', ALMACEN = 'pptx';
  *  entregables, así que compartir una sola no sirve. */
 const clave = (projectId: string) => `seguimiento:${projectId}`;
 
-export interface PlantillaGuardada { nombre: string; guardadaEn: string; datos: ArrayBuffer }
+export interface PlantillaGuardada { nombre: string; guardadaEn: string; datos: ArrayBuffer; compartida?: boolean }
+
+// ── Plantilla compartida ─────────────────────────────────────────────────────
+// Guardada en el estado del proyecto, que el API ya sincroniza entre todos: así
+// la sube una persona y el resto la tiene sin hacer nada. No va en public/
+// porque el sitio es público y eso dejaría la presentación del banco al alcance
+// de cualquiera con la URL, ni en el repositorio por lo mismo.
+//
+// Lo suyo sería un endpoint binario, como el de las imágenes de notas, en vez
+// de base64 dentro del estado —que se descarga entero al entrar—. Eso espera
+// al despliegue del API; mientras tanto, 414 KB en base64 caben.
+const claveEstado = (projectId: string) => `timia_plantilla_${projectId}`;
+
+export interface PlantillaCompartida { nombre: string; guardadaEn: string; b64: string }
+
+function deBase64(b64: string): ArrayBuffer {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes.buffer;
+}
+
+function aBase64(datos: ArrayBuffer): string {
+  const bytes = new Uint8Array(datos);
+  let bin = '';
+  // De a trozos: pasar 400 KB de golpe a String.fromCharCode revienta la pila.
+  for (let i = 0; i < bytes.length; i += 8192) bin += String.fromCharCode(...bytes.subarray(i, i + 8192));
+  return btoa(bin);
+}
+
+export function leerCompartida(projectId: string): PlantillaGuardada | null {
+  try {
+    const crudo = localStorage.getItem(claveEstado(projectId));
+    if (!crudo) return null;
+    const v = JSON.parse(crudo) as PlantillaCompartida;
+    if (!v?.b64) return null;
+    return { nombre: v.nombre, guardadaEn: v.guardadaEn, datos: deBase64(v.b64), compartida: true };
+  } catch { return null; }
+}
+
+export function guardarCompartida(projectId: string, nombre: string, datos: ArrayBuffer): void {
+  const v: PlantillaCompartida = { nombre, guardadaEn: new Date().toISOString(), b64: aBase64(datos) };
+  persistSet(claveEstado(projectId), v);
+}
+
+
 
 function abrir(): Promise<IDBDatabase> {
   return new Promise((ok, mal) => {

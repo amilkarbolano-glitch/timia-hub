@@ -11,7 +11,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { X, Copy, Download, Check } from 'lucide-react';
 import { adminStore, type AdminProject, type PlanIssue } from '../lib/adminStore';
 import { realFase, type AvanceFase, type PesoModo } from '../lib/avance';
-import { rellenarPlantilla, guardarPlantilla, leerPlantilla, type PlantillaGuardada } from '../lib/plantillaPptx';
+import { rellenarPlantilla, guardarPlantilla, leerPlantilla, leerCompartida, guardarCompartida, type PlantillaGuardada } from '../lib/plantillaPptx';
 
 const VINO = '#9a003d';   // el de la barra bajo la A del logo, muestreado del propio archivo
 const TINTA = '#1f2937';
@@ -83,7 +83,11 @@ export default function GenerarCorreo({ datos, onClose }: { datos: DatosCorreo; 
   const [marca, setMarca] = useState<{ logo?: HTMLImageElement; agua?: HTMLImageElement }>({});
   const [plantilla, setPlantilla] = useState<PlantillaGuardada | null>(null);
   const [pptx, setPptx] = useState<string>('');
-  useEffect(() => { leerPlantilla(datos.projectId).then(setPlantilla); }, [datos.projectId]);
+  useEffect(() => {
+    const compartida = leerCompartida(datos.projectId);
+    if (compartida) { setPlantilla(compartida); return; }
+    leerPlantilla(datos.projectId).then(setPlantilla);
+  }, [datos.projectId]);
   const lienzo = useRef<HTMLCanvasElement | null>(null);
 
   const abiertas = datos.issues.filter(i => !i.endDate);
@@ -334,11 +338,18 @@ export default function GenerarCorreo({ datos, onClose }: { datos: DatosCorreo; 
     return v;
   }
 
-  async function subirPlantilla(f: File) {
+  async function subirPlantilla(f: File, paraTodos: boolean) {
     try {
-      await guardarPlantilla(datos.projectId, f.name, await f.arrayBuffer());
-      setPlantilla(await leerPlantilla(datos.projectId));
-      setPptx('');
+      const datosArchivo = await f.arrayBuffer();
+      if (paraTodos) {
+        guardarCompartida(datos.projectId, f.name, datosArchivo);
+        setPlantilla({ nombre: f.name, guardadaEn: new Date().toISOString(), datos: datosArchivo, compartida: true });
+        setPptx('Guardada para todo el equipo. Al resto le aparece al volver a entrar.');
+      } else {
+        await guardarPlantilla(datos.projectId, f.name, datosArchivo);
+        setPlantilla(await leerPlantilla(datos.projectId));
+        setPptx('');
+      }
     } catch (e) { setPptx(`No pude guardar la plantilla: ${e}`); }
   }
 
@@ -403,7 +414,8 @@ export default function GenerarCorreo({ datos, onClose }: { datos: DatosCorreo; 
           {plantilla ? (
             <>
               <div style={{ fontSize: 10.5, color: GRIS, marginBottom: 8 }}>
-                Plantilla: <b style={{ color: TINTA }}>{plantilla.nombre}</b> · guardada el {plantilla.guardadaEn.slice(0, 10)}.
+                Plantilla: <b style={{ color: TINTA }}>{plantilla.nombre}</b> · guardada el {plantilla.guardadaEn.slice(0, 10)}
+                {plantilla.compartida ? ' · compartida con el equipo' : ' · solo en este navegador'}.
                 Se rellenan la portada y el resumen; las láminas de Gantt quedan como estén en la plantilla.
                 La tabla se ajusta a los {fases.length} entregables del plan sin cambiar de alto, y el texto de alertas
                 se encoge si no cabe.
@@ -415,21 +427,29 @@ export default function GenerarCorreo({ datos, onClose }: { datos: DatosCorreo; 
                 <label style={{ ...boton('#f1f5f9', TINTA), cursor: 'pointer' }}>
                   Cambiar plantilla
                   <input type="file" accept=".pptx" style={{ display: 'none' }}
-                    onChange={e => { const f = e.target.files?.[0]; if (f) subirPlantilla(f); }}/>
+                    onChange={e => { const f = e.target.files?.[0]; if (f) subirPlantilla(f, true); }}/>
                 </label>
               </div>
             </>
           ) : (
             <>
               <div style={{ fontSize: 10.5, color: GRIS, marginBottom: 8 }}>
-                Sube una vez la plantilla de <b>{proyecto?.name ?? datos.projectId}</b> y queda guardada para ese proyecto en
-                este navegador. No se sube a ningún servidor ni al repositorio: es la presentación del banco.
+                Sube una vez la plantilla de <b>{proyecto?.name ?? datos.projectId}</b>. Compartida queda guardada con el
+                proyecto y el resto del equipo la recibe sin hacer nada; solo para ti, se queda en este navegador. No va
+                al repositorio ni a una URL pública: es la presentación del banco.
               </div>
-              <label style={{ ...boton(VINO, '#fff'), cursor: 'pointer' }}>
-                Subir plantilla (.pptx)
-                <input type="file" accept=".pptx" style={{ display: 'none' }}
-                  onChange={e => { const f = e.target.files?.[0]; if (f) subirPlantilla(f); }}/>
-              </label>
+              <div className="gc-acciones">
+                <label style={{ ...boton(VINO, '#fff'), cursor: 'pointer' }}>
+                  Subir para todo el equipo
+                  <input type="file" accept=".pptx" style={{ display: 'none' }}
+                    onChange={e => { const f = e.target.files?.[0]; if (f) subirPlantilla(f, true); }}/>
+                </label>
+                <label style={{ ...boton('#f1f5f9', TINTA), cursor: 'pointer' }}>
+                  Solo para mí
+                  <input type="file" accept=".pptx" style={{ display: 'none' }}
+                    onChange={e => { const f = e.target.files?.[0]; if (f) subirPlantilla(f, false); }}/>
+                </label>
+              </div>
             </>
           )}
           {pptx && pptx !== 'generando' && (
