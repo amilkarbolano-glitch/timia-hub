@@ -356,6 +356,14 @@ export interface MailHilo {
 }
 
 /** Un cuaderno: una carpeta con nombre y color, nada más. Dos niveles bastan. */
+/** Lo que se escribe una vez por proyecto para el correo de status. */
+export interface CorreoConfig {
+  sda?: string;
+  asuntoAlcance?: string;
+  respBBVA?: string;
+  respTimia?: string;
+}
+
 export interface Cuaderno {
   id: string;
   nombre: string;
@@ -809,6 +817,13 @@ export const adminStore = {
   saveNotas:     (n: Nota[])          => save('notas', n),
   getCuadernos:  (): Cuaderno[]       => load('cuadernos', []),
   saveCuadernos: (c: Cuaderno[])      => save('cuadernos', c),
+
+  // Ajustes del correo de status, por proyecto. Van aparte y no en el registro
+  // del proyecto: escribir ahí exige projects.manage —crear y renombrar
+  // proyectos— y un líder técnico no tiene ese permiso ni debería tenerlo solo
+  // para teclear el nombre de un responsable.
+  getCorreoConfig:  (): Record<string, CorreoConfig> => load('correo_config', {}),
+  saveCorreoConfig: (c: Record<string, CorreoConfig>) => save('correo_config', c),
 
   // Siguientes pasos (se resuelven, no se borran)
   getPlanPasos:  (): PasoPlan[]       => load('plan_pasos', []),

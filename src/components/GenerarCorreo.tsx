@@ -9,7 +9,7 @@
 // pantalla, que es el error que se paga caro cuando el correo va al banco.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { X, Copy, Download, Check } from 'lucide-react';
-import { adminStore, type AdminProject, type PlanIssue } from '../lib/adminStore';
+import { adminStore, type PlanIssue } from '../lib/adminStore';
 import { realFase, type AvanceFase, type PesoModo } from '../lib/avance';
 import { rellenarPlantilla, guardarPlantilla, leerPlantilla, leerCompartida, guardarCompartida, type PlantillaGuardada } from '../lib/plantillaPptx';
 
@@ -73,10 +73,11 @@ export default function GenerarCorreo({ datos, onClose }: { datos: DatosCorreo; 
   const proyectos = adminStore.getProjects();
   const proyecto = proyectos.find(p => p.id === datos.projectId);
 
-  const [sda, setSda] = useState(proyecto?.sda ?? '');
-  const [alcance, setAlcance] = useState(proyecto?.asuntoAlcance ?? '');
-  const [respBBVA, setRespBBVA] = useState(proyecto?.respBBVA ?? datos.respBBVA ?? '');
-  const [respTimia, setRespTimia] = useState(proyecto?.respTimia ?? datos.respTimia ?? '');
+  const cfg = adminStore.getCorreoConfig()[datos.projectId] ?? {};
+  const [sda, setSda] = useState(cfg.sda ?? proyecto?.sda ?? '');
+  const [alcance, setAlcance] = useState(cfg.asuntoAlcance ?? '');
+  const [respBBVA, setRespBBVA] = useState(cfg.respBBVA ?? datos.respBBVA ?? '');
+  const [respTimia, setRespTimia] = useState(cfg.respTimia ?? datos.respTimia ?? '');
   const [copiado, setCopiado] = useState<string>('');
   /** Logo y marca de agua salen de la plantilla real de TIMIA, no redibujados:
    *  así el correo no se parece al formato del banco, es ese formato. */
@@ -100,15 +101,25 @@ export default function GenerarCorreo({ datos, onClose }: { datos: DatosCorreo; 
     [datos.fases, datos.pesoModo],
   );
 
-  /** Guarda en el proyecto lo que se escribe una vez y vale para siempre.
-   *  Se llama al salir de cada campo, no solo al copiar: son datos que se
-   *  escriben una vez por proyecto y volver a teclearlos cada semana sería
-   *  justo lo que esto viene a quitar. */
+  /** Guarda lo que se escribe una vez y vale para siempre. Se llama al salir de
+   *  cada campo, no solo al copiar: son datos que se escriben una vez por
+   *  proyecto y volver a teclearlos cada semana sería justo lo que esto viene a
+   *  quitar.
+   *
+   *  Va en su propia clave y no en el registro del proyecto: ahí escribir exige
+   *  projects.manage, el permiso de crear y renombrar proyectos, y a un líder
+   *  técnico el servidor le rechazaba el cambio por teclear un responsable. */
   function recordar() {
-    if (!proyecto) return;
-    const cambios: Partial<AdminProject> = { sda: sda.trim() || undefined, asuntoAlcance: alcance.trim() || undefined,
-      respBBVA: respBBVA.trim() || undefined, respTimia: respTimia.trim() || undefined };
-    adminStore.saveProjects(proyectos.map(p => p.id === proyecto.id ? { ...p, ...cambios } : p));
+    const todas = adminStore.getCorreoConfig();
+    adminStore.saveCorreoConfig({
+      ...todas,
+      [datos.projectId]: {
+        sda: sda.trim() || undefined,
+        asuntoAlcance: alcance.trim() || undefined,
+        respBBVA: respBBVA.trim() || undefined,
+        respTimia: respTimia.trim() || undefined,
+      },
+    });
   }
 
   const titulo = [sda.trim(), proyecto?.name ?? datos.projectId].filter(Boolean).join(' · ');
