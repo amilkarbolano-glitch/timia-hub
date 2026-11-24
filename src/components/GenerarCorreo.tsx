@@ -85,97 +85,122 @@ export default function GenerarCorreo({ datos, onClose }: { datos: DatosCorreo; 
   // Se dibuja a mano en un canvas en vez de convertir HTML: así sale igual en
   // todos los navegadores y no depende de fuentes ni de CSS que el portapapeles
   // no se lleva.
-  function dibujar(): HTMLCanvasElement {
-    const W = 1120, H = 620, R = 2;
-    const c = lienzo.current ?? document.createElement('canvas');
-    c.width = W * R; c.height = H * R;
-    const ctx = c.getContext('2d')!;
-    ctx.setTransform(R, 0, 0, R, 0, 0);
+  function trazar(ctx: CanvasRenderingContext2D, W: number): number {
     const F = (px: number, peso = 400) => `${peso} ${px}px system-ui, -apple-system, "Segoe UI", sans-serif`;
+    const IZQ = 40, ANCHO_IZQ = 470;        // alertas y bloqueantes
+    const DER = 560, ANCHO_DER = W - DER - 40;  // el dibujo: cifras, tabla y equipo
 
-    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, 4000);
     ctx.fillStyle = VINO; ctx.fillRect(0, 0, W, 6);
 
     ctx.fillStyle = TINTA; ctx.font = F(21, 600);
-    ctx.fillText(titulo || 'Plan de trabajo', 40, 52);
+    ctx.fillText(titulo || 'Plan de trabajo', IZQ, 52);
     ctx.fillStyle = VINO; ctx.font = F(16, 600); ctx.textAlign = 'right';
     ctx.fillText(fechaCorta(datos.fechaCorte), W - 40, 52);
     ctx.textAlign = 'left';
 
-    // Avance general
-    ctx.fillStyle = GRIS; ctx.font = F(12, 600);
-    ctx.fillText('AVANCE GENERAL', 40, 92);
-    const caja = (x: number, et: string, val: string, fondo: string, tinta: string) => {
-      ctx.fillStyle = fondo; ctx.beginPath(); ctx.roundRect(x, 104, 180, 72, 8); ctx.fill();
-      ctx.fillStyle = tinta; ctx.font = F(11, 600); ctx.textAlign = 'center';
-      ctx.fillText(et, x + 90, 126);
-      ctx.font = F(26, 700); ctx.fillText(val, x + 90, 160);
-      ctx.textAlign = 'left';
-    };
-    caja(40, 'Avance real', un(datos.real), '#f3f4f6', TINTA);
-    caja(236, 'Avance esperado', un(datos.esperado), '#f3f4f6', TINTA);
-    const verde = dif >= 0;
-    caja(432, 'Diferencia', `${dif >= 0 ? '+' : '−'}${Math.abs(dif).toFixed(1)}%`,
-         verde ? '#dcfce7' : '#fee2e2', verde ? '#15803d' : '#b91c1c');
-
-    // Entregables
-    let y = 212;
-    ctx.fillStyle = VINO; ctx.beginPath(); ctx.roundRect(40, y, 572, 30, 6); ctx.fill();
-    ctx.fillStyle = '#fff'; ctx.font = F(12, 600);
-    ctx.fillText('Entregable / Bloque', 54, y + 20);
-    ctx.textAlign = 'right'; ctx.fillText('Porcentaje', 598, y + 20); ctx.textAlign = 'left';
-    y += 30;
-    fases.forEach((f, i) => {
-      if (i % 2) { ctx.fillStyle = '#f9fafb'; ctx.fillRect(40, y, 572, 28); }
-      ctx.fillStyle = TINTA; ctx.font = F(12);
-      ctx.fillText(enLineas(ctx, f.label, 470, 1)[0] ?? f.label, 54, y + 19);
-      ctx.font = F(12, 600); ctx.textAlign = 'right';
-      ctx.fillText(un(f.pct), 598, y + 19); ctx.textAlign = 'left';
-      ctx.strokeStyle = LINEA; ctx.lineWidth = 0.5;
-      ctx.beginPath(); ctx.moveTo(40, y + 28); ctx.lineTo(612, y + 28); ctx.stroke();
-      y += 28;
-    });
-
-    // Equipo
-    y += 18;
-    ctx.fillStyle = GRIS; ctx.font = F(11, 600); ctx.fillText('EQUIPO', 40, y);
-    ctx.fillStyle = TINTA; ctx.font = F(12);
-    ctx.fillText(`Responsable BBVA:  ${respBBVA || '—'}`, 40, y + 22);
-    ctx.fillText(`Responsable Timia:  ${respTimia || '—'}`, 40, y + 42);
-
-    // Alertas y bloqueantes, columna derecha
-    const X = 652, ANCHO = W - X - 40;
-    let yy = 92;
+    // ── Izquierda: alertas y bloqueantes ─────────────────────────────────────
+    let yI = 96;
     const lista = (etiqueta: string, color: string, items: PlanIssue[]) => {
       ctx.fillStyle = color; ctx.font = F(13, 700);
-      ctx.fillText(`${etiqueta}  (${items.length})`, X, yy); yy += 20;
+      ctx.fillText(`${etiqueta}  (${items.length})`, IZQ, yI); yI += 10;
+      ctx.strokeStyle = color; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(IZQ, yI); ctx.lineTo(IZQ + ANCHO_IZQ, yI); ctx.stroke();
+      yI += 18;
       if (!items.length) {
         ctx.fillStyle = GRIS; ctx.font = F(12);
-        ctx.fillText(`No se tienen ${etiqueta.toLowerCase()} por el momento`, X, yy); yy += 26; return;
+        ctx.fillText(`No se tienen ${etiqueta.toLowerCase()} por el momento`, IZQ, yI);
+        yI += 30; return;
       }
       items.forEach((it, n) => {
         ctx.fillStyle = TINTA; ctx.font = F(12);
-        const lineas = enLineas(ctx, `${n + 1}. ${it.title}`, ANCHO, 3);
-        lineas.forEach(l => { ctx.fillText(l, X, yy); yy += 17; });
+        const cuerpo = [it.title, it.detail].filter(Boolean).join(' ');
+        enLineas(ctx, `${n + 1}. ${cuerpo}`, ANCHO_IZQ, 4).forEach(l => { ctx.fillText(l, IZQ, yI); yI += 17; });
         if (it.responsable) {
-          ctx.fillStyle = GRIS; ctx.font = F(11);
-          ctx.fillText(`Responsable: ${it.responsable}`, X, yy); yy += 16;
+          ctx.fillStyle = color; ctx.font = F(11, 600);
+          ctx.fillText(`Responsable: ${it.responsable}`, IZQ, yI); yI += 16;
         }
-        yy += 8;
+        yI += 10;
       });
-      yy += 10;
+      yI += 12;
     };
     lista('Alertas', '#b45309', alertas);
     lista('Bloqueantes', '#b91c1c', bloqueantes);
 
+    // ── Derecha: el dibujo ───────────────────────────────────────────────────
+    let yD = 96;
+    ctx.fillStyle = GRIS; ctx.font = F(11, 600);
+    ctx.textAlign = 'center'; ctx.fillText('AVANCE GENERAL', DER + ANCHO_DER / 2, yD); ctx.textAlign = 'left';
+    yD += 12;
+    const anchoCaja = (ANCHO_DER - 24) / 3;
+    const caja = (i: number, et: string, val: string, fondo: string, tinta: string) => {
+      const x = DER + i * (anchoCaja + 12);
+      ctx.fillStyle = fondo; ctx.beginPath(); ctx.roundRect(x, yD, anchoCaja, 70, 8); ctx.fill();
+      ctx.fillStyle = tinta; ctx.textAlign = 'center';
+      ctx.font = F(11, 600); ctx.fillText(et, x + anchoCaja / 2, yD + 22);
+      ctx.font = F(25, 700); ctx.fillText(val, x + anchoCaja / 2, yD + 55);
+      ctx.textAlign = 'left';
+    };
+    caja(0, 'Avance real', un(datos.real), '#f3f4f6', TINTA);
+    caja(1, 'Avance esperado', un(datos.esperado), '#f3f4f6', TINTA);
+    const verde = dif >= 0;
+    caja(2, 'Diferencia', `${dif >= 0 ? '+' : '−'}${Math.abs(dif).toFixed(1)}%`,
+         verde ? '#dcfce7' : '#fee2e2', verde ? '#15803d' : '#b91c1c');
+    yD += 70 + 22;
+
+    ctx.fillStyle = VINO; ctx.beginPath(); ctx.roundRect(DER, yD, ANCHO_DER, 30, 6); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.font = F(12, 600);
+    ctx.fillText('Entregable / Bloque', DER + 14, yD + 20);
+    ctx.textAlign = 'right'; ctx.fillText('Porcentaje', DER + ANCHO_DER - 14, yD + 20); ctx.textAlign = 'left';
+    yD += 30;
+    fases.forEach((f, i) => {
+      if (i % 2) { ctx.fillStyle = '#f9fafb'; ctx.fillRect(DER, yD, ANCHO_DER, 28); }
+      ctx.fillStyle = TINTA; ctx.font = F(12);
+      ctx.fillText(enLineas(ctx, f.label, ANCHO_DER - 100, 1)[0] ?? f.label, DER + 14, yD + 19);
+      ctx.font = F(12, 600); ctx.textAlign = 'right';
+      ctx.fillText(un(f.pct), DER + ANCHO_DER - 14, yD + 19); ctx.textAlign = 'left';
+      ctx.strokeStyle = LINEA; ctx.lineWidth = 0.5;
+      ctx.beginPath(); ctx.moveTo(DER, yD + 28); ctx.lineTo(DER + ANCHO_DER, yD + 28); ctx.stroke();
+      yD += 28;
+    });
+
+    yD += 22;
+    ctx.fillStyle = VINO; ctx.beginPath(); ctx.roundRect(DER, yD, ANCHO_DER, 26, 6); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.font = F(11, 600);
+    ctx.fillText('Equipo', DER + 14, yD + 18);
+    ctx.textAlign = 'right'; ctx.fillText('Responsable', DER + ANCHO_DER - 14, yD + 18); ctx.textAlign = 'left';
+    yD += 26;
+    ([['Responsable BBVA', respBBVA], ['Responsable Timia', respTimia]] as const).forEach(([et, val], i) => {
+      if (i % 2) { ctx.fillStyle = '#f9fafb'; ctx.fillRect(DER, yD, ANCHO_DER, 26); }
+      ctx.fillStyle = GRIS; ctx.font = F(11, 600); ctx.fillText(et, DER + 14, yD + 18);
+      ctx.fillStyle = TINTA; ctx.font = F(11); ctx.textAlign = 'right';
+      ctx.fillText(enLineas(ctx, val || '—', ANCHO_DER - 160, 1)[0] ?? '—', DER + ANCHO_DER - 14, yD + 18);
+      ctx.textAlign = 'left';
+      ctx.strokeStyle = LINEA; ctx.lineWidth = 0.5;
+      ctx.beginPath(); ctx.moveTo(DER, yD + 26); ctx.lineTo(DER + ANCHO_DER, yD + 26); ctx.stroke();
+      yD += 26;
+    });
+
+    const alto = Math.max(yI, yD) + 34;
     ctx.fillStyle = '#9ca3af'; ctx.font = F(10);
-    ctx.fillText(`Generado desde Timia Hub · corte ${fechaCorta(datos.fechaCorte)}`, 40, H - 18);
-    return c;
+    ctx.fillText(`Generado desde Timia Hub · corte ${fechaCorta(datos.fechaCorte)}`, IZQ, alto - 14);
+    return alto;
   }
 
-  // El dibujo depende de lo que se escriba arriba, así que se rehace en cada
-  // cambio: si no, el preview miente respecto a lo que se copia.
-  useEffect(() => { if (lienzo.current) dibujar(); });
+  /** Dos pasadas: la primera mide sobre un lienzo de usar y tirar, la segunda
+   *  dibuja ya con el alto justo. Así un bloqueante largo no se corta. */
+  function dibujar(): HTMLCanvasElement {
+    const W = 1120, R = 2;
+    const borrador = document.createElement('canvas');
+    borrador.width = W; borrador.height = 2000;
+    const alto = Math.max(420, trazar(borrador.getContext('2d')!, W));
+    const c = lienzo.current ?? document.createElement('canvas');
+    c.width = W * R; c.height = alto * R;
+    const ctx = c.getContext('2d')!;
+    ctx.setTransform(R, 0, 0, R, 0, 0);
+    trazar(ctx, W);
+    return c;
+  }
 
   async function copiarImagen() {
     const c = dibujar();
