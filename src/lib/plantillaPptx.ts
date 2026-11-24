@@ -276,6 +276,17 @@ export function acomodarResumen(xml: string, textoAlertas: string, textoBloq: st
   });
 }
 
+/** Cuántas láminas trae la plantilla. Sirve para que se vea en pantalla cuál
+ *  está cargada: la de 11 lleva los Gantt y la de 4 solo el resumen, y
+ *  confundirlas hace que el correo salga corto sin que nadie se entere. */
+export async function contarLaminas(datos: ArrayBuffer): Promise<number> {
+  try {
+    const zip = await JSZip.loadAsync(datos);
+    const pres = await zip.file('ppt/presentation.xml')?.async('string');
+    return pres ? (pres.match(/<p:sldId\b/g) ?? []).length : 0;
+  } catch { return 0; }
+}
+
 export interface ResultadoRelleno {
   blob: Blob;
   reemplazos: number;

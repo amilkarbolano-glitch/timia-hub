@@ -11,7 +11,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { X, Copy, Download, Check } from 'lucide-react';
 import { adminStore, type PlanIssue } from '../lib/adminStore';
 import { realFase, type AvanceFase, type PesoModo } from '../lib/avance';
-import { rellenarPlantilla, guardarPlantilla, leerPlantilla, leerCompartida, guardarCompartida, type PlantillaGuardada } from '../lib/plantillaPptx';
+import { rellenarPlantilla, guardarPlantilla, leerPlantilla, leerCompartida, guardarCompartida, contarLaminas, type PlantillaGuardada } from '../lib/plantillaPptx';
 
 const VINO = '#9a003d';   // el de la barra bajo la A del logo, muestreado del propio archivo
 const TINTA = '#1f2937';
@@ -84,10 +84,15 @@ export default function GenerarCorreo({ datos, onClose }: { datos: DatosCorreo; 
   const [marca, setMarca] = useState<{ logo?: HTMLImageElement; agua?: HTMLImageElement }>({});
   const [plantilla, setPlantilla] = useState<PlantillaGuardada | null>(null);
   const [pptx, setPptx] = useState<string>('');
+  const [laminas, setLaminas] = useState<number>(0);
   useEffect(() => {
     const compartida = leerCompartida(datos.projectId);
-    if (compartida) { setPlantilla(compartida); return; }
-    leerPlantilla(datos.projectId).then(setPlantilla);
+    const puesta = (p: PlantillaGuardada | null) => {
+      setPlantilla(p);
+      if (p) contarLaminas(p.datos).then(setLaminas); else setLaminas(0);
+    };
+    if (compartida) { puesta(compartida); return; }
+    leerPlantilla(datos.projectId).then(puesta);
   }, [datos.projectId]);
   const lienzo = useRef<HTMLCanvasElement | null>(null);
 
@@ -355,10 +360,12 @@ export default function GenerarCorreo({ datos, onClose }: { datos: DatosCorreo; 
       if (paraTodos) {
         guardarCompartida(datos.projectId, f.name, datosArchivo);
         setPlantilla({ nombre: f.name, guardadaEn: new Date().toISOString(), datos: datosArchivo, compartida: true });
+        setLaminas(await contarLaminas(datosArchivo));
         setPptx('Guardada para todo el equipo. Al resto le aparece al volver a entrar.');
       } else {
         await guardarPlantilla(datos.projectId, f.name, datosArchivo);
         setPlantilla(await leerPlantilla(datos.projectId));
+        setLaminas(await contarLaminas(datosArchivo));
         setPptx('');
       }
     } catch (e) { setPptx(`No pude guardar la plantilla: ${e}`); }
@@ -426,7 +433,9 @@ export default function GenerarCorreo({ datos, onClose }: { datos: DatosCorreo; 
             <>
               <div style={{ fontSize: 10.5, color: GRIS, marginBottom: 8 }}>
                 Plantilla: <b style={{ color: TINTA }}>{plantilla.nombre}</b> · guardada el {plantilla.guardadaEn.slice(0, 10)}
-                {plantilla.compartida ? ' · compartida con el equipo' : ' · solo en este navegador'}.
+                {plantilla.compartida ? ' · compartida con el equipo' : ' · solo en este navegador'}
+                {laminas > 0 && <> · <b style={{ color: laminas >= 11 ? '#047857' : '#b45309' }}>{laminas} láminas</b>
+                  {laminas < 11 && ' (sin las de Gantt)'}</>}.
                 Se rellenan la portada y el resumen; las láminas de Gantt quedan como estén en la plantilla.
                 La tabla se ajusta a los {fases.length} entregables del plan sin cambiar de alto, y el texto de alertas
                 se encoge si no cabe.
