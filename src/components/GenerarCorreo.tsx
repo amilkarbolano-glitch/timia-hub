@@ -71,7 +71,10 @@ export default function GenerarCorreo({ datos, onClose }: { datos: DatosCorreo; 
     [datos.fases, datos.pesoModo],
   );
 
-  /** Guarda en el proyecto lo que se escribe una vez y vale para siempre. */
+  /** Guarda en el proyecto lo que se escribe una vez y vale para siempre.
+   *  Se llama al salir de cada campo, no solo al copiar: son datos que se
+   *  escriben una vez por proyecto y volver a teclearlos cada semana sería
+   *  justo lo que esto viene a quitar. */
   function recordar() {
     if (!proyecto) return;
     const cambios: Partial<AdminProject> = { sda: sda.trim() || undefined, asuntoAlcance: alcance.trim() || undefined,
@@ -143,9 +146,11 @@ export default function GenerarCorreo({ datos, onClose }: { datos: DatosCorreo; 
     };
     caja(0, 'Avance real', un(datos.real), '#f3f4f6', TINTA);
     caja(1, 'Avance esperado', un(datos.esperado), '#f3f4f6', TINTA);
-    const verde = dif >= 0;
-    caja(2, 'Diferencia', `${dif >= 0 ? '+' : '−'}${Math.abs(dif).toFixed(1)}%`,
-         verde ? '#dcfce7' : '#fee2e2', verde ? '#15803d' : '#b91c1c');
+    // El semáforo de la diferencia es el del banco, no el mío: en el status real
+    // un −1.3% va en verde, porque un atraso pequeño se absorbe. Verde hasta −2
+    // puntos, ámbar hasta −5, rojo por debajo.
+    const tono = dif >= -2 ? ['#dcfce7', '#15803d'] : dif >= -5 ? ['#fef3c7', '#b45309'] : ['#fee2e2', '#b91c1c'];
+    caja(2, 'Diferencia', `${dif >= 0 ? '+' : '−'}${Math.abs(dif).toFixed(1)}%`, tono[0], tono[1]);
     yD += 70 + 22;
 
     ctx.fillStyle = VINO; ctx.beginPath(); ctx.roundRect(DER, yD, ANCHO_DER, 30, 6); ctx.fill();
@@ -181,10 +186,7 @@ export default function GenerarCorreo({ datos, onClose }: { datos: DatosCorreo; 
       yD += 26;
     });
 
-    const alto = Math.max(yI, yD) + 34;
-    ctx.fillStyle = '#9ca3af'; ctx.font = F(10);
-    ctx.fillText(`Generado desde Timia Hub · corte ${fechaCorta(datos.fechaCorte)}`, IZQ, alto - 14);
-    return alto;
+    return Math.max(yI, yD) + 16;
   }
 
   /** Dos pasadas: la primera mide sobre un lienzo de usar y tirar, la segunda
@@ -201,6 +203,10 @@ export default function GenerarCorreo({ datos, onClose }: { datos: DatosCorreo; 
     trazar(ctx, W);
     return c;
   }
+
+  // El dibujo tiene que estar hecho antes de que nadie toque nada: si solo se
+  // dibujara al copiar, no habría forma de revisar el correo antes de mandarlo.
+  useEffect(() => { if (lienzo.current) dibujar(); });
 
   async function copiarImagen() {
     const c = dibujar();
@@ -265,13 +271,13 @@ export default function GenerarCorreo({ datos, onClose }: { datos: DatosCorreo; 
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 8, marginBottom: 14 }}>
           <label style={{ fontSize: 10, color: GRIS }}>Código del proyecto
-            <input value={sda} onChange={e => setSda(e.target.value)} placeholder="SDATOOL-54364" style={campo}/></label>
+            <input value={sda} onChange={e => setSda(e.target.value)} onBlur={recordar} placeholder="SDATOOL-54364" style={campo}/></label>
           <label style={{ fontSize: 10, color: GRIS }}>Asunto del correo de alcance
-            <input value={alcance} onChange={e => setAlcance(e.target.value)} placeholder="[SDATOOL-…] - Plan de trabajo" style={campo}/></label>
+            <input value={alcance} onChange={e => setAlcance(e.target.value)} onBlur={recordar} placeholder="[SDATOOL-…] - Plan de trabajo" style={campo}/></label>
           <label style={{ fontSize: 10, color: GRIS }}>Responsable BBVA
-            <input value={respBBVA} onChange={e => setRespBBVA(e.target.value)} placeholder="Nombre y apellido" style={campo}/></label>
+            <input value={respBBVA} onChange={e => setRespBBVA(e.target.value)} onBlur={recordar} placeholder="Nombre y apellido" style={campo}/></label>
           <label style={{ fontSize: 10, color: GRIS }}>Responsable Timia
-            <input value={respTimia} onChange={e => setRespTimia(e.target.value)} placeholder="Nombre y apellido" style={campo}/></label>
+            <input value={respTimia} onChange={e => setRespTimia(e.target.value)} onBlur={recordar} placeholder="Nombre y apellido" style={campo}/></label>
         </div>
 
         <div style={{ border: `0.5px solid ${LINEA}`, borderRadius: 10, padding: 10, marginBottom: 10, background: '#fafafa' }}>
