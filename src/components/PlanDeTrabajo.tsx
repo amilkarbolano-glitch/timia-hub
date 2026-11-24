@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   AlertTriangle, CheckCircle, Clock, ChevronRight, ChevronDown,
   FileDown, X, Users, Check, LayoutList, Search, ExternalLink,
@@ -7,7 +7,7 @@ import {
 import { PROJECTS, useAuth, canAccess, canInProject } from '../contexts/AuthContext';
 import { FlowStepper } from './SetupProject';
 import ImpactPicker, { ImpactChips, impactLabel, type PlanOutline } from './ImpactPicker';
-import { HiloBadge, HiloPanel, HiloForm, hilosDeActividad } from './HilosCorreo';
+import { HiloBadge, HiloPanel, HiloForm, hilosDeActividad, ResponsableInput, ResponsableChip, usuariosDeProyecto } from './HilosCorreo';
 import { persistSet } from '../lib/persist';
 import { snapToBusinessDay, addBusinessDays, computeBusinessWeekIdx, dateToBusinessWeekIdx, businessDaysBetween, diaHabilDeSemana } from '../lib/businessDays';
 import { sincronizarAsignados, reconciliarTablero, type MetaActividad } from '../lib/planTablero';
@@ -16,7 +16,7 @@ import {
   type PlanEtapa, type EtapaStates, type PlanHistorialEntry, RESP_ETIQUETA,
   type ActivityAssignees, type AdminUser, type AdminProject, type PlanConfig, type PlanIssue, type PlanImpact, type BitacoraEntry,
   issueImpacts, aplicarEdicionIssue, escalarAlerta, migrarPasos, type PasoPlan, type TipoPaso,
-  changeExtensionDays, makePlanKey, splitPlanKey, planKeyOf, CRONO_MAIN_NAME, type MailHilo,
+  changeExtensionDays, makePlanKey, splitPlanKey, planKeyOf, CRONO_MAIN_NAME, type MailHilo, type MailResponsable,
 } from '../lib/adminStore';
 import {
   type CambioPct, nuevoCambio, pctsEnFecha, finDelDia, alcanzaElHistorial,
@@ -910,23 +910,6 @@ function EntregableSection({ block, projectId, sectionIdx, getActivityPct, setAc
                   ))}
                 </React.Fragment>
               ))}
-              <tr style={{ background: '#f8fafc' }}>
-                <td colSpan={2 + semanasGrid} style={{ padding:'5px 10px' }}>
-                  <div style={{ display:'flex', gap:14, alignItems:'center', flexWrap:'wrap' }}>
-                    {[
-                      { sw:<div style={{ width:20, height:9, background:'#0d9488', borderRadius:2 }}/>, l:'Ejecutado' },
-                      { sw:<div style={{ width:20, height:9, background:'#16a34a', borderRadius:2, display:'flex', alignItems:'center', justifyContent:'flex-end', paddingRight:2, boxSizing:'border-box', color:'#fff', fontSize:7, fontWeight:700 }}>✓</div>, l:'Finalizada' },
-                      { sw:<div style={{ width:20, height:9, background:'rgba(13,148,136,0.22)', borderRadius:2 }}/>, l:'Planificado' },
-                      { sw:<div style={{ width:20, height:9, background:'repeating-linear-gradient(135deg, #c4b5fd 0 3px, #ede9fe 3px 6px)', borderRadius:2 }}/>, l:'Extensión por cambios (Δ)' },
-                      { sw:<div style={{ width:20, height:9, background:'repeating-linear-gradient(135deg, #fca5a5 0 3px, #fee2e2 3px 6px)', borderRadius:2 }}/>, l:'Días perdidos por bloqueante' },
-                      { sw:<span style={{ fontSize:8, padding:'1px 4px', borderRadius:3, background:'#dbeafe', color:'#1d4ed8', fontWeight:700 }}>BBVA</span>, l:'Depende de BBVA' },
-                      { sw:<LayoutList size={10} color="#0d9488"/>, l:'Tiene etapas (click)' },
-                    ].map(({ sw, l }) => (
-                      <div key={l} style={{ display:'flex', alignItems:'center', gap:5 }}>{sw}<span style={{ fontSize:9, color:'#64748b' }}>{l}</span></div>
-                    ))}
-                  </div>
-                </td>
-              </tr>
             </tbody>
           </table>
         </div>
@@ -1241,12 +1224,15 @@ function IssuesPanel({ plan, issues, legacy, userName, onChange, outlines, readO
  * es justo lo que hay que contar en el seguimiento. Ahora se resuelven con
  * fecha y nota, como las alertas, y se pueden editar.
  */
-function PasosPanel({ pasos, userName, onChange, readOnly = false }: {
+function PasosPanel({ pasos, userName, projectId, onChange, readOnly = false }: {
   pasos: PasoPlan[];
   userName: string;
+  projectId: string;
   onChange: (next: PasoPlan[]) => void;
   readOnly?: boolean;
 }) {
+  const usuarios = useMemo(() => usuariosDeProyecto(projectId), [projectId]);
+  const SIN_RESP: MailResponsable = { lado: 'TIMIA', nombre: '' };
   const todayISO = new Date().toISOString().slice(0, 10);
   const [adding, setAdding] = useState(false);
   const [editando, setEditando] = useState<string | null>(null);
@@ -1256,6 +1242,7 @@ function PasosPanel({ pasos, userName, onChange, readOnly = false }: {
   const [resolviendo, setResolviendo] = useState<string | null>(null);
   const [fecha, setFecha] = useState(todayISO);
   const [nota, setNota] = useState('');
+  const [resp, setResp] = useState<MailResponsable>(SIN_RESP);
   const [verHechos, setVerHechos] = useState(false);
 
   const abiertos = pasos.filter(p => !p.hechoEn);
@@ -1263,17 +1250,18 @@ function PasosPanel({ pasos, userName, onChange, readOnly = false }: {
   const nNotas = abiertos.length - nPasos;
   const hechos   = pasos.filter(p => !!p.hechoEn).sort((a,b) => (b.hechoEn ?? '').localeCompare(a.hechoEn ?? ''));
 
-  function cerrarTodo() { setAdding(false); setEditando(null); setResolviendo(null); setTexto(''); setNota(''); }
+  function cerrarTodo() { setAdding(false); setEditando(null); setResolviendo(null); setTexto(''); setNota(''); setResp(SIN_RESP); }
   function agregar() {
     const t = texto.trim(); if (!t) return;
     onChange([...pasos, { id:`pa-${Date.now()}-${Math.random().toString(36).slice(2,6)}`,
       planKey: pasos[0]?.planKey ?? '', texto:t, tipo,
+      ...(resp.nombre.trim() ? { responsable: { ...resp, nombre: resp.nombre.trim() } } : {}),
       creadoPor:userName, creadoEn:new Date().toISOString() }]);
     cerrarTodo();
   }
   function guardarEdicion(id: string) {
     const t = texto.trim(); if (!t) return;
-    onChange(pasos.map(p => p.id === id ? { ...p, texto: t, tipo } : p));
+    onChange(pasos.map(p => p.id === id ? { ...p, texto: t, tipo, responsable: resp.nombre.trim() ? { ...resp, nombre: resp.nombre.trim() } : undefined } : p));
     cerrarTodo();
   }
   function resolver(id: string) {
@@ -1305,6 +1293,7 @@ function PasosPanel({ pasos, userName, onChange, readOnly = false }: {
             <textarea value={texto} onChange={e => setTexto(e.target.value)} rows={2} autoFocus
               onKeyDown={e => { if (e.key==='Enter' && !e.shiftKey) { e.preventDefault(); guardarEdicion(p.id); } if (e.key==='Escape') cerrarTodo(); }}
               style={{ width:'100%', padding:'5px 8px', fontSize:11, border:'0.5px solid #bbf7d0', borderRadius:6, resize:'vertical', boxSizing:'border-box', lineHeight:1.5 }}/>
+            <div style={{ marginTop:5 }}><ResponsableInput value={resp} onChange={setResp} users={usuarios}/></div>
             <div style={{ display:'flex', gap:4, marginTop:4, alignItems:'center' }}>
               <button onClick={() => guardarEdicion(p.id)} style={{ padding:'3px 10px', fontSize:10, background:'#15803d', color:'#fff', border:'none', borderRadius:5, cursor:'pointer', fontWeight:600 }}>Guardar</button>
               <button onClick={cerrarTodo} style={{ padding:'3px 8px', fontSize:10, background:'#f1f5f9', border:'none', borderRadius:5, cursor:'pointer', color:'#374151' }}>Cancelar</button>
@@ -1328,6 +1317,7 @@ function PasosPanel({ pasos, userName, onChange, readOnly = false }: {
                 {!abierto && <span style={{ fontSize:9, fontWeight:600, borderRadius:4, padding:'1px 5px',
                                             color: nota_ ? '#64748b' : '#15803d', background: nota_ ? '#f1f5f9' : '#f0fdf4' }}>
                   {nota_ ? 'archivada' : 'hecho'} {fmtShort(p.hechoEn!)}{p.hechoPor ? ` · ${p.hechoPor.split(' ')[0]}` : ''}</span>}
+                {p.responsable?.nombre && <ResponsableChip r={p.responsable}/>}
                 <span style={{ fontSize:9, color:'#94a3b8' }}>{p.creadoPor.split(' ')[0]}</span>
               </div>
               {p.notaCierre && <div style={{ fontSize:10, color:'#15803d', marginTop:3, lineHeight:1.45 }}>{p.notaCierre}</div>}
@@ -1350,7 +1340,7 @@ function PasosPanel({ pasos, userName, onChange, readOnly = false }: {
             </div>
             {!readOnly && (
               <div style={{ display:'flex', gap:3, flexShrink:0 }}>
-                <button onClick={() => { cerrarTodo(); setEditando(p.id); setTexto(p.texto); setTipo(p.tipo ?? 'paso'); }} title="Editar"
+                <button onClick={() => { cerrarTodo(); setEditando(p.id); setTexto(p.texto); setTipo(p.tipo ?? 'paso'); setResp(p.responsable ?? SIN_RESP); }} title="Editar"
                   style={{ fontSize:9, padding:'2px 6px', background:'#fff', color:'#64748b', border:'0.5px solid #e2e8f0', borderRadius:5, cursor:'pointer', fontWeight:600, display:'flex', alignItems:'center', gap:3 }}><Pencil size={9}/>Editar</button>
                 {abierto
                   ? <button onClick={() => { cerrarTodo(); setResolviendo(p.id); setFecha(todayISO); }}
@@ -1415,6 +1405,7 @@ function PasosPanel({ pasos, userName, onChange, readOnly = false }: {
             onKeyDown={e => { if (e.key==='Enter' && !e.shiftKey) { e.preventDefault(); agregar(); } if (e.key==='Escape') cerrarTodo(); }}
             style={{ width:'100%', padding:'5px 8px', fontSize:11, borderRadius:6, background:'#fff', resize:'vertical', boxSizing:'border-box', outline:'none', lineHeight:1.5,
                      border:`0.5px solid ${tipo==='nota' ? '#e2e8f0' : '#bbf7d0'}` }}/>
+          <div style={{ marginTop:5 }}><ResponsableInput value={resp} onChange={setResp} users={usuarios}/></div>
           <div style={{ display:'flex', gap:4, marginTop:4 }}>
             <button onClick={agregar} style={{ padding:'3px 10px', fontSize:10, background:'#15803d', color:'#fff', border:'none', borderRadius:5, cursor:'pointer', fontWeight:600 }}>Guardar</button>
             <button onClick={cerrarTodo} style={{ padding:'3px 8px', fontSize:10, background:'#f1f5f9', border:'none', borderRadius:5, cursor:'pointer', color:'#374151' }}>Cancelar</button>
@@ -1788,7 +1779,7 @@ function PlanDetail({ plan, getActivityPct: getActivityPctHoy, setActivityPct, e
 
       {/* Pasos (editables) + Alertas / Bloqueantes con fechas e impacto */}
       <div style={{ display:'grid', gridTemplateColumns:'1fr 2fr', gap:8, marginBottom:20 }}>
-        <PasosPanel userName={userName} onChange={guardarPasos} readOnly={!puedeEditar}
+        <PasosPanel userName={userName} projectId={plan.projectId} onChange={guardarPasos} readOnly={!puedeEditar}
           pasos={pasos
             .filter(p => p.planKey === plan.planKey)
             // Un paso que se cerró después del corte estaba pendiente ese día;
@@ -1832,6 +1823,31 @@ function PlanDetail({ plan, getActivityPct: getActivityPctHoy, setActivityPct, e
           />
         ));
       })()}
+
+      <LeyendaPlan/>
+    </div>
+  );
+}
+
+// ─── Leyenda del Gantt ───────────────────────────────────────────────────────
+// Va una sola vez al pie del plan: repetida en cada entregable ensuciaba mucho.
+function LeyendaPlan() {
+  const items = [
+    { sw:<div style={{ width:20, height:9, background:'#0d9488', borderRadius:2 }}/>, l:'Ejecutado' },
+    { sw:<div style={{ width:20, height:9, background:'#16a34a', borderRadius:2, display:'flex', alignItems:'center', justifyContent:'flex-end', paddingRight:2, boxSizing:'border-box', color:'#fff', fontSize:7, fontWeight:700 }}>✓</div>, l:'Finalizada' },
+    { sw:<div style={{ width:20, height:9, background:'rgba(13,148,136,0.22)', borderRadius:2 }}/>, l:'Planificado' },
+    { sw:<div style={{ width:20, height:9, background:'repeating-linear-gradient(135deg, #c4b5fd 0 3px, #ede9fe 3px 6px)', borderRadius:2 }}/>, l:'Extensión por cambios (Δ)' },
+    { sw:<div style={{ width:20, height:9, background:'repeating-linear-gradient(135deg, #fca5a5 0 3px, #fee2e2 3px 6px)', borderRadius:2 }}/>, l:'Días perdidos por bloqueante' },
+    { sw:<span style={{ fontSize:8, padding:'1px 4px', borderRadius:3, background:'#dbeafe', color:'#1d4ed8', fontWeight:700 }}>BBVA</span>, l:'Depende de BBVA' },
+    { sw:<LayoutList size={10} color="#0d9488"/>, l:'Tiene etapas (click)' },
+  ];
+  return (
+    <div style={{ display:'flex', gap:14, alignItems:'center', flexWrap:'wrap', padding:'9px 12px', marginTop:4,
+                  background:'#f8fafc', border:'0.5px solid #e2e8f0', borderRadius:8 }}>
+      <span style={{ fontSize:9, color:'#94a3b8', fontWeight:600, textTransform:'uppercase', letterSpacing:0.4 }}>Leyenda</span>
+      {items.map(({ sw, l }) => (
+        <div key={l} style={{ display:'flex', alignItems:'center', gap:5 }}>{sw}<span style={{ fontSize:9, color:'#64748b' }}>{l}</span></div>
+      ))}
     </div>
   );
 }

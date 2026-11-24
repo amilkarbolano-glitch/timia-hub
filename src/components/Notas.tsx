@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Plus, Search, Star, Trash2, Bold, Italic, List, ListChecks, Heading2, Link2, Code, Eye, Pencil, RotateCcw, BookOpen, Image as ImageIcon, Loader, X } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { adminStore, type Nota, type Cuaderno, type AdminProject } from '../lib/adminStore';
+import { adminStore, type Nota, type Cuaderno, type AdminProject, type NotaImportancia, type NotaEstado } from '../lib/adminStore';
 import { markdownAHtml, resumenDeNota } from '../lib/markdownMini';
 import { subirImagen, marcaDeImagen, conAnchoDeImagen } from '../lib/imagenesNota';
 import { leerLocal } from '../lib/imgLocal';
@@ -30,6 +30,38 @@ const ETIQUETA_VIS: Record<Nota['visibilidad'], { label: string; bg: string; fg:
   proyecto: { label: 'proyecto', bg: '#e6f1fb', fg: '#0c447c' },
 };
 
+/** Importancia: solo tres niveles. Más matices y nadie los usa igual. */
+const IMPORTANCIAS: { k: NotaImportancia; label: string; bg: string; fg: string }[] = [
+  { k: 'alta',  label: 'Alta',  bg: '#fdeaea', fg: '#a32d2d' },
+  { k: 'media', label: 'Media', bg: '#fdf3e2', fg: '#8a5a12' },
+  { k: 'baja',  label: 'Baja',  bg: '#eef2f6', fg: '#52606d' },
+];
+
+/** Estados. Cubren el recorrido normal y las dos formas de cerrar algo:
+ *  terminarlo o decidir que no hacía falta. */
+const ESTADOS: { k: NotaEstado; label: string; bg: string; fg: string }[] = [
+  { k: 'borrador',     label: 'Borrador',     bg: '#f1efe8', fg: '#56534a' },
+  { k: 'en-curso',     label: 'En curso',     bg: '#e6f1fb', fg: '#0c447c' },
+  { k: 'en-espera',    label: 'En espera',    bg: '#fdf3e2', fg: '#8a5a12' },
+  { k: 'en-revision',  label: 'En revisión',  bg: '#efeafd', fg: '#4c2f9e' },
+  { k: 'revisada',     label: 'Revisada',     bg: '#e1f5ee', fg: '#0f6e56' },
+  { k: 'finalizada',   label: 'Finalizada',   bg: '#dff3e4', fg: '#1a6b32' },
+  { k: 'no-requerida', label: 'No se requiere', bg: '#f1efe8', fg: '#7a776e' },
+];
+const metaImp = (k?: NotaImportancia) => IMPORTANCIAS.find(x => x.k === k);
+const metaEst = (k?: NotaEstado) => ESTADOS.find(x => x.k === k);
+
+/** Chip pequeño, el mismo para importancia y estado. */
+function Chip({ label, bg, fg, punto = false }: { label: string; bg: string; fg: string; punto?: boolean }) {
+  return (
+    <span style={{ fontSize: 9, padding: '1px 6px', borderRadius: 10, background: bg, color: fg, fontWeight: 600,
+                   display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+      {punto && <span style={{ width: 5, height: 5, borderRadius: '50%', background: fg }}/>}
+      {label}
+    </span>
+  );
+}
+
 export default function Notas() {
   const { user } = useAuth();
   const yo = user?.id ?? '';
@@ -45,6 +77,8 @@ export default function Notas() {
   const [subiendo, setSubiendo]   = useState(0);
   const [errorImg, setErrorImg]   = useState('');
   const [avisoLocal, setAvisoLocal] = useState(false);
+  const [fImp, setFImp] = useState<NotaImportancia | ''>('');
+  const [fEst, setFEst] = useState<NotaEstado | ''>('');
   const [imgSel, setImgSel]       = useState<{ sha: string; idx: number; ancho: number; top: number; left: number } | null>(null);
   const refCuerpo = React.useRef<HTMLTextAreaElement>(null);
   const refLectura = React.useRef<HTMLDivElement>(null);
@@ -124,9 +158,12 @@ export default function Notas() {
       : cuaderno === 'todas' ? vivas
       : vivas.filter(n => n.cuadernoId === cuaderno);
     const t = q.trim().toLowerCase();
-    const filtrada = t ? base.filter(n => `${n.titulo} ${n.cuerpo} ${(n.etiquetas ?? []).join(' ')}`.toLowerCase().includes(t)) : base;
-    return [...filtrada].sort((a, b) => (b.actualizadaEn > a.actualizadaEn ? 1 : -1));
-  }, [cuaderno, q, notas, yo]);
+    const porTexto = t ? base.filter(n => `${n.titulo} ${n.cuerpo} ${(n.etiquetas ?? []).join(' ')}`.toLowerCase().includes(t)) : base;
+    const filtrada = porTexto.filter(n => (!fImp || n.importancia === fImp) && (!fEst || n.estado === fEst));
+    // Lo urgente primero, y dentro de cada nivel lo último que se tocó.
+    const peso = (n: Nota) => n.importancia === 'alta' ? 0 : n.importancia === 'media' ? 1 : n.importancia === 'baja' ? 3 : 2;
+    return [...filtrada].sort((a, b) => peso(a) - peso(b) || (b.actualizadaEn > a.actualizadaEn ? 1 : -1));
+  }, [cuaderno, q, notas, yo, fImp, fEst]);
 
   const sel = notas.find(n => n.id === selId) ?? lista[0];
 
@@ -253,6 +290,25 @@ export default function Notas() {
             style={{ flex: 1, minWidth: 0, fontSize: 12, padding: '7px 8px', border: '0.5px solid #e2e8f0', borderRadius: 8, color: '#1e293b' }}/>
         </div>
 
+        <div style={{ padding: '8px 14px', borderBottom: '0.5px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: 6 }}>
+          <select value={fImp} onChange={e => setFImp(e.target.value as NotaImportancia | '')} aria-label="Filtrar por importancia"
+            style={{ flex: 1, minWidth: 0, fontSize: 10, padding: '4px 6px', border: '0.5px solid #e2e8f0', borderRadius: 7, color: '#334155', background: metaImp(fImp || undefined)?.bg ?? '#fff' }}>
+            <option value="">Toda importancia</option>
+            {IMPORTANCIAS.map(x => <option key={x.k} value={x.k}>{x.label}</option>)}
+          </select>
+          <select value={fEst} onChange={e => setFEst(e.target.value as NotaEstado | '')} aria-label="Filtrar por estado"
+            style={{ flex: 1, minWidth: 0, fontSize: 10, padding: '4px 6px', border: '0.5px solid #e2e8f0', borderRadius: 7, color: '#334155', background: metaEst(fEst || undefined)?.bg ?? '#fff' }}>
+            <option value="">Todos los estados</option>
+            {ESTADOS.map(x => <option key={x.k} value={x.k}>{x.label}</option>)}
+          </select>
+          {(fImp || fEst) && (
+            <button onClick={() => { setFImp(''); setFEst(''); }} aria-label="Quitar los filtros"
+              style={{ border: '0.5px solid #e2e8f0', background: '#fff', borderRadius: 7, padding: '4px 6px', cursor: 'pointer', display: 'flex', color: '#64748b' }}>
+              <X size={11}/>
+            </button>
+          )}
+        </div>
+
         <div style={{ flex: 1, overflowY: 'auto' }}>
           {lista.length === 0 && (
             <p style={{ margin: 0, padding: '24px 16px', fontSize: 12, color: '#94a3b8', textAlign: 'center' }}>
@@ -283,6 +339,8 @@ export default function Notas() {
                   <span style={{ fontSize: 9, padding: '1px 6px', borderRadius: 10, background: vis.bg, color: vis.fg, fontWeight: 600 }}>
                     {n.visibilidad === 'proyecto' ? (n.projectId ?? 'proyecto') : vis.label}
                   </span>
+                  {(() => { const m = metaImp(n.importancia); return m ? <Chip label={m.label} bg={m.bg} fg={m.fg} punto/> : null; })()}
+                  {(() => { const m = metaEst(n.estado); return m ? <Chip label={m.label} bg={m.bg} fg={m.fg}/> : null; })()}
                   {n.ownerId !== yo && <span style={{ fontSize: 9, color: '#94a3b8' }}>de {n.ownerNombre.split(' ')[0]}</span>}
                 </div>
               </button>
@@ -338,6 +396,22 @@ export default function Notas() {
                           {proyectos.map(p => <option key={p.id} value={p.id}>{p.id}</option>)}
                         </select>
                       )}
+                    </>
+                  )}
+                  {puedeEditar && (
+                    <>
+                      <select value={sel.importancia ?? ''} aria-label="Importancia de la nota"
+                        onChange={e => actualizar(sel.id, { importancia: (e.target.value || undefined) as NotaImportancia | undefined })}
+                        style={{ fontSize: 10, padding: '3px 7px', border: '0.5px solid #e2e8f0', borderRadius: 20, color: '#334155', background: metaImp(sel.importancia)?.bg ?? '#fff' }}>
+                        <option value="">importancia</option>
+                        {IMPORTANCIAS.map(x => <option key={x.k} value={x.k}>{x.label}</option>)}
+                      </select>
+                      <select value={sel.estado ?? ''} aria-label="Estado de la nota"
+                        onChange={e => actualizar(sel.id, { estado: (e.target.value || undefined) as NotaEstado | undefined })}
+                        style={{ fontSize: 10, padding: '3px 7px', border: '0.5px solid #e2e8f0', borderRadius: 20, color: '#334155', background: metaEst(sel.estado)?.bg ?? '#fff' }}>
+                        <option value="">sin estado</option>
+                        {ESTADOS.map(x => <option key={x.k} value={x.k}>{x.label}</option>)}
+                      </select>
                     </>
                   )}
                 </div>

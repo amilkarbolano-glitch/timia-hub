@@ -15,7 +15,33 @@ const fmtD = (d: Date | null) => d ? `${d.getDate()} ${['ene','feb','mar','abr',
 interface ProjectRow {
   p: AdminProject; plans: PlanSummary[]; real: number; exp: number; dif: number; nActs: number; done: number; late: number;
   openBloq: number; openAlert: number; team: AdminUser[]; pm?: AdminUser; leads: AdminUser[]; tasksOpen: number; tasksDone: number;
-  start: Date | null; end: Date | null; risk: number; riskWhy: string[];
+  start: Date | null; end: Date | null; risk: number; riskWhy: string[]; ultima: string | null;
+}
+
+/** Última vez que alguien movió algo del proyecto: % de actividad o etapa marcada.
+ *  Sale de los dos historiales, que son append-only, así que es fiable sin
+ *  guardar un campo nuevo en ninguna parte. */
+function ultimasActualizaciones(): Map<string, string> {
+  const m = new Map<string, string>();
+  const poner = (pid: string, iso?: string) => {
+    if (!pid || !iso) return;
+    const previo = m.get(pid);
+    if (!previo || iso > previo) m.set(pid, iso);
+  };
+  adminStore.getPctHistorial().forEach(c => poner(String(c.planKey ?? '').split('::')[0], c.en));
+  adminStore.getHistorial().forEach(h => poner(h.projectId, h.timestamp));
+  return m;
+}
+
+/** "Actualizado ayer · 23 nov, 16:40", con color según lo rancio que esté. */
+function textoActualizado(iso: string | null): { txt: string; color: string } {
+  if (!iso) return { txt: 'Sin movimientos registrados', color: '#94a3b8' };
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return { txt: 'Sin movimientos registrados', color: '#94a3b8' };
+  const dias = Math.floor((Date.now() - d.getTime()) / 86400000);
+  const cuando = dias <= 0 ? 'hoy' : dias === 1 ? 'ayer' : `hace ${dias} días`;
+  const fecha = `${d.getDate()} ${['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'][d.getMonth()]}, ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+  return { txt: `Actualizado ${cuando} · ${fecha}`, color: dias <= 3 ? '#047857' : dias <= 10 ? '#b45309' : '#b91c1c' };
 }
 
 function useDashboardData() {
@@ -27,6 +53,7 @@ function useDashboardData() {
     const summaries = getPlanSummaries();
     const issues = adminStore.getPlanIssues().filter(i => !i.endDate);
     const tasks = adminStore.getKanbanTasks();
+    const ultimas = ultimasActualizaciones();
     const rows: ProjectRow[] = projects.map(p => {
       const plans = summaries.filter(s => s.projectId === p.id);
       const nActs = plans.reduce((s, x) => s + x.nActs, 0);
@@ -49,7 +76,7 @@ function useDashboardData() {
       const lost = plans.reduce((s, x) => s + x.blockDays + x.changeDays, 0); if (lost) { risk += Math.min(15, lost); why.push(`+${lost} d hábiles por bloqueos/cambios`); }
       if (!plans.length) { risk += 10; why.push('Sin plan de trabajo generado'); }
       return { p, plans, real, exp, dif, nActs, done, late, openBloq, openAlert, team, pm, leads, tasksOpen: pt.filter(t => t.status !== 'done').length, tasksDone: pt.filter(t => t.status === 'done').length,
-        start: starts.length ? new Date(Math.min(...starts.map(d => d.getTime()))) : null, end: ends.length ? new Date(Math.max(...ends.map(d => d.getTime()))) : null, risk: Math.min(100, risk), riskWhy: why };
+        start: starts.length ? new Date(Math.min(...starts.map(d => d.getTime()))) : null, end: ends.length ? new Date(Math.max(...ends.map(d => d.getTime()))) : null, risk: Math.min(100, risk), riskWhy: why, ultima: ultimas.get(p.id) ?? null };
     });
     return { rows, users, issues, summaries };
   }, [user]);
@@ -95,7 +122,13 @@ function ProjectCard({ r, onOpen }: { r: ProjectRow; onOpen?: () => void }) {
         <div style={{ marginLeft: 'auto', display: 'flex', paddingLeft: 6 }}>{r.team.slice(0, 6).map(u => <Avatar key={u.id} u={u} />)}{r.team.length > 6 && <span style={{ fontSize: 9, marginLeft: 4 }}>+{r.team.length - 6}</span>}</div>
       </div>
       {r.riskWhy.length > 0 && <div style={{ marginTop: 6, fontSize: 9, color: riskColor(r.risk) }}>{r.riskWhy.join(' · ')}</div>}
-      {onOpen && <button onClick={e => { e.stopPropagation(); onOpen(); }} style={{ marginTop: 8, fontSize: 10, padding: '4px 10px', background: '#fff', border: `0.5px solid ${r.p.color}60`, color: r.p.color, borderRadius: 8, cursor: 'pointer', fontWeight: 600 }}>Abrir plan de trabajo</button>}
+      <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        {onOpen && <button onClick={e => { e.stopPropagation(); onOpen(); }} style={{ fontSize: 10, padding: '4px 10px', background: '#fff', border: `0.5px solid ${r.p.color}60`, color: r.p.color, borderRadius: 8, cursor: 'pointer', fontWeight: 600 }}>Abrir plan de trabajo</button>}
+        {(() => { const u = textoActualizado(r.ultima); return (
+          <span title="Último movimiento de % o de etapas en este proyecto" style={{ fontSize: 10, color: u.color, display: 'flex', alignItems: 'center', gap: 4 }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: u.color, flexShrink: 0 }}/>{u.txt}
+          </span>); })()}
+      </div>
     </div>
   );
 }

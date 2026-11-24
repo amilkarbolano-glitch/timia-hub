@@ -289,6 +289,9 @@ export interface PasoPlan {
   hechoEn?: string;                // ISO yyyy-mm-dd — sin esto, sigue pendiente
   hechoPor?: string;
   notaCierre?: string;
+  /** Opcional: de quién depende. Mismo formato que los hilos, para no inventar
+   *  dos maneras de decir lo mismo — gente de Timia de la lista, BBVA a mano. */
+  responsable?: MailResponsable;
   creadoPor: string;
   creadoEn: string;                // ISO timestamp
 }
@@ -368,11 +371,21 @@ export interface Cuaderno {
  * sea privacidad de verdad hace falta un endpoint propio que filtre por
  * usuario en el servidor.
  */
+/** Qué tan urgente es la nota. Sin marcar es lo normal: no obliga a clasificar
+ *  cada apunte suelto, y así "alta" significa algo cuando aparece. */
+export type NotaImportancia = 'alta' | 'media' | 'baja';
+
+/** En qué punto está lo que cuenta la nota. 'no-requerida' es el caso de algo
+ *  que se evaluó y se decidió no hacer: cerrarlo sin borrarlo deja el rastro. */
+export type NotaEstado = 'borrador' | 'en-curso' | 'en-espera' | 'en-revision' | 'revisada' | 'finalizada' | 'no-requerida';
+
 export interface Nota {
   id: string;
   titulo: string;
   cuerpo: string;
   cuadernoId?: string;
+  importancia?: NotaImportancia;
+  estado?: NotaEstado;
   etiquetas?: string[];
   visibilidad: 'privada' | 'equipo' | 'proyecto';
   /** Solo si visibilidad es 'proyecto'. */
