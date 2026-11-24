@@ -38,6 +38,37 @@ function enLineas(ctx: CanvasRenderingContext2D, texto: string, ancho: number, m
   return out;
 }
 
+const ROMANOS = ['I','II','III','IV','V','VI','VII','VIII','IX','X','XI','XII'];
+/** Siglas que no deben pasar a minúscula al normalizar un nombre en mayúsculas. */
+const SIGLAS = new Set(['ADA','BBVA','ETL','DT','MSD','QA','ACL','ACLS','FX','SDA','L1T','MVP','API','RE','BD']);
+/** Nombres propios que van con inicial, no en minúscula ni en mayúsculas. */
+const PROPIOS: Record<string, string> = {
+  dynamic: 'Dynamic', nebula: 'Nebula', hammurabi: 'Hammurabi', datax: 'DataX',
+  github: 'Github', taxonomy: 'Taxonomy', colcox: 'COLCOX', tesoreria: 'Tesorería',
+  'tesorería': 'Tesorería', 'control-m': 'Control-M', dataproc: 'Dataproc', tantia: 'Tantia',
+};
+
+/**
+ * El nombre del entregable como va en el status: numeral romano y caja de
+ * frase. En la base están escritos de cualquier manera —unos en mayúsculas,
+ * otros no— y en la misma tabla eso canta. Lo que no puede arreglar es un
+ * acento que nunca se escribió: "VALIDACION" se queda sin tilde.
+ */
+export function nombreEntregable(etiqueta: string, i: number): string {
+  let t = etiqueta.trim().replace(/^[IVXLC]+\s*[.)-]\s*/i, '');
+  if (t && t === t.toUpperCase()) {
+    t = t.toLowerCase().split(/\s+/)
+      .map(w => {
+        const limpio = w.replace(/[^a-záéíóúñ-]/gi, '').toLowerCase();
+        if (SIGLAS.has(limpio.toUpperCase())) return w.toUpperCase();
+        return PROPIOS[limpio] ? w.replace(new RegExp(limpio, 'i'), PROPIOS[limpio]) : w;
+      })
+      .join(' ');
+    t = t.charAt(0).toUpperCase() + t.slice(1);
+  }
+  return `${ROMANOS[i] ?? String(i + 1)}. ${t}`;
+}
+
 export interface DatosCorreo {
   projectId: string;
   /** Los del plan: si el proyecto no tiene guardados los suyos, mandan estos. */
@@ -348,7 +379,7 @@ export default function GenerarCorreo({ datos, onClose }: { datos: DatosCorreo; 
     // La plantilla tiene siete filas fijas. Si el plan trae menos, las que
     // sobran quedan en blanco en vez de con el texto de la semana pasada.
     for (let i = 0; i < 7; i++) {
-      v[`E${i + 1}`] = fases[i]?.label ?? '';
+      v[`E${i + 1}`] = fases[i] ? nombreEntregable(fases[i].label, i) : '';
       v[`P${i + 1}`] = fases[i] ? un(fases[i].pct) : '';
     }
     return v;

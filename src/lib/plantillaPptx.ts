@@ -159,13 +159,16 @@ export function ajustarFilas(xml: string, cuantos: number): string {
   const n = Math.max(1, cuantos);
   const altoFila = Math.floor(altoTotal / n);
 
-  // Con más filas de las que trae la plantilla, el alto de cada una baja. Si la
-  // letra no baja con él, el nombre del entregable pasa a dos líneas, la fila
-  // crece y la tabla empuja a la de responsables. Así que se encoge con ella.
+  // El tamaño se fija SIEMPRE, no solo cuando sobran filas. La plantilla las
+  // trae todas a 16 pt, pero PowerPoint encoge solo las celdas cuyo nombre es
+  // largo, así que unas filas salían grandes y otras pequeñas en la misma
+  // tabla. Y si hay más filas de las que trae la plantilla, el tamaño baja con
+  // ellas: si no, el nombre pasa a dos líneas, la fila crece y la tabla acaba
+  // empujando a la de responsables.
   const szBase = 1200;
   const sz = idx.length && n > idx.length
     ? Math.max(800, Math.round((szBase * idx.length) / n / 50) * 50)
-    : 0;
+    : szBase;
   const nuevas: string[] = [];
   for (let k = 1; k <= n; k++) {
     const base = k <= idx.length ? filas[idx[k - 1]] : patron;
