@@ -113,14 +113,25 @@ export function ajustarFilas(xml: string, cuantos: number): string {
   const n = Math.max(1, cuantos);
   const altoFila = Math.floor(altoTotal / n);
 
+  // Con más filas de las que trae la plantilla, el alto de cada una baja. Si la
+  // letra no baja con él, el nombre del entregable pasa a dos líneas, la fila
+  // crece y la tabla empuja a la de responsables. Así que se encoge con ella.
+  const szBase = 1200;
+  const sz = idx.length && n > idx.length
+    ? Math.max(800, Math.round((szBase * idx.length) / n / 50) * 50)
+    : 0;
   const nuevas: string[] = [];
   for (let k = 1; k <= n; k++) {
     const base = k <= idx.length ? filas[idx[k - 1]] : patron;
-    nuevas.push(
-      base.replace(/\{\{E\d+\}\}/g, `{{E${k}}}`)
-          .replace(/\{\{P\d+\}\}/g, `{{P${k}}}`)
-          .replace(/(<a:tr\b[^>]*\bh=")\d+(")/, `$1${altoFila}$2`),
-    );
+    let fila = base.replace(/\{\{E\d+\}\}/g, `{{E${k}}}`)
+                   .replace(/\{\{P\d+\}\}/g, `{{P${k}}}`)
+                   .replace(/(<a:tr\b[^>]*\bh=")\d+(")/, `$1${altoFila}$2`);
+    if (sz) {
+      fila = /sz="\d+"/.test(fila)
+        ? fila.replace(/sz="\d+"/g, `sz="${sz}"`)
+        : fila.replace(/<a:rPr\b/g, `<a:rPr sz="${sz}"`);
+    }
+    nuevas.push(fila);
   }
 
   const antes = filas.slice(0, idx[0]);
@@ -160,6 +171,65 @@ export function ajustarTamano(xml: string, clave: string, texto: string, baseP =
   });
 }
 
+const PULGADA = 914400;
+const emu = (pulgadas: number) => Math.round(pulgadas * PULGADA);
+const aPulgadas = (v: string) => parseInt(v, 10) / PULGADA;
+
+/** Cambia la posición y el alto de una forma dentro de su XML. */
+function situar(bloque: string, y: number, alto?: number): string {
+  let out = bloque.replace(/(<a:off\b[^>]*\by=")\d+(")/, `$1${emu(y)}$2`);
+  if (alto !== undefined) out = out.replace(/(<a:ext\b[^>]*\bcy=")\d+(")/, `$1${emu(alto)}$2`);
+  return out;
+}
+const yDe = (bloque: string) => {
+  const m = /<a:off\b[^>]*\by="(\d+)"/.exec(bloque);
+  return m ? aPulgadas(m[1]) : NaN;
+};
+
+/** Cuántas líneas ocupa un texto a un ancho dado. */
+const lineasDe = (texto: string, porLinea: number) =>
+  texto.split('\n').reduce((s, l) => s + Math.max(1, Math.ceil(l.length / porLinea)), 0);
+
+/**
+ * Recoloca la columna de alertas y bloqueantes.
+ *
+ * En la plantilla las cajas están mal de origen: el cuerpo de alertas empieza
+ * 0,33" por encima de donde acaba su título —de ahí que el texto saliera pegado
+ * a la palabra "Alertas"— y el de bloqueantes termina en 9,02" sobre una lámina
+ * de 7,5". Aquí se reparte la altura disponible entre los dos cuerpos según lo
+ * que tenga cada uno, y el título y el icono de bloqueantes bajan con ellos.
+ */
+export function acomodarResumen(xml: string, textoAlertas: string, textoBloq: string): string {
+  const ARRIBA = 2.46, ABAJO = 7.20, HUECO = 0.18, ALTO_TIT = 0.51, TRAS_TIT = 0.06, MINIMO = 1.0;
+  const disponible = ABAJO - ARRIBA - HUECO - ALTO_TIT - TRAS_TIT;
+  const la = lineasDe(textoAlertas, 65), lb = lineasDe(textoBloq, 65);
+  let altoA = Math.round((disponible * la / Math.max(1, la + lb)) * 100) / 100;
+  altoA = Math.min(Math.max(altoA, MINIMO), disponible - MINIMO);
+  const altoB = Math.round((disponible - altoA) * 100) / 100;
+  const yTitB = ARRIBA + altoA + HUECO;
+  const yCuerpoB = yTitB + ALTO_TIT + TRAS_TIT;
+
+  const formas = xml.match(/<p:sp>[\s\S]*?<\/p:sp>|<p:pic>[\s\S]*?<\/p:pic>/g);
+  if (!formas) return xml;
+  const tituloB = formas.find(f => /<a:t>Bloqueantes<\/a:t>/.test(f));
+  const yTitBviejo = tituloB ? yDe(tituloB) : NaN;
+
+  let i = 0;
+  return xml.replace(/<p:sp>[\s\S]*?<\/p:sp>|<p:pic>[\s\S]*?<\/p:pic>/g, f => {
+    i++;
+    if (/\{\{ALERTAS\}\}/.test(f)) return situar(f, ARRIBA, altoA);
+    if (/\{\{BLOQUEANTES\}\}/.test(f)) return situar(f, yCuerpoB, altoB);
+    if (/<a:t>Bloqueantes<\/a:t>/.test(f)) return situar(f, yTitB, ALTO_TIT);
+    // El icono de bloqueantes viaja con su título: es el dibujo que está a su
+    // altura, y si se queda quieto acaba suelto en mitad del texto.
+    if (/^<p:pic>/.test(f) && !isNaN(yTitBviejo)) {
+      const y = yDe(f);
+      if (!isNaN(y) && Math.abs(y - yTitBviejo) < 0.35) return situar(f, y + (yTitB - yTitBviejo));
+    }
+    return f;
+  });
+}
+
 export interface ResultadoRelleno {
   blob: Blob;
   reemplazos: number;
@@ -182,6 +252,9 @@ export async function rellenarPlantilla(plantilla: ArrayBuffer, valores: Record<
     const original = await zip.file(ruta)!.async('string');
     let xml = original;
     if (entregables !== undefined && /\{\{E1\}\}/.test(xml)) xml = ajustarFilas(xml, entregables);
+    if (xml.includes('{{ALERTAS}}') && xml.includes('{{BLOQUEANTES}}')) {
+      xml = acomodarResumen(xml, valores.ALERTAS ?? '', valores.BLOQUEANTES ?? '');
+    }
     for (const [k, v] of Object.entries(valores)) {
       if (!xml.includes(`{{${k}}}`)) continue;
       if (k === 'ALERTAS' || k === 'BLOQUEANTES') xml = ajustarTamano(xml, k, v);
