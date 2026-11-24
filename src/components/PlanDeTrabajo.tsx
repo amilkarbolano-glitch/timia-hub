@@ -324,7 +324,7 @@ function GanttRow({ act, effectivePct, idx, expanded, onToggle, isSubtask = fals
               style={{ fontSize: 9, padding: '1px 3px', border: '1.5px solid #16a34a', borderRadius: 5,
                        outline: 'none', flexShrink: 0, colorScheme: 'light' }}/>
           ) : (
-            <span onClick={onDoneDateChange ? (e => { e.stopPropagation(); setEditandoFecha(true); }) : undefined}
+            <span data-report-hide onClick={onDoneDateChange ? (e => { e.stopPropagation(); setEditandoFecha(true); }) : undefined}
               title={onDoneDateChange ? 'Clic para corregir la fecha de finalizada' : undefined}
               style={{ fontSize: 9, color: '#15803d', fontWeight: 500, flexShrink: 0, whiteSpace: 'nowrap',
                        cursor: onDoneDateChange ? 'pointer' : 'default', borderRadius: 4,
@@ -366,7 +366,7 @@ function GanttRow({ act, effectivePct, idx, expanded, onToggle, isSubtask = fals
             outline: onPctChange && !isSubtask ? `1.5px dashed ${pctManual ? '#b4530950' : '#0d948850'}` : 'none' }}
             title={pctManual ? 'Avance puesto a mano. Déjalo vacío para volver al que calculan las subtareas.'
                              : (hasEtapas ? 'Lo calculan las subtareas. Clic para fijarlo a mano.' : 'Clic para editar')}>
-            {effectivePct}%{pctManual && <b style={{ marginLeft: 3, fontSize: 8, color: '#b45309' }}>·m</b>}
+            {effectivePct}%{pctManual && <b data-report-hide style={{ marginLeft: 3, fontSize: 8, color: '#b45309' }}>·m</b>}
           </span>
         )}
       </td>
@@ -2572,13 +2572,19 @@ function kpisDelPlan(
 async function exportPlanPPTX(plan: WorkPlan, getActivityPct: (eid: string, ai: number, a: PlanActivity) => number, screenshots: string[] = [], issues: PlanIssue[] = [], changes: BitacoraEntry[] = []) {
   const pptxgen = (await import('pptxgenjs')).default;
   const pptx = new pptxgen();
-  pptx.layout = 'LAYOUT_WIDE';
+  // Todo el contenido está maquetado sobre 10 pulgadas de ancho, pero la lámina
+  // se declaraba de 13,33: sobraba un tercio de diapositiva a la derecha. Con
+  // una lámina propia de 10 × 5,625 el contenido llena la hoja y además queda
+  // en 16:9, que es el formato de la plantilla y del PDF que manda Juan.
+  pptx.defineLayout({ name: 'TIMIA_16_9', width: 10, height: 5.625 });
+  pptx.layout = 'TIMIA_16_9';
   pptx.title = `Plan de Trabajo · ${planLabel(plan)}`;
 
   // ── Paleta ───────────────────────────────────────────────────────────────────
   const BG_DARK  = '0F172A';                   // portada y última slide
   const WHITE    = 'FFFFFF';
-  const TBL_HDR  = '881337';                   // header row de la tabla (maroon)
+  const VINO_TIMIA = '9A003D';                 // muestreado de la barra bajo la A del logo
+  const TBL_HDR  = VINO_TIMIA;                 // header row de la tabla, con el vino de la marca
   const ROW_ODD  = 'FFFFFF';
   const ROW_EVEN = 'F8FAFC';
   const ROW_BORD = 'E2E8F0';
@@ -2597,6 +2603,20 @@ async function exportPlanPPTX(plan: WorkPlan, getActivityPct: (eid: string, ai: 
   const CARD     = '1E293B';
   const BORDER_D = '334155';
   const ENT_COLORS = [RED,'0D9488','7C3AED','0891B2','BE185D'];
+
+  // ── Plantilla ────────────────────────────────────────────────────────────
+  // El logo y la marca de agua salen del PPTX de seguimiento de TIMIA, así que
+  // la baraja no imita el formato del banco: lleva el formato.
+  const _raiz = (() => { const b = import.meta.env.BASE_URL ?? '/'; return b.endsWith('/') ? b : `${b}/`; })();
+  const LOGO = `${_raiz}plantilla/timia-logo.png`;
+  const MARCA = `${_raiz}plantilla/timia-marca.png`;
+  const RATIO_LOGO = 2048 / 326;
+
+  /** Marca de agua y logo de las láminas de contenido. */
+  const vestir = (sl: any, claro = true) => {
+    sl.addImage({ path: MARCA, x: 7.05, y: 1.95, w: 3.1, h: 2.99, transparency: claro ? 93 : 88 });
+    sl.addImage({ path: LOGO, x: 0.18, y: 0.14, w: 1.15, h: 1.15 / RATIO_LOGO });
+  };
 
   // ── Semanas — dinámico basado en startDate del plan ──────────────────────
   const _holidays = new Set(adminStore.getHolidays().map(h => h.date));
@@ -2627,9 +2647,12 @@ async function exportPlanPPTX(plan: WorkPlan, getActivityPct: (eid: string, ai: 
   const dif = kpis.dif;
 
   // ══ SLIDE 1: Portada ═════════════════════════════════════════════════════════
-  const s1=pptx.addSlide(); s1.background={color:BG_DARK};
-  s1.addShape('rect'as any,{x:0,y:0,w:0.07,h:5.63,fill:{color:RED}});
-  s1.addText('TIMIA',{x:0.4,y:0.28,w:3,fontSize:12,bold:true,color:RED,align:'left'});
+  const s1=pptx.addSlide(); s1.background={color:'000000'};
+  s1.addImage({ path: MARCA, x: 5.6, y: 0.55, w: 4.3, h: 4.15, transparency: 86 });
+  s1.addImage({ path: LOGO, x: 0.4, y: 0.4, w: 2.1, h: 2.1 / RATIO_LOGO });
+  s1.addShape('rect'as any,{x:0,y:5.17,w:10,h:0.46,fill:{color:VINO_TIMIA}});
+  s1.addText(today,{x:0.4,y:5.24,w:9.2,fontSize:11,color:WHITE,align:'right'});
+  s1.addText('Seguimiento',{x:0.4,y:2.2,w:6,fontSize:34,bold:true,color:WHITE,align:'left'});
   s1.addText('Plan de Trabajo',{x:0.4,y:1.05,w:9,fontSize:22,bold:false,color:GRAY,align:'left'});
   s1.addText(`Proyecto ${planLabel(plan)}`,{x:0.4,y:1.55,w:9,fontSize:50,bold:true,color:WHITE,align:'left'});
   s1.addText(today,{x:0.4,y:2.85,w:9,fontSize:12,color:GRAY,align:'left'});
@@ -2653,7 +2676,7 @@ async function exportPlanPPTX(plan: WorkPlan, getActivityPct: (eid: string, ai: 
 
     // ── Si hay screenshot de DOM, usar slide de imagen (más fiel a la app) ──
     if (screenshots[ei]) {
-      const sl=pptx.addSlide(); sl.background={color:WHITE};
+      const sl=pptx.addSlide(); sl.background={color:WHITE}; vestir(sl);
       sl.addText(ent.name,{x:LM,y:0.07,w:7,fontSize:13,bold:true,color:DARK,align:'left'});
       // KPI badges
       const badges=[
@@ -2846,9 +2869,10 @@ async function exportPlanPPTX(plan: WorkPlan, getActivityPct: (eid: string, ai: 
   ].forEach(sec=>{
     sL.addShape('rect'as any,{x:sec.x,y:0.88,w:2.9,h:4.3,fill:{color:CARD},line:{color:BORDER_D,width:0.5}});
     sL.addText(sec.title,{x:sec.x+0.1,y:0.98,w:2.7,fontSize:9.5,bold:true,color:sec.col});
-    sec.items.forEach((item,ii)=>sL.addText(`• ${item}`,{x:sec.x+0.1,y:1.5+ii*0.42,w:2.7,fontSize:9,color:'F1F5F9',wrap:true}));
+    // Numeradas: en la reunión se dice "el bloqueante 2", y sin número no hay
+    // forma de saber a cuál se refieren ni de casarlo con el Gantt.
+    sec.items.forEach((item,ii)=>sL.addText(`${ii+1}. ${item}`,{x:sec.x+0.1,y:1.5+ii*0.42,w:2.7,fontSize:9,color:'F1F5F9',wrap:true}));
   });
-  sL.addText('Generado por Timia Hub',{x:0.4,y:5.1,w:9,fontSize:8,color:MUT,align:'center'});
 
   await pptx.writeFile({fileName:`Plan_${plan.planKey.replace('::','_')}_${new Date().toISOString().slice(0,10)}.pptx`});
 }
@@ -3261,6 +3285,13 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
         try {
           // Temporarily expand overflow so the full Gantt is visible
           const saved: { el: HTMLElement; prop: string; val: string }[] = [];
+          // Lo que la pantalla muestra y el reporte no debe llevar: la marca de
+          // % manual y las etiquetas de fecha de finalizada. Se ocultan solo
+          // durante la captura y se devuelven después, así la vista no cambia.
+          el.querySelectorAll<HTMLElement>('[data-report-hide]').forEach(e => {
+            saved.push({ el: e, prop: 'display', val: e.style.display ?? '' });
+            e.style.display = 'none';
+          });
           const expand = (e: HTMLElement, prop: string) => {
             saved.push({ el: e, prop, val: (e.style as Record<string,string>)[prop] ?? '' });
             (e.style as Record<string,string>)[prop] = 'visible';
