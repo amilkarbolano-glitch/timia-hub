@@ -2,12 +2,13 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   AlertTriangle, CheckCircle, Clock, ChevronRight, ChevronDown,
   FileDown, X, Users, Check, LayoutList, Search, ExternalLink,
-  Plus, Trash2, Printer, Pencil,
+  Plus, Trash2, Printer, Pencil, Mail,
 } from 'lucide-react';
 import { PROJECTS, useAuth, canAccess, canInProject } from '../contexts/AuthContext';
 import { FlowStepper } from './SetupProject';
 import ImpactPicker, { ImpactChips, impactLabel, type PlanOutline } from './ImpactPicker';
 import { HiloBadge, HiloPanel, HiloForm, hilosDeActividad, ResponsableInput, ResponsableChip, usuariosDeProyecto } from './HilosCorreo';
+import GenerarCorreo from './GenerarCorreo';
 import { persistSet } from '../lib/persist';
 import { snapToBusinessDay, addBusinessDays, computeBusinessWeekIdx, dateToBusinessWeekIdx, businessDaysBetween, diaHabilDeSemana } from '../lib/businessDays';
 import { sincronizarAsignados, reconciliarTablero, type MetaActividad } from '../lib/planTablero';
@@ -1498,6 +1499,7 @@ function PlanDetail({ plan, getActivityPct: getActivityPctHoy, setActivityPct, e
    * reporta cifras de otro día sin enterarse.
    */
   const [fechaCorte, setFechaCorte] = useState<string>('');
+  const [correoAbierto, setCorreoAbierto] = useState(false);
   const corte = fechaCorte ? new Date(fechaCorte + 'T12:00:00') : undefined;
   const simulando = !!corte && !isNaN(corte.getTime());
 
@@ -1632,6 +1634,13 @@ function PlanDetail({ plan, getActivityPct: getActivityPctHoy, setActivityPct, e
                        border:'0.5px solid #ddd6fe', background:'#f5f3ff', color:'#6d28d9',
                        borderRadius:7, cursor:'pointer' }}>Volver a hoy</button>
           )}
+          <button onClick={() => setCorreoAbierto(true)} data-print-hide
+            title="Arma la imagen de resumen y el texto de alertas y bloqueantes para el correo semanal, con este mismo corte"
+            style={{ alignSelf:'flex-end', display:'flex', alignItems:'center', gap:5, padding:'5px 10px', fontSize:10.5,
+                     fontWeight:600, border:'0.5px solid #e2e8f0', background:'#fff', color:'#475569',
+                     borderRadius:7, cursor:'pointer' }}>
+            <Mail size={11}/> Generar correo
+          </button>
           {[
             { label: mirandoAtras ? `REAL AL ${fmtShort(fechaCorte).toUpperCase()}` : 'AVANCE REAL',
               val:`${overallReal}%`, bg: mirandoAtras ? '#0f766e' : '#374151', c:'#fff', sc: mirandoAtras ? '#99f6e4' : '#9ca3af' },
@@ -1825,6 +1834,21 @@ function PlanDetail({ plan, getActivityPct: getActivityPctHoy, setActivityPct, e
       })()}
 
       <LeyendaPlan/>
+
+      {correoAbierto && (
+        <GenerarCorreo onClose={() => setCorreoAbierto(false)}
+          datos={{
+            projectId: plan.projectId,
+            respBBVA: plan.respBBVA,
+            respTimia: plan.respTimia,
+            fechaCorte: fechaCorte || new Date().toISOString().slice(0, 10),
+            real: overallReal,
+            esperado: overallExpBase,
+            fases: fasesAvance,
+            pesoModo,
+            issues,
+          }}/>
+      )}
     </div>
   );
 }

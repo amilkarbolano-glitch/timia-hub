@@ -44,6 +44,12 @@ export interface AdminProject {
   id: string; name: string; area: string; color: string;
   priority: Priority; client: string; startDate: string; active: boolean;
   sda?: string;  // Código SDA — solo clientes BBVA Colombia / BBVA Argentina
+  /** Asunto del correo donde se acordó el alcance; se cita en el status semanal. */
+  asuntoAlcance?: string;
+  /** Los dos nombres que firman el status. Van aquí y no salen del equipo
+   *  porque son fijos por proyecto y el equipo cambia. */
+  respBBVA?: string;
+  respTimia?: string;
 }
 
 export interface AdminUser {
