@@ -64,22 +64,23 @@ function paraXml(v: string): string {
 }
 
 /**
- * Reemplaza un marcador por un texto de varias líneas.
+ * Reemplaza un marcador por un texto de varias líneas, clonando el párrafo.
  *
- * No vale meter <a:br/> dentro del <a:t>: un run admite un solo <a:t> y el
- * archivo queda inválido — el texto se perdía a partir del primer salto. Hay
- * que partir en varios runs con el mismo formato y un <a:br/> entre ellos.
+ * El primer intento metía <a:br/> dentro del <a:t>, que además de ser XML
+ * inválido —un run admite un solo <a:t>— dejaba todo en un párrafo: se perdía
+ * el espaciado de la plantilla y las líneas quedaban pegadas unas a otras.
+ * Clonando el <a:p> entero cada línea conserva sangría, viñeta y separación,
+ * y las líneas en blanco del texto se vuelven párrafos vacíos, que es justo lo
+ * que separaba las alertas en el original.
  */
-export function ponerMultilinea(xml: string, clave: string, texto: string): string {
-  const re = new RegExp(`<a:r>(?:(?!</a:r>)[\\s\\S])*?\\{\\{${clave}\\}\\}(?:(?!</a:r>)[\\s\\S])*?</a:r>`);
-  return xml.replace(re, run => {
-    const rPr = /<a:rPr\b[^>]*\/>|<a:rPr\b[\s\S]*?<\/a:rPr>/.exec(run)?.[0] ?? '';
-    return texto.split(/\r?\n/)
-      .map(l => `<a:r>${rPr}<a:t>${paraXml(l)}</a:t></a:r>`)
-      .join('<a:br/>');
-  });
+export function ponerParrafos(xml: string, clave: string, texto: string): string {
+  const re = new RegExp(`<a:p>(?:(?!</a:p>)[\\s\\S])*?\\{\\{${clave}\\}\\}(?:(?!</a:p>)[\\s\\S])*?</a:p>`);
+  const marcador = new RegExp(`\\{\\{${clave}\\}\\}`, 'g');
+  return xml.replace(re, par => texto.split(/\r?\n/).map(linea => {
+    const limpio = par.replace(/<a:t>(?:(?!<\/a:t>)[\s\S])*?<\/a:t>/, `<a:t>${paraXml(linea)}</a:t>`);
+    return limpio.replace(marcador, '');
+  }).join(''));
 }
-
 
 /** Alto total de las filas de entregable, para repartirlo entre las que haya. */
 const altoDe = (tr: string): number => {
@@ -178,12 +179,13 @@ export async function rellenarPlantilla(plantilla: ArrayBuffer, valores: Record<
   const vistos = new Set<string>();
   let reemplazos = 0;
   for (const ruta of laminas) {
-    let xml = await zip.file(ruta)!.async('string');
+    const original = await zip.file(ruta)!.async('string');
+    let xml = original;
     if (entregables !== undefined && /\{\{E1\}\}/.test(xml)) xml = ajustarFilas(xml, entregables);
     for (const [k, v] of Object.entries(valores)) {
       if (!xml.includes(`{{${k}}}`)) continue;
       if (k === 'ALERTAS' || k === 'BLOQUEANTES') xml = ajustarTamano(xml, k, v);
-      if (/\r?\n/.test(v)) { xml = ponerMultilinea(xml, k, v); vistos.add(k); reemplazos++; }
+      if (/\r?\n/.test(v)) { xml = ponerParrafos(xml, k, v); vistos.add(k); reemplazos++; }
     }
     const nuevo = xml.replace(/\{\{([A-Z_0-9]+)\}\}/g, (coincide, clave: string) => {
       vistos.add(clave);
@@ -192,7 +194,10 @@ export async function rellenarPlantilla(plantilla: ArrayBuffer, valores: Record<
       reemplazos++;
       return paraXml(v);
     });
-    if (nuevo !== xml) zip.file(ruta, nuevo);
+    // Contra el original, no contra el paso anterior: una lámina cuyo único
+    // marcador se resolvió en el paso de párrafos no cambiaba aquí y se
+    // guardaba sin tocar — así se quedó el título de la portadilla sin poner.
+    if (nuevo !== original) zip.file(ruta, nuevo);
   }
   if (!vistos.size) {
     throw new Error('La plantilla no tiene marcadores {{…}}. Sube la que te pasé con los marcadores puestos.');

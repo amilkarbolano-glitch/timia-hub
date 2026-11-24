@@ -312,7 +312,9 @@ export default function GenerarCorreo({ datos, onClose }: { datos: DatosCorreo; 
     const d = new Date(datos.fechaCorte + 'T12:00:00');
     const v: Record<string, string> = {
       FECHA: `${d.getDate()} ${MES[d.getMonth()]} ${d.getFullYear()}`,
-      TITULO: titulo,
+      // En la portadilla el título va en dos líneas, como en la plantilla: el
+      // código arriba y el nombre debajo. En una sola se salía de la caja.
+      TITULO: sda.trim() ? `${sda.trim()} -\n${proyecto?.name ?? datos.projectId}` : (proyecto?.name ?? datos.projectId),
       REAL: un(datos.real), ESP: un(datos.esperado),
       DIF: `${dif >= 0 ? '+' : '-'}${Math.abs(dif).toFixed(1)}%`,
       RESP_BBVA: respBBVA || '—', RESP_TIMIA: respTimia || '—',
