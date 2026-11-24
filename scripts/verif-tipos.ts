@@ -17,8 +17,8 @@ const HEREDADOS: { patron: RegExp; cuantos: number; nota: string }[] = [
     nota: "React 19: `key` no va en el tipo de props; es ruido del JSX, no un fallo real" },
   { patron: /TS2352.*CSSStyleDeclaration/s, cuantos: 3,
     nota: 'PlanDeTrabajo convierte CSSStyleDeclaration a Record<string,string> al exportar a PPTX' },
-  { patron: /TS2339.*'env' does not exist on type 'ImportMeta'/s, cuantos: 1,
-    nota: 'adminStore lee import.meta.env sin los tipos de Vite cargados' },
+  { patron: /TS2339.*'env' does not exist on type 'ImportMeta'/s, cuantos: 2,
+    nota: 'adminStore y GenerarCorreo leen import.meta.env sin los tipos de Vite cargados' },
 ];
 
 let salida = '';

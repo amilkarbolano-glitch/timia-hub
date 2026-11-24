@@ -12,7 +12,7 @@ import { X, Copy, Download, Check } from 'lucide-react';
 import { adminStore, type AdminProject, type PlanIssue } from '../lib/adminStore';
 import { realFase, type AvanceFase, type PesoModo } from '../lib/avance';
 
-const VINO = '#8b1538';
+const VINO = '#9a003d';   // el de la barra bajo la A del logo, muestreado del propio archivo
 const TINTA = '#1f2937';
 const GRIS = '#6b7280';
 const LINEA = '#e5e7eb';
@@ -77,6 +77,9 @@ export default function GenerarCorreo({ datos, onClose }: { datos: DatosCorreo; 
   const [respBBVA, setRespBBVA] = useState(proyecto?.respBBVA ?? datos.respBBVA ?? '');
   const [respTimia, setRespTimia] = useState(proyecto?.respTimia ?? datos.respTimia ?? '');
   const [copiado, setCopiado] = useState<string>('');
+  /** Logo y marca de agua salen de la plantilla real de TIMIA, no redibujados:
+   *  así el correo no se parece al formato del banco, es ese formato. */
+  const [marca, setMarca] = useState<{ logo?: HTMLImageElement; agua?: HTMLImageElement }>({});
   const lienzo = useRef<HTMLCanvasElement | null>(null);
 
   const abiertas = datos.issues.filter(i => !i.endDate);
@@ -112,16 +115,30 @@ export default function GenerarCorreo({ datos, onClose }: { datos: DatosCorreo; 
     const DER = 560, ANCHO_DER = W - DER - 40;  // el dibujo: cifras, tabla y equipo
 
     ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, 4000);
+
+    // La marca de agua va primero y muy suave: detrás de todo, como en la plantilla.
+    if (marca.agua) {
+      const lado = 520;
+      ctx.save(); ctx.globalAlpha = 0.07;
+      ctx.drawImage(marca.agua, W - lado + 60, 150, lado, lado * (marca.agua.height / marca.agua.width));
+      ctx.restore();
+    }
     ctx.fillStyle = VINO; ctx.fillRect(0, 0, W, 6);
 
-    ctx.fillStyle = TINTA; ctx.font = F(21, 600);
-    ctx.fillText(titulo || 'Plan de trabajo', IZQ, 52);
-    ctx.fillStyle = VINO; ctx.font = F(16, 600); ctx.textAlign = 'right';
-    ctx.fillText(fechaCorta(datos.fechaCorte), W - 40, 52);
+    if (marca.logo) {
+      const alto = 30, ancho = alto * (marca.logo.width / marca.logo.height);
+      ctx.drawImage(marca.logo, IZQ, 20, ancho, alto);
+    } else {
+      ctx.fillStyle = TINTA; ctx.font = F(24, 700); ctx.fillText('TIMIA', IZQ, 46);
+    }
+    ctx.fillStyle = VINO; ctx.font = F(17, 600); ctx.textAlign = 'right';
+    ctx.fillText(fechaCorta(datos.fechaCorte), W - 40, 44);
     ctx.textAlign = 'left';
+    ctx.fillStyle = GRIS; ctx.font = F(12);
+    ctx.fillText(titulo || 'Plan de trabajo', IZQ, 70);
 
     // ── Izquierda: alertas y bloqueantes ─────────────────────────────────────
-    let yI = 96;
+    let yI = 108;
     const lista = (etiqueta: string, color: string, items: PlanIssue[]) => {
       ctx.fillStyle = color; ctx.font = F(13, 700);
       ctx.fillText(`${etiqueta}  (${items.length})`, IZQ, yI); yI += 10;
@@ -149,7 +166,7 @@ export default function GenerarCorreo({ datos, onClose }: { datos: DatosCorreo; 
     lista('Bloqueantes', '#b91c1c', bloqueantes);
 
     // ── Derecha: el dibujo ───────────────────────────────────────────────────
-    let yD = 96;
+    let yD = 108;
     ctx.fillStyle = GRIS; ctx.font = F(11, 600);
     ctx.textAlign = 'center'; ctx.fillText('AVANCE GENERAL', DER + ANCHO_DER / 2, yD); ctx.textAlign = 'left';
     yD += 12;
@@ -221,6 +238,21 @@ export default function GenerarCorreo({ datos, onClose }: { datos: DatosCorreo; 
     trazar(ctx, W);
     return c;
   }
+
+  useEffect(() => {
+    let vivo = true;
+    const base = import.meta.env.BASE_URL ?? '/';
+    const raiz = base.endsWith('/') ? base : `${base}/`;
+    const cargar = (f: string) => new Promise<HTMLImageElement | undefined>(res => {
+      const im = new Image();
+      im.onload = () => res(im);
+      im.onerror = () => res(undefined);     // sin plantilla el dibujo sale igual, solo sin fondo
+      im.src = `${raiz}plantilla/${f}`;
+    });
+    Promise.all([cargar('timia-logo.png'), cargar('timia-marca.png')])
+      .then(([logo, agua]) => { if (vivo) setMarca({ logo, agua }); });
+    return () => { vivo = false; };
+  }, []);
 
   // El dibujo tiene que estar hecho antes de que nadie toque nada: si solo se
   // dibujara al copiar, no habría forma de revisar el correo antes de mandarlo.
