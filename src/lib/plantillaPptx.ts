@@ -10,7 +10,10 @@
 import JSZip from 'jszip';
 
 const MIME = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
-const BD = 'timia-plantillas', ALMACEN = 'pptx', CLAVE = 'seguimiento';
+const BD = 'timia-plantillas', ALMACEN = 'pptx';
+/** Una plantilla por proyecto: cada uno tiene su portada, su código y sus
+ *  entregables, así que compartir una sola no sirve. */
+const clave = (projectId: string) => `seguimiento:${projectId}`;
 
 export interface PlantillaGuardada { nombre: string; guardadaEn: string; datos: ArrayBuffer }
 
@@ -23,21 +26,21 @@ function abrir(): Promise<IDBDatabase> {
   });
 }
 
-export async function guardarPlantilla(nombre: string, datos: ArrayBuffer): Promise<void> {
+export async function guardarPlantilla(projectId: string, nombre: string, datos: ArrayBuffer): Promise<void> {
   const db = await abrir();
   await new Promise<void>((ok, mal) => {
     const tx = db.transaction(ALMACEN, 'readwrite');
-    tx.objectStore(ALMACEN).put({ nombre, guardadaEn: new Date().toISOString(), datos }, CLAVE);
+    tx.objectStore(ALMACEN).put({ nombre, guardadaEn: new Date().toISOString(), datos }, clave(projectId));
     tx.oncomplete = () => ok(); tx.onerror = () => mal(tx.error);
   });
   db.close();
 }
 
-export async function leerPlantilla(): Promise<PlantillaGuardada | null> {
+export async function leerPlantilla(projectId: string): Promise<PlantillaGuardada | null> {
   try {
     const db = await abrir();
     const v = await new Promise<PlantillaGuardada | undefined>((ok, mal) => {
-      const req = db.transaction(ALMACEN, 'readonly').objectStore(ALMACEN).get(CLAVE);
+      const req = db.transaction(ALMACEN, 'readonly').objectStore(ALMACEN).get(clave(projectId));
       req.onsuccess = () => ok(req.result); req.onerror = () => mal(req.error);
     });
     db.close();
@@ -45,11 +48,11 @@ export async function leerPlantilla(): Promise<PlantillaGuardada | null> {
   } catch { return null; }
 }
 
-export async function borrarPlantilla(): Promise<void> {
+export async function borrarPlantilla(projectId: string): Promise<void> {
   const db = await abrir();
   await new Promise<void>(ok => {
     const tx = db.transaction(ALMACEN, 'readwrite');
-    tx.objectStore(ALMACEN).delete(CLAVE);
+    tx.objectStore(ALMACEN).delete(clave(projectId));
     tx.oncomplete = () => ok();
   });
   db.close();
@@ -63,7 +66,15 @@ function paraXml(v: string): string {
     .replace(/\r?\n/g, '</a:t><a:br/><a:t>');
 }
 
-export interface ResultadoRelleno { blob: Blob; reemplazos: number; sinUsar: string[] }
+export interface ResultadoRelleno {
+  blob: Blob;
+  reemplazos: number;
+  sinUsar: string[];
+  /** Cuántas filas de entregable tiene la plantilla. Si el plan trae más, las
+   *  de más no caben y hay que decirlo: perderlas en silencio en un correo al
+   *  banco es peor que no generarlo. */
+  filasEntregable: number;
+}
 
 /** Cambia los {{MARCADORES}} de todas las láminas por sus valores. */
 export async function rellenarPlantilla(plantilla: ArrayBuffer, valores: Record<string, string>): Promise<ResultadoRelleno> {
@@ -88,5 +99,6 @@ export async function rellenarPlantilla(plantilla: ArrayBuffer, valores: Record<
     throw new Error('La plantilla no tiene marcadores {{…}}. Sube la que te pasé con los marcadores puestos.');
   }
   const blob = await zip.generateAsync({ type: 'blob', mimeType: MIME, compression: 'DEFLATE' });
-  return { blob, reemplazos, sinUsar: [...vistos].filter(k => valores[k] === undefined) };
+  const filasEntregable = [...vistos].filter(k => /^E\d+$/.test(k)).length;
+  return { blob, reemplazos, sinUsar: [...vistos].filter(k => valores[k] === undefined), filasEntregable };
 }

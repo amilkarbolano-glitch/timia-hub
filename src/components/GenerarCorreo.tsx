@@ -83,7 +83,7 @@ export default function GenerarCorreo({ datos, onClose }: { datos: DatosCorreo; 
   const [marca, setMarca] = useState<{ logo?: HTMLImageElement; agua?: HTMLImageElement }>({});
   const [plantilla, setPlantilla] = useState<PlantillaGuardada | null>(null);
   const [pptx, setPptx] = useState<string>('');
-  useEffect(() => { leerPlantilla().then(setPlantilla); }, []);
+  useEffect(() => { leerPlantilla(datos.projectId).then(setPlantilla); }, [datos.projectId]);
   const lienzo = useRef<HTMLCanvasElement | null>(null);
 
   const abiertas = datos.issues.filter(i => !i.endDate);
@@ -334,8 +334,8 @@ export default function GenerarCorreo({ datos, onClose }: { datos: DatosCorreo; 
 
   async function subirPlantilla(f: File) {
     try {
-      await guardarPlantilla(f.name, await f.arrayBuffer());
-      setPlantilla(await leerPlantilla());
+      await guardarPlantilla(datos.projectId, f.name, await f.arrayBuffer());
+      setPlantilla(await leerPlantilla(datos.projectId));
       setPptx('');
     } catch (e) { setPptx(`No pude guardar la plantilla: ${e}`); }
   }
@@ -344,14 +344,17 @@ export default function GenerarCorreo({ datos, onClose }: { datos: DatosCorreo; 
     if (!plantilla) return;
     setPptx('generando');
     try {
-      const { blob, reemplazos } = await rellenarPlantilla(plantilla.datos, valoresPlantilla());
+      const { blob, reemplazos, filasEntregable } = await rellenarPlantilla(plantilla.datos, valoresPlantilla());
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
       a.download = `Seguimiento-${datos.projectId}-${datos.fechaCorte}.pptx`;
       a.click();
       URL.revokeObjectURL(a.href);
       recordar();
-      setPptx(`Listo · ${reemplazos} valores puestos`);
+      const faltan = fases.length - filasEntregable;
+      setPptx(faltan > 0
+        ? `Listo · ${reemplazos} valores puestos. OJO: el plan tiene ${fases.length} entregables y la plantilla ${filasEntregable} filas, así que ${faltan} no salieron.`
+        : `Listo · ${reemplazos} valores puestos`);
     } catch (e) { setPptx(String(e instanceof Error ? e.message : e)); }
   }
 
@@ -397,12 +400,13 @@ export default function GenerarCorreo({ datos, onClose }: { datos: DatosCorreo; 
         </div>
 
         <div style={{ border: `0.5px solid ${LINEA}`, borderRadius: 10, padding: 12, marginBottom: 14, background: '#fafafa' }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: TINTA, marginBottom: 4 }}>Presentación adjunta</div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: TINTA, marginBottom: 4 }}>Presentación adjunta · {proyecto?.name ?? datos.projectId}</div>
           {plantilla ? (
             <>
               <div style={{ fontSize: 10.5, color: GRIS, marginBottom: 8 }}>
                 Plantilla: <b style={{ color: TINTA }}>{plantilla.nombre}</b> · guardada el {plantilla.guardadaEn.slice(0, 10)}.
                 Se rellenan la portada y el resumen; las láminas de Gantt quedan como estén en la plantilla.
+                {fases.length > 7 && <b style={{ color: '#b45309' }}> Este plan tiene {fases.length} entregables y la plantilla suele traer 7: revisa el aviso al generar.</b>}
               </div>
               <div className="gc-acciones">
                 <button onClick={descargarPptx} style={boton(VINO, '#fff')}>
@@ -418,8 +422,8 @@ export default function GenerarCorreo({ datos, onClose }: { datos: DatosCorreo; 
           ) : (
             <>
               <div style={{ fontSize: 10.5, color: GRIS, marginBottom: 8 }}>
-                Sube una vez la plantilla con marcadores y queda guardada en este navegador. No se sube a ningún
-                servidor ni al repositorio: es la presentación del banco.
+                Sube una vez la plantilla de <b>{proyecto?.name ?? datos.projectId}</b> y queda guardada para ese proyecto en
+                este navegador. No se sube a ningún servidor ni al repositorio: es la presentación del banco.
               </div>
               <label style={{ ...boton(VINO, '#fff'), cursor: 'pointer' }}>
                 Subir plantilla (.pptx)
