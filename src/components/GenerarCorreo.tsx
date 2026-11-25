@@ -84,6 +84,10 @@ export interface DatosCorreo {
   porEntregable?: { esp: number; actividades: ActividadCorreo[] }[];
   semanas?: number;
   semanaHoy?: number;
+  /** El día hábil en curso (1..5): sitúa la raya de hoy dentro de su semana. */
+  diaHoy?: number;
+  /** Inicio y fin de cada semana, ya calculados como los pinta la rejilla. */
+  semanasFechas?: { ini: string; fin: string }[];
   inicio?: string;               // ISO yyyy-mm-dd, el arranque del plan
 }
 
@@ -159,6 +163,8 @@ export default function GenerarCorreo({ datos, onClose }: { datos: DatosCorreo; 
     return {
       semanas: datos.semanas,
       semanaHoy: datos.semanaHoy ?? 1,
+      diaHoy: datos.diaHoy,
+      semanasFechas: datos.semanasFechas,
       inicio: datos.inicio ? new Date(datos.inicio + 'T12:00:00') : undefined,
       entregables,
     };
