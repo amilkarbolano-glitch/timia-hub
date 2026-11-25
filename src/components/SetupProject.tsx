@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Rocket, ArrowRight, Database, Cloud, Cpu, Layout as LayoutIcon, Building2, CheckCircle2 } from 'lucide-react';
+import { Rocket, ArrowRight, Database, Cloud, Cpu, Layout as LayoutIcon, Building2, CheckCircle2, X, Check } from 'lucide-react';
 import { ProjectTemplate } from '../types';
 import { adminStore, AdminProject } from '../lib/adminStore';
+import { PasosTym } from '../modules/tym';
 
 // ─── Flow Stepper ─────────────────────────────────────────────────────────────
 const FLOW_STEPS = [
@@ -51,7 +52,8 @@ const BANCOS = [
 ];
 
 interface SetupProjectProps {
-  onNext: () => void;
+  /** El tipo decide a dónde va el flujo: cerrado sigue a estimar, abierto a crear tareas. */
+  onNext: (tipo: 'cerrado' | 'tym', projectId: string) => void;
   templates: ProjectTemplate[];
   selectedTemplateId: string;
   onSelectTemplate: (id: string) => void;
@@ -61,6 +63,8 @@ export default function SetupProject({ onNext, templates, selectedTemplateId, on
   const [banco, setBanco] = useState('bbva-co');
   const [name, setName]   = useState(() => localStorage.getItem('timia_setup_draft_name') ?? '');
   const [desc, setDesc]   = useState(() => localStorage.getItem('timia_setup_draft_desc') ?? '');
+  const [tipo, setTipo]   = useState<'cerrado' | 'tym'>('cerrado');
+  const abierto = tipo === 'tym';
 
   function handleNext() {
     // Persist form state so Back → Next doesn't lose it
@@ -91,6 +95,7 @@ export default function SetupProject({ onNext, templates, selectedTemplateId, on
       client: clientLabel,
       startDate: today,
       active: true,
+      tipo,
     };
 
     // Only add if not already saved (idempotent if user clicks Next twice)
@@ -105,9 +110,13 @@ export default function SetupProject({ onNext, templates, selectedTemplateId, on
     // Signal Estimaciones to auto-select this project and use the right plan template.
     // Guardamos { projectId, type } para que solo este proyecto reciba la plantilla.
     localStorage.setItem('timia_setup_draft_id', rawId);
-    localStorage.setItem('timia_setup_template_type', JSON.stringify({ projectId: rawId, type: selectedTemplateId }));
-    localStorage.setItem('timia_setup_flow', '2');
-    onNext();
+    // Un proyecto abierto no se estima, así que no arrastra plantilla ni entra
+    // en el flujo de tres pasos: de crearlo se va directo a crear sus tareas.
+    if (!abierto) {
+      localStorage.setItem('timia_setup_template_type', JSON.stringify({ projectId: rawId, type: selectedTemplateId }));
+      localStorage.setItem('timia_setup_flow', '2');
+    }
+    onNext(tipo, rawId);
   }
 
   const getIcon = (iconName: string) => {
@@ -121,13 +130,43 @@ export default function SetupProject({ onNext, templates, selectedTemplateId, on
 
   return (
     <div className="max-w-4xl mx-auto px-6 py-12">
-      <FlowStepper current={1} />
+      {abierto ? <PasosTym current={1}/> : <FlowStepper current={1} />}
       <div className="text-center mb-12 space-y-4">
         <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary/10 text-primary mb-4">
           <Rocket size={32} />
         </div>
         <h1 className="text-4xl font-black text-slate-900 tracking-tight">Nuevo Proyecto</h1>
         <p className="text-slate-500 text-lg">Define los parámetros básicos del nuevo proyecto de datos.</p>
+      </div>
+
+      {/* El tipo va antes que nada porque decide qué se pide debajo. */}
+      <div className="space-y-2 mb-8">
+        <label className="text-sm font-bold text-slate-700 uppercase tracking-wider">Tipo de proyecto</label>
+        <div className="flex flex-wrap gap-3">
+          {([
+            { id: 'cerrado', titulo: 'Cerrado', pie: 'Alcance y fechas comprometidos. Se estima y genera plan.' },
+            { id: 'tym', titulo: 'Abierto · T&M', pie: 'Por tiempo y materiales. Sin estimación: se crean tareas.' },
+          ] as const).map(op => (
+            <button
+              key={op.id}
+              onClick={() => setTipo(op.id)}
+              aria-pressed={tipo === op.id}
+              className="flex-1 min-w-[260px] text-left rounded-xl border-2 p-4 transition-all"
+              style={{
+                borderColor: tipo === op.id ? '#dc2626' : '#e2e8f0',
+                background: tipo === op.id ? '#fef2f2' : '#fff',
+              }}
+            >
+              <span className="block text-sm font-bold text-slate-900">{op.titulo}</span>
+              <span className="block mt-1 text-xs text-slate-500">{op.pie}</span>
+            </button>
+          ))}
+        </div>
+        {abierto && (
+          <p className="text-xs text-slate-500 pt-1">
+            El tipo queda fijo al crear: pasar un abierto a cerrado obligaría a inventarle un cronograma a lo ya cargado.
+          </p>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -180,6 +219,19 @@ export default function SetupProject({ onNext, templates, selectedTemplateId, on
           </div>
         </div>
 
+        {abierto ? (
+          <div className="rounded-2xl border-2 border-dashed border-slate-300 bg-white p-6">
+            <p className="text-sm font-bold text-slate-700 uppercase tracking-wider">Sin plantilla</p>
+            <p className="mt-2 text-sm text-slate-600 leading-relaxed">
+              Un proyecto abierto no se estima, así que no se pide plantilla de pipeline y no se genera plan de trabajo.
+            </p>
+            <ul className="mt-4 space-y-2 text-sm text-slate-600">
+              <li className="flex gap-2 border-t border-slate-100 pt-2"><X size={15} className="shrink-0 mt-0.5 text-slate-400"/>No se elige plantilla de pipeline</li>
+              <li className="flex gap-2 border-t border-slate-100 pt-2"><X size={15} className="shrink-0 mt-0.5 text-slate-400"/>No pasa por <em>Estimar plan</em></li>
+              <li className="flex gap-2 border-t border-slate-100 pt-2"><Check size={15} className="shrink-0 mt-0.5 text-green-700"/>Al crear, se va directo a <strong>Crear tareas</strong></li>
+            </ul>
+          </div>
+        ) : (
         <div className="space-y-6">
           <label className="text-sm font-bold text-slate-700 uppercase tracking-wider">Tipo de Pipeline / Plantilla</label>
           <div className="grid gap-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
@@ -195,6 +247,7 @@ export default function SetupProject({ onNext, templates, selectedTemplateId, on
             ))}
           </div>
         </div>
+        )}
       </div>
 
       <div className="mt-12 flex justify-end">
@@ -203,7 +256,7 @@ export default function SetupProject({ onNext, templates, selectedTemplateId, on
           disabled={!name.trim()}
           className="flex items-center gap-2 px-8 h-14 bg-primary text-white rounded-2xl font-bold text-lg shadow-lg shadow-primary/20 hover:opacity-90 transition-all group disabled:opacity-40 disabled:cursor-not-allowed"
         >
-          Siguiente: Estimar plan
+          {abierto ? 'Crear proyecto' : 'Siguiente: Estimar plan'}
           <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" />
         </button>
       </div>

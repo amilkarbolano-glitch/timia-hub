@@ -7,11 +7,22 @@ const w: any = dom.window;
 for (const k of ['window','document','HTMLElement','Node','Element','getComputedStyle','requestAnimationFrame','cancelAnimationFrame','MutationObserver','localStorage','MouseEvent','Event']) { try { (globalThis as any)[k] = w[k]; } catch {} }
 Object.defineProperty(globalThis, 'navigator', { value: w.navigator, configurable: true });
 w.confirm = () => true;
+w.prompt = () => null;
 const db = JSON.parse(fs.readFileSync('public/db.json','utf8'));
 for (const [k,v] of Object.entries(db)) if (k.startsWith('timia_')) w.localStorage.setItem(k, JSON.stringify(v));
 // Restos de versiones anteriores que pueden quedar en el navegador
 w.localStorage.setItem('timia_notes_MIGBD', JSON.stringify({ pasos:['x'] }));
 w.localStorage.setItem('timia_notes_OTRO', 'garbage{');
+// Un proyecto abierto con tareas, para que la vista T&M se monte con contenido
+// y el click en la fila abra el panel de avance.
+w.localStorage.setItem('timia_tym_planes', JSON.stringify({ MIGBD: {
+  projectId: 'MIGBD', bloques: ['Incidencias'],
+  tareas: [
+    { id: 't1', nombre: 'Atención de incidencias', bloque: 'Incidencias', responsable: 'Juliana Garzón', estado: 'en-curso', pct: 60, creada: '2026-11-01T12:00:00Z' },
+    { id: 't2', nombre: 'Ajustes de validación', bloque: 'Incidencias', estado: 'finalizada', pct: 100, creada: '2026-11-02T12:00:00Z' },
+  ],
+  historial: { t1: [{ fecha: '2026-11-20T12:00:00Z', de: 40, a: 60, quien: 'Amilkar', nota: 'reglas validadas' }] },
+} }));
 const errors: string[] = [];
 let failed = false;
 (async () => {
@@ -24,11 +35,13 @@ let failed = false;
   const Estimaciones = (await import('../src/components/Estimaciones.tsx')).default;
   const Bitacora = (await import('../src/components/Bitacora.tsx')).default;
   const ActivityReport = (await import('../src/components/ActivityReport.tsx')).default;
+  const ProyectoTym = (await import('../src/modules/tym/ProyectoTym.tsx')).default;
+  const CrearTareas = (await import('../src/modules/tym/CrearTareas.tsx')).default;
   (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
   console.error = (...a:any[]) => { const s = a.join(' '); if (!s.includes('act(')) errors.push('console.error: ' + s.slice(0,300)); };
   for (const acc of auth.MOCK_ACCOUNTS) {
     w.localStorage.setItem('timia_hub_user', JSON.stringify(acc));
-    for (const [name, C, props] of [['Plan', PlanDeTrabajo, {}], ['Estim', Estimaciones, { onViewChange:()=>{}, onBack:()=>{} }], ['Tareas', Bitacora, {}], ['TR', ActivityReport, { user: acc }], ['Dash', PMDashboard, { onViewChange: () => {} }]] as any) {
+    for (const [name, C, props] of [['Plan', PlanDeTrabajo, {}], ['Estim', Estimaciones, { onViewChange:()=>{}, onBack:()=>{} }], ['Tareas', Bitacora, {}], ['TR', ActivityReport, { user: acc }], ['Dash', PMDashboard, { onViewChange: () => {} }], ['TymProy', ProyectoTym, { projectId: 'MIGBD' }], ['TymTareas', CrearTareas, { projectId: 'MIGBD', onListo: () => {} }]] as any) {
       const el = w.document.createElement('div'); w.document.body.appendChild(el);
       const root = createRoot(el, { onUncaughtError: (e:any) => errors.push('uncaught: ' + (e?.stack ?? e)), onCaughtError: (e:any) => errors.push('caught: ' + (e?.stack ?? e)) } as any);
       const click = async (label: string) => {

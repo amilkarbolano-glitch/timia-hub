@@ -20,7 +20,7 @@ import {
 import { TimiaMark, TimiaWordmark } from './TimiaLogo';
 import ParchePermisos from './ParchePermisos';
 
-export type View = 'correos' | 'notas' | 'setup-project' | 'setup-team' | 'setup-tasks' | 'dashboard' | 'standards' | 'analytics' | 'audit' | 'bank-status' | 'notifications' | 'roles-permissions' | 'project-templates' | 'admin' | 'circuitos-bbva' | 'bitacora' | 'estimaciones' | 'plan-trabajo' | 'imputaciones' | 'inventario' | 'links' | 'proyectos' | 'activity-report' | 'fabrica';
+export type View = 'correos' | 'notas' | 'setup-project' | 'setup-team' | 'setup-tasks' | 'proyecto-tym' | 'dashboard' | 'standards' | 'analytics' | 'audit' | 'bank-status' | 'notifications' | 'roles-permissions' | 'project-templates' | 'admin' | 'circuitos-bbva' | 'bitacora' | 'estimaciones' | 'plan-trabajo' | 'imputaciones' | 'inventario' | 'links' | 'proyectos' | 'activity-report' | 'fabrica';
 
 interface LayoutProps {
   children: React.ReactNode;

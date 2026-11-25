@@ -11,7 +11,7 @@ export const VIEW_PATHS: Record<View, string> = {
   'inventario': '/inventario', 'fabrica': '/fabrica', 'links': '/links', 'circuitos-bbva': '/circuitos', 'proyectos': '/proyectos', 'correos': '/correos', 'notas': '/notas',
   'admin': '/admin', 'roles-permissions': '/admin/roles', 'audit': '/auditoria', 'bank-status': '/banco',
   'standards': '/estandares', 'notifications': '/notificaciones', 'project-templates': '/plantillas',
-  'setup-project': '/nuevo-proyecto', 'setup-team': '/nuevo-proyecto/equipo', 'setup-tasks': '/nuevo-proyecto/tareas',
+  'setup-project': '/nuevo-proyecto', 'setup-team': '/nuevo-proyecto/equipo', 'setup-tasks': '/nuevo-proyecto/tareas', 'proyecto-tym': '/abierto',
 };
 const PATH_VIEWS: [string, View][] = (Object.entries(VIEW_PATHS) as [View, string][]).map(([v, p]): [string, View] => [p, v]).sort((a, b) => b[0].length - a[0].length);
 

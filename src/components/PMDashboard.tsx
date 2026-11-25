@@ -4,8 +4,23 @@
 import React, { useMemo, useState } from 'react';
 import { Mail, AlertTriangle, TrendingUp, Users, Briefcase, CheckSquare, X, Copy, Check, Plus } from 'lucide-react';
 import { useAuth, canAccess } from '../contexts/AuthContext';
+import { esTym } from '../modules/tym';
 import { adminStore, issueImpacts, type AdminProject, type AdminUser, type PlanIssue } from '../lib/adminStore';
 import { getPlanSummaries, type PlanSummary } from './PlanDeTrabajo';
+
+/**
+ * Abrir un proyecto lleva a su vista: los cerrados al plan de trabajo y los
+ * abiertos a la suya, que no tiene plan ni cronograma.
+ */
+function abrirProyecto(id: string, ir: (v: any, p?: string) => void) {
+  if (esTym(id)) {
+    try { localStorage.setItem('timia_tym_project', id); } catch { /* sin almacenamiento */ }
+    ir('proyecto-tym', id);
+    return;
+  }
+  try { localStorage.setItem('timia_last_plan_project', id); } catch { /* sin almacenamiento */ }
+  ir('plan-trabajo', id);
+}
 
 type PMView = 'setup-project' | 'estimaciones' | 'plan-trabajo' | 'admin' | 'bitacora' | 'analytics';
 interface PMDashboardProps { onViewChange?: (v: PMView, param?: string) => void; }
@@ -212,7 +227,7 @@ export default function PMDashboard({ onViewChange }: PMDashboardProps) {
               <span style={{ fontSize: 10, color: '#94a3b8' }}>· {prs.length} proyecto{prs.length !== 1 ? 's' : ''} · {avg.toFixed(0)}% prom.</span>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: 10 }}>
-              {prs.map(r => <ProjectCard key={r.p.id} r={r} onOpen={onViewChange ? () => { localStorage.setItem('timia_last_plan_project', r.p.id); onViewChange('plan-trabajo', r.p.id); } : undefined} />)}
+              {prs.map(r => <ProjectCard key={r.p.id} r={r} onOpen={onViewChange ? () => abrirProyecto(r.p.id, onViewChange) : undefined} />)}
             </div>
           </div>
         );
@@ -237,7 +252,7 @@ export default function PMDashboard({ onViewChange }: PMDashboardProps) {
 export function ProyectosPage({ onViewChange }: PMDashboardProps = {}) {
   const { rows } = useDashboardData();
   const abrir = (id: string) => onViewChange
-    ? () => { localStorage.setItem('timia_last_plan_project', id); onViewChange('plan-trabajo', id); }
+    ? () => abrirProyecto(id, onViewChange)
     : undefined;
   return (
     <div style={{ padding: '28px 36px', maxWidth: 1600, margin: '0 auto' }}>

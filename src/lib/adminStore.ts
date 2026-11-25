@@ -50,6 +50,10 @@ export interface AdminProject {
    *  porque son fijos por proyecto y el equipo cambia. */
   respBBVA?: string;
   respTimia?: string;
+  /** 'tym' = proyecto abierto, por tiempo y materiales: ni plantilla ni plan.
+   *  Sin valor es cerrado, que es como estaban todos. Se fija al crear y no
+   *  cambia: pasar un abierto a cerrado obligaría a inventarle un cronograma. */
+  tipo?: 'cerrado' | 'tym';
 }
 
 export interface AdminUser {
