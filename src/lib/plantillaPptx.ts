@@ -9,6 +9,7 @@
 // navegador.
 import JSZip from 'jszip';
 import { persistSet } from './persist';
+import { construirGantt, type EntregableGantt } from './ganttPptx';
 
 const MIME = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
 const BD = 'timia-plantillas', ALMACEN = 'pptx';
@@ -143,6 +144,19 @@ const altoDe = (tr: string): number => {
  * alto original entre las filas que queden, así la tabla ocupa exactamente el
  * mismo espacio y nada se corre.
  */
+/**
+ * Pone el mismo tamaño en todas las propiedades de texto de un trozo de XML.
+ * No basta con sustituir los sz que ya existen: en la plantilla algunas celdas
+ * de porcentaje no traen sz y heredaban el del estilo de tabla, así que esas
+ * filas salían con la letra mucho más grande que las demás.
+ */
+function fijarSz(xml: string, sz: number): string {
+  return xml.replace(/<a:(rPr|defRPr|endParaRPr)\b([^>]*?)(\/?)>/g, (_m, tag: string, attrs: string, cierre: string) => {
+    const limpio = attrs.replace(/\s*sz="\d+"/g, '');
+    return `<a:${tag} sz="${sz}"${limpio}${cierre}>`;
+  });
+}
+
 export function ajustarFilas(xml: string, cuantos: number): string {
   const tablas = xml.match(/<a:tbl>[\s\S]*?<\/a:tbl>/g);
   if (!tablas) return xml;
@@ -175,11 +189,7 @@ export function ajustarFilas(xml: string, cuantos: number): string {
     let fila = base.replace(/\{\{E\d+\}\}/g, `{{E${k}}}`)
                    .replace(/\{\{P\d+\}\}/g, `{{P${k}}}`)
                    .replace(/(<a:tr\b[^>]*\bh=")\d+(")/, `$1${altoFila}$2`);
-    if (sz) {
-      fila = /sz="\d+"/.test(fila)
-        ? fila.replace(/sz="\d+"/g, `sz="${sz}"`)
-        : fila.replace(/<a:rPr\b/g, `<a:rPr sz="${sz}"`);
-    }
+    if (sz) fila = fijarSz(fila, sz);
     nuevas.push(fila);
   }
 
@@ -279,6 +289,63 @@ export function acomodarResumen(xml: string, textoAlertas: string, textoBloq: st
   });
 }
 
+/**
+ * Encaja la tabla de responsables debajo de la de entregables.
+ *
+ * En la plantilla las dos están puestas a mano, con los responsables que tenía
+ * aquel plan. En cuanto un equipo lleva dos nombres la última fila crece, la
+ * tabla pasa de las 7,5" de la lámina y el segundo nombre se corta por abajo.
+ * Aquí se mide lo que ocupan de verdad las filas de arriba, la de responsables
+ * se baja hasta justo debajo, y se le pone el tamaño de letra más grande que
+ * quepa sin salirse.
+ */
+export function acomodarResponsables(xml: string, bbva: string, timia: string): string {
+  const ABAJO = 7.26, HUECO = 0.16, MARGEN = 0.06;
+  const marcos = xml.match(/<p:graphicFrame>[\s\S]*?<\/p:graphicFrame>/g);
+  if (!marcos) return xml;
+  const resumen = marcos.find(m => /\{\{E1\}\}/.test(m));
+  const resp = marcos.find(m => /\{\{RESP_BBVA\}\}/.test(m));
+  if (!resp) return xml;
+
+  // Dónde acaba la tabla de arriba: su origen más el alto real de sus filas.
+  // El cy del marco no sirve: las tablas crecen con su contenido y la plantilla
+  // lo trae puesto a ojo.
+  let y0 = yDe(resp);
+  if (resumen) {
+    const altos = [...resumen.matchAll(/<a:tr\b[^>]*\bh="(\d+)"/g)].map(m => aPulgadas(m[1]));
+    const fin = yDe(resumen) + altos.reduce((s, h) => s + h, 0);
+    if (!isNaN(fin)) y0 = fin + HUECO;
+  }
+  if (isNaN(y0)) return xml;
+
+  const cols = [...resp.matchAll(/<a:gridCol\b[^>]*\bw="(\d+)"/g)].map(m => aPulgadas(m[1]));
+  const ancho = cols[1] ?? 3.1;
+  const textos = ['Equipo', bbva, timia];
+
+  for (const sz of [1500, 1400, 1300, 1200, 1100, 1000, 900]) {
+    const porLinea = Math.max(10, Math.floor(((ancho - 0.2) * 72) / ((sz / 100) * 0.5)));
+    const altos = textos.map(t => (lineasDe(t, porLinea) * (sz / 100) * 1.25) / 72 + 2 * MARGEN);
+    const total = altos.reduce((s, h) => s + h, 0);
+    if (y0 + total > ABAJO && sz > 900) continue;
+    return xml.replace(resp, () => ponerTabla(resp, y0, altos, sz, MARGEN));
+  }
+  return xml;
+}
+
+/** Reposiciona una tabla y le fija el alto de cada fila, el tamaño de letra y
+ *  los márgenes de celda, que es lo único que decide si cabe. */
+function ponerTabla(marco: string, y: number, altos: number[], sz: number, margen: number): string {
+  let i = 0;
+  const conFilas = marco.replace(/<a:tr\b[^>]*>[\s\S]*?<\/a:tr>/g, fila => {
+    const h = altos[i++] ?? altos[altos.length - 1];
+    return fijarSz(fila, sz)
+      .replace(/(<a:tr\b[^>]*\bh=")\d+(")/, `$1${emu(h)}$2`)
+      .replace(/\smar[TB]="-?\d+"/g, '')
+      .replace(/<a:tcPr\b/g, `<a:tcPr marT="${emu(margen)}" marB="${emu(margen)}"`);
+  });
+  return situar(conFilas, y, altos.reduce((s, h) => s + h, 0));
+}
+
 /** Cuántas láminas trae la plantilla. Sirve para que se vea en pantalla cuál
  *  está cargada: la de 11 lleva los Gantt y la de 4 solo el resumen, y
  *  confundirlas hace que el correo salga corto sin que nadie se entere. */
@@ -290,10 +357,82 @@ export async function contarLaminas(datos: ArrayBuffer): Promise<number> {
   } catch { return 0; }
 }
 
+// ── Las láminas de Gantt ─────────────────────────────────────────────────────
+// Hay una por entregable. La plantilla trae las que tenía el plan del que se
+// sacó, así que sobran o faltan: se construyen las que hagan falta, se clona
+// la última si el plan trae más entregables, y se quitan del índice las que
+// sobren. Quitar una lámina es sacarla de sldIdLst; su XML se queda dentro del
+// archivo sin estorbar.
+export interface DatosGantt {
+  entregables: EntregableGantt[];
+  semanas: number;
+  semanaHoy: number;
+  inicio?: Date;
+}
+
+/** Las láminas en el orden en que se presentan, no en el que las guarda el zip. */
+async function laminasEnOrden(zip: JSZip): Promise<{ rId: string; ruta: string }[]> {
+  const pres = await zip.file('ppt/presentation.xml')?.async('string');
+  const rels = await zip.file('ppt/_rels/presentation.xml.rels')?.async('string');
+  if (!pres || !rels) return [];
+  const destino = new Map<string, string>();
+  for (const m of rels.matchAll(/<Relationship\b[^>]*\bId="([^"]+)"[^>]*\bTarget="(slides\/slide\d+\.xml)"/g)) {
+    destino.set(m[1], 'ppt/' + m[2]);
+  }
+  const out: { rId: string; ruta: string }[] = [];
+  for (const m of pres.matchAll(/<p:sldId\b[^>]*\br:id="([^"]+)"/g)) {
+    const ruta = destino.get(m[1]);
+    if (ruta) out.push({ rId: m[1], ruta });
+  }
+  return out;
+}
+
+/** Copia una lámina dentro del archivo y la deja detrás de la original. */
+async function clonarLamina(zip: JSZip, origen: string, trasRId: string): Promise<string> {
+  const usados = Object.keys(zip.files)
+    .map(f => /^ppt\/slides\/slide(\d+)\.xml$/.exec(f)?.[1])
+    .filter(Boolean).map(n => parseInt(n as string, 10));
+  const numero = Math.max(0, ...usados) + 1;
+  const ruta = `ppt/slides/slide${numero}.xml`;
+  zip.file(ruta, await zip.file(origen)!.async('string'));
+  const relsOrigen = origen.replace('ppt/slides/', 'ppt/slides/_rels/') + '.rels';
+  const relsCopia = zip.file(relsOrigen);
+  if (relsCopia) zip.file(ruta.replace('ppt/slides/', 'ppt/slides/_rels/') + '.rels', await relsCopia.async('string'));
+
+  const ct = await zip.file('[Content_Types].xml')!.async('string');
+  zip.file('[Content_Types].xml', ct.replace('</Types>',
+    `<Override PartName="/${ruta}" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/></Types>`));
+
+  const rels = await zip.file('ppt/_rels/presentation.xml.rels')!.async('string');
+  const nums = [...rels.matchAll(/Id="rId(\d+)"/g)].map(m => parseInt(m[1], 10));
+  const rId = `rId${Math.max(0, ...nums) + 1}`;
+  zip.file('ppt/_rels/presentation.xml.rels', rels.replace('</Relationships>',
+    `<Relationship Id="${rId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide${numero}.xml"/></Relationships>`));
+
+  const pres = await zip.file('ppt/presentation.xml')!.async('string');
+  const ids = [...pres.matchAll(/<p:sldId\b[^>]*\bid="(\d+)"/g)].map(m => parseInt(m[1], 10));
+  const nuevoId = Math.max(256, ...ids) + 1;
+  const re = new RegExp(`(<p:sldId\\b[^>]*\\br:id="${trasRId}"\\s*/>)`);
+  zip.file('ppt/presentation.xml', pres.replace(re, `$1<p:sldId id="${nuevoId}" r:id="${rId}"/>`));
+  return ruta;
+}
+
+/** Saca láminas del índice de la presentación. */
+async function quitarLaminas(zip: JSZip, rIds: string[]): Promise<void> {
+  if (!rIds.length) return;
+  let pres = await zip.file('ppt/presentation.xml')!.async('string');
+  for (const rId of rIds) {
+    pres = pres.replace(new RegExp(`<p:sldId\\b[^>]*\\br:id="${rId}"\\s*/>`), '');
+  }
+  zip.file('ppt/presentation.xml', pres);
+}
+
 export interface ResultadoRelleno {
   blob: Blob;
   reemplazos: number;
   sinUsar: string[];
+  /** Cuántas láminas de Gantt se construyeron. */
+  ganttHechas: number;
   /** Cuántas filas de entregable tiene la plantilla. Si el plan trae más, las
    *  de más no caben y hay que decirlo: perderlas en silencio en un correo al
    *  banco es peor que no generarlo. */
@@ -301,7 +440,12 @@ export interface ResultadoRelleno {
 }
 
 /** Cambia los {{MARCADORES}} de todas las láminas por sus valores. */
-export async function rellenarPlantilla(plantilla: ArrayBuffer, valores: Record<string, string>, entregables?: number): Promise<ResultadoRelleno> {
+export async function rellenarPlantilla(
+  plantilla: ArrayBuffer,
+  valores: Record<string, string>,
+  entregables?: number,
+  gantt?: DatosGantt,
+): Promise<ResultadoRelleno> {
   const zip = await JSZip.loadAsync(plantilla);
   const laminas = Object.keys(zip.files).filter(f => /^ppt\/slides\/slide\d+\.xml$/.test(f));
   if (!laminas.length) throw new Error('Ese archivo no parece una presentación: no encontré láminas dentro.');
@@ -314,6 +458,9 @@ export async function rellenarPlantilla(plantilla: ArrayBuffer, valores: Record<
     if (entregables !== undefined && /\{\{E1\}\}/.test(xml)) xml = ajustarFilas(xml, entregables);
     if (xml.includes('{{ALERTAS}}') && xml.includes('{{BLOQUEANTES}}')) {
       xml = acomodarResumen(xml, valores.ALERTAS ?? '', valores.BLOQUEANTES ?? '');
+    }
+    if (xml.includes('{{RESP_BBVA}}')) {
+      xml = acomodarResponsables(xml, valores.RESP_BBVA ?? '', valores.RESP_TIMIA ?? '');
     }
     for (const [k, v] of Object.entries(valores)) {
       if (!xml.includes(`{{${k}}}`)) continue;
@@ -335,7 +482,34 @@ export async function rellenarPlantilla(plantilla: ArrayBuffer, valores: Record<
   if (!vistos.size) {
     throw new Error('La plantilla no tiene marcadores {{…}}. Sube la que te pasé con los marcadores puestos.');
   }
+  // Las de Gantt van después del relleno: se construyen enteras, no se rellenan.
+  let ganttHechas = 0;
+  if (gantt?.entregables.length) {
+    const orden = await laminasEnOrden(zip);
+    const esGantt: { rId: string; ruta: string }[] = [];
+    for (const l of orden) {
+      const x = await zip.file(l.ruta)!.async('string');
+      if (/Actividades\s*\/?\s*Avance/.test(x)) esGantt.push(l);
+    }
+    if (esGantt.length) {
+      while (esGantt.length < gantt.entregables.length) {
+        const ultima = esGantt[esGantt.length - 1];
+        const ruta = await clonarLamina(zip, ultima.ruta, ultima.rId);
+        const nuevos = await laminasEnOrden(zip);
+        const rId = nuevos.find(l => l.ruta === ruta)?.rId ?? '';
+        esGantt.push({ rId, ruta });
+      }
+      for (let i = 0; i < gantt.entregables.length; i++) {
+        const { ruta } = esGantt[i];
+        const x = await zip.file(ruta)!.async('string');
+        const nuevo = construirGantt(x, gantt.entregables[i], gantt.semanas, gantt.semanaHoy, gantt.inicio);
+        if (nuevo !== x) { zip.file(ruta, nuevo); ganttHechas++; }
+      }
+      await quitarLaminas(zip, esGantt.slice(gantt.entregables.length).map(l => l.rId));
+    }
+  }
+
   const blob = await zip.generateAsync({ type: 'blob', mimeType: MIME, compression: 'DEFLATE' });
   const filasEntregable = [...vistos].filter(k => /^E\d+$/.test(k)).length;
-  return { blob, reemplazos, sinUsar: [...vistos].filter(k => valores[k] === undefined), filasEntregable };
+  return { blob, reemplazos, sinUsar: [...vistos].filter(k => valores[k] === undefined), filasEntregable, ganttHechas };
 }

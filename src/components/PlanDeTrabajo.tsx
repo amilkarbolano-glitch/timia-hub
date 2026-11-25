@@ -1569,6 +1569,34 @@ function PlanDetail({ plan, getActivityPct: getActivityPctHoy, setActivityPct, e
   // está frente a lo acordado.
   const overallDif = kpis.dif;
 
+  // Una entrada por entregable con lo que hace falta en los dos sitios donde se
+  // enseña: las tarjetas de arriba y las láminas de Gantt del correo. Antes el
+  // cálculo vivía dentro del map de las tarjetas y el correo no lo tenía, que
+  // es como acabaron saliendo números distintos para la misma fase.
+  const porEntregable = plan.entregables.map(e => {
+    const faseE = fasesAvance.find(f => f.id === e.id);
+    const faseExtE = fasesAvanceExt.find(f => f.id === e.id);
+    const real = !e.activities.length ? e.pctReal
+      : porSemana && faseE
+        ? parseFloat(realFase(faseE, pesoModo).toFixed(1))
+        : parseFloat((e.activities.reduce((s, a, i) => s + getActivityPct(e.id, i, a), 0) / e.activities.length).toFixed(1));
+    const esp = !e.activities.length ? e.pctExp
+      : porSemana && faseExtE
+        ? parseFloat(enDia(seriePlanFase(faseExtE, Math.max(planWeeks, semanaHoy)), semanaHoy, diaHoy).toFixed(1))
+        : parseFloat((e.activities.reduce((s, a, i) => s + computeActExpPct(a.startWeek, extensionFor(changes, plan.planKey, e.id, i, a.endWeek, issues, holidays).effEndWeek, todayWeekIdx), 0) / e.activities.length).toFixed(1));
+    return {
+      id: e.id,
+      real, esp,
+      dif: parseFloat((real - esp).toFixed(1)),
+      actividades: e.activities.map((a, i) => ({
+        nombre: a.name,
+        pct: getActivityPct(e.id, i, a),
+        ini: a.startWeek,
+        fin: extensionFor(changes, plan.planKey, e.id, i, a.endWeek, issues, holidays).effEndWeek,
+      })),
+    };
+  });
+
 
 
   // ── Resumen de cambios funcionales sobre este cronograma ─────────────────
@@ -1734,22 +1762,11 @@ function PlanDetail({ plan, getActivityPct: getActivityPctHoy, setActivityPct, e
       ); })()}
 
       <div style={{ display:'grid', gridTemplateColumns:`repeat(${plan.entregables.length},1fr)`, gap:8, marginBottom:14 }}>
-        {plan.entregables.map(e => {
-          // Estas tarjetas usaban el promedio simple de los % mientras el KPI de
-          // arriba y el Gantt ya pesaban por casillas: tres números distintos
-          // para la misma fase en la misma pantalla.
-          const faseE = fasesAvance.find(f => f.id === e.id);
-          const faseExtE = fasesAvanceExt.find(f => f.id === e.id);
-          const ePct = !e.activities.length ? e.pctReal
-            : porSemana && faseE
-              ? parseFloat(realFase(faseE, pesoModo).toFixed(1))
-              : parseFloat((e.activities.reduce((s,a,i)=>s+getActivityPct(e.id,i,a),0)/e.activities.length).toFixed(1));
-          // pctExp dinámico por entregable
-          const eExp = !e.activities.length ? e.pctExp
-            : porSemana && faseExtE
-              ? parseFloat(enDia(seriePlanFase(faseExtE, Math.max(planWeeks, semanaHoy)), semanaHoy, diaHoy).toFixed(1))
-              : parseFloat((e.activities.reduce((s,a,i)=>s+computeActExpPct(a.startWeek,extensionFor(changes, plan.planKey, e.id, i, a.endWeek, issues, holidays).effEndWeek,todayWeekIdx),0)/e.activities.length).toFixed(1));
-          const dif = parseFloat((ePct-eExp).toFixed(1));
+        {plan.entregables.map((e, eIdx) => {
+          // Los números salen de `porEntregable`, que es el mismo que alimenta
+          // las láminas de Gantt del correo: antes se calculaban aquí dentro y
+          // la presentación acababa con otras cifras que la pantalla.
+          const { real: ePct, esp: eExp, dif } = porEntregable[eIdx];
           return (
             <div key={e.id} style={{ background:'#fff', border:'0.5px solid #e2e8f0', borderRadius:10, padding:'10px 14px' }}>
               <p style={{ margin:'0 0 8px', fontSize:11, fontWeight:600, color:'#9f1239', lineHeight:1.3 }}>{e.name}</p>
@@ -1847,6 +1864,10 @@ function PlanDetail({ plan, getActivityPct: getActivityPctHoy, setActivityPct, e
             fases: fasesAvance,
             pesoModo,
             issues,
+            semanas: Math.max(planWeeks, semanaHoy),
+            semanaHoy,
+            inicio: plan.startDate,
+            porEntregable: porEntregable.map(x => ({ esp: x.esp, actividades: x.actividades })),
           }}/>
       )}
     </div>

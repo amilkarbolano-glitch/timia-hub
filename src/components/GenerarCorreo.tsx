@@ -11,7 +11,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { X, Copy, Download, Check } from 'lucide-react';
 import { adminStore, type PlanIssue } from '../lib/adminStore';
 import { realFase, type AvanceFase, type PesoModo } from '../lib/avance';
-import { rellenarPlantilla, guardarPlantilla, leerPlantilla, leerCompartida, guardarCompartida, contarLaminas, type PlantillaGuardada } from '../lib/plantillaPptx';
+import { rellenarPlantilla, guardarPlantilla, leerPlantilla, leerCompartida, guardarCompartida, contarLaminas, type PlantillaGuardada, type DatosGantt } from '../lib/plantillaPptx';
 
 const VINO = '#9a003d';   // el de la barra bajo la A del logo, muestreado del propio archivo
 const TINTA = '#1f2937';
@@ -80,7 +80,14 @@ export interface DatosCorreo {
   fases: AvanceFase[];
   pesoModo: PesoModo;
   issues: PlanIssue[];           // ya filtradas al corte por el plan
+  /** Para las láminas de Gantt, en el mismo orden que `fases`. */
+  porEntregable?: { esp: number; actividades: ActividadCorreo[] }[];
+  semanas?: number;
+  semanaHoy?: number;
+  inicio?: string;               // ISO yyyy-mm-dd, el arranque del plan
 }
+
+export interface ActividadCorreo { nombre: string; pct: number; ini: number; fin: number }
 
 /** Estilos con media query: el diálogo se usa igual desde el escritorio y desde
  *  el teléfono, y en línea no se pueden escribir puntos de corte. */
@@ -136,6 +143,23 @@ export default function GenerarCorreo({ datos, onClose }: { datos: DatosCorreo; 
     () => datos.fases.map(f => ({ label: f.label, pct: realFase(f, datos.pesoModo) })),
     [datos.fases, datos.pesoModo],
   );
+
+  /** Las láminas de Gantt: una por entregable, con el mismo nombre y el mismo
+   *  real que la tabla de resumen para que la presentación no se contradiga. */
+  const gantt = useMemo((): DatosGantt | undefined => {
+    if (!datos.porEntregable?.length || !datos.semanas) return undefined;
+    return {
+      semanas: datos.semanas,
+      semanaHoy: datos.semanaHoy ?? 1,
+      inicio: datos.inicio ? new Date(datos.inicio + 'T12:00:00') : undefined,
+      entregables: fases.map((f, i) => ({
+        titulo: nombreEntregable(f.label, i),
+        real: f.pct,
+        esp: datos.porEntregable?.[i]?.esp ?? f.pct,
+        actividades: datos.porEntregable?.[i]?.actividades ?? [],
+      })),
+    };
+  }, [datos, fases]);
 
   /** Guarda lo que se escribe una vez y vale para siempre. Se llama al salir de
    *  cada campo, no solo al copiar: son datos que se escriben una vez por
@@ -376,9 +400,11 @@ export default function GenerarCorreo({ datos, onClose }: { datos: DatosCorreo; 
         ? bloqueantes.map((i, n) => `${n + 1}. ${[i.title, i.detail].filter(Boolean).join(' ')}${i.responsable ? ` Responsable: ${i.responsable}` : ''}`).join('\n\n')
         : 'No se tienen bloqueantes por el momento',
     };
-    // La plantilla tiene siete filas fijas. Si el plan trae menos, las que
-    // sobran quedan en blanco en vez de con el texto de la semana pasada.
-    for (let i = 0; i < 7; i++) {
+    // La plantilla trae siete filas. Si el plan tiene menos, las que sobran
+    // quedan en blanco en vez de con el texto de la semana pasada; si tiene
+    // más, hay que darles valor o las filas de abajo salen con el {{E8}} a la
+    // vista.
+    for (let i = 0; i < Math.max(7, fases.length); i++) {
       v[`E${i + 1}`] = fases[i] ? nombreEntregable(fases[i].label, i) : '';
       v[`P${i + 1}`] = fases[i] ? un(fases[i].pct) : '';
     }
@@ -406,14 +432,14 @@ export default function GenerarCorreo({ datos, onClose }: { datos: DatosCorreo; 
     if (!plantilla) return;
     setPptx('generando');
     try {
-      const { blob, reemplazos, filasEntregable } = await rellenarPlantilla(plantilla.datos, valoresPlantilla(), fases.length);
+      const { blob, reemplazos, filasEntregable, ganttHechas } = await rellenarPlantilla(plantilla.datos, valoresPlantilla(), fases.length, gantt);
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
       a.download = `Seguimiento-${datos.projectId}-${datos.fechaCorte}.pptx`;
       a.click();
       URL.revokeObjectURL(a.href);
       recordar();
-      setPptx(`Listo · ${reemplazos} valores puestos · tabla ajustada a ${filasEntregable} entregables`);
+      setPptx(`Listo · ${reemplazos} valores puestos · ${filasEntregable} entregables${ganttHechas ? ` · ${ganttHechas} láminas de Gantt` : ''}`);
     } catch (e) { setPptx(String(e instanceof Error ? e.message : e)); }
   }
 
