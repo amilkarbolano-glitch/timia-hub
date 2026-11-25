@@ -1614,7 +1614,11 @@ function PlanDetail({ plan, getActivityPct: getActivityPctHoy, setActivityPct, e
           nombre: a.name,
           pct: getActivityPct(e.id, i, a),
           ini: a.startWeek,
-          fin: extensionFor(changes, plan.planKey, e.id, i, a.endWeek, issues, holidays).effEndWeek,
+          // La barra va sobre la línea base, no sobre lo replanificado: en el
+          // reporte se enseña lo que se comprometió. Con el fin efectivo las
+          // barras se estiraban con cada bloqueante y la lámina contaba una
+          // planificación que nadie prometió.
+          fin: a.endWeek,
           // Los ids, no un sí/no: la presentación numera las alertas y pone
           // encima del icono cuál es cuál, igual que el formato de Juan.
           idsBloq: suyas.filter(x => x.type === 'bloqueante').map(x => x.id),
