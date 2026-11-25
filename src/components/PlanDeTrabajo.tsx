@@ -1643,6 +1643,10 @@ function PlanDetail({ plan, getActivityPct: getActivityPctHoy, setActivityPct, e
           </div>
         </div>
         <div style={{ display:'flex', gap:8, flexShrink:0, alignItems:'center' }}>
+          {/* La fecha y los dos botones van en su propio grupo alineado abajo:
+              sueltos en la fila se alineaban cada uno contra las pastillas de
+              KPI, que son más altas, y el de correo quedaba descolgado. */}
+          <div style={{ display:'flex', gap:8, alignItems:'flex-end' }}>
           {/* Simular el esperado a otra fecha. El seguimiento se arma dos o tres
               días antes, y hay que saber contra qué número te van a comparar. */}
           <label title="Hacia adelante proyecta el esperado; hacia atrás muestra cómo estaba el plan ese día"
@@ -1658,17 +1662,18 @@ function PlanDetail({ plan, getActivityPct: getActivityPctHoy, setActivityPct, e
           </label>
           {simulando && (
             <button onClick={() => setFechaCorte('')} title="Volver al día de hoy"
-              style={{ alignSelf:'flex-end', padding:'5px 10px', fontSize:10.5, fontWeight:600,
+              style={{ padding:'5px 10px', fontSize:10.5, fontWeight:600,
                        border:'0.5px solid #ddd6fe', background:'#f5f3ff', color:'#6d28d9',
                        borderRadius:7, cursor:'pointer' }}>Volver a hoy</button>
           )}
           <button onClick={() => setCorreoAbierto(true)} data-print-hide
             title="Arma la imagen de resumen y el texto de alertas y bloqueantes para el correo semanal, con este mismo corte"
-            style={{ alignSelf:'flex-end', display:'flex', alignItems:'center', gap:5, padding:'5px 10px', fontSize:10.5,
+            style={{ display:'flex', alignItems:'center', gap:5, padding:'5px 10px', fontSize:10.5,
                      fontWeight:600, border:'0.5px solid #e2e8f0', background:'#fff', color:'#475569',
                      borderRadius:7, cursor:'pointer' }}>
             <Mail size={11}/> Generar correo
           </button>
+          </div>
           {[
             { label: mirandoAtras ? `REAL AL ${fmtShort(fechaCorte).toUpperCase()}` : 'AVANCE REAL',
               val:`${overallReal}%`, bg: mirandoAtras ? '#0f766e' : '#374151', c:'#fff', sc: mirandoAtras ? '#99f6e4' : '#9ca3af' },
@@ -1863,7 +1868,9 @@ function PlanDetail({ plan, getActivityPct: getActivityPctHoy, setActivityPct, e
             esperado: overallExpBase,
             fases: fasesAvance,
             pesoModo,
-            issues,
+            // Solo las de este plan: `issues` trae las de todos, y el reporte
+            // de un proyecto salía con las alertas y bloqueantes de otro.
+            issues: issues.filter(i => i.planKey === plan.planKey),
             semanas: Math.max(planWeeks, semanaHoy),
             semanaHoy,
             inicio: plan.startDate,
