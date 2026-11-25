@@ -159,6 +159,16 @@ export async function armarDeck(d: DatosDeck, base = ''): Promise<any> {
   return pptx;
 }
 
+/**
+ * El color de fondo, pintado como un rectángulo a sangre y no con el fondo de
+ * lámina. Es lo que hace la plantilla original, y además el <p:bg> que escribe
+ * pptxgenjs sale sin el <a:effectLst/> que pide el esquema: PowerPoint lo da
+ * por dañado y repara el archivo, que es cuando aparecen láminas en blanco.
+ */
+function fondo(slide: any, color: string) {
+  slide.addShape('rect', { x: 0, y: 0, w: W, h: H, fill: { color }, line: { color, width: 0 } });
+}
+
 /** El logotipo de arriba y la barra de abajo, que la plantilla pone en todas. */
 function sello(slide: any, img: Imagenes) {
   slide.addImage({ data: img.marca, x: 0.313, y: 0.279, w: 1.981, h: 0.316 });
@@ -167,7 +177,7 @@ function sello(slide: any, img: Imagenes) {
 
 function portadilla(pptx: any, img: Imagenes, d: DatosDeck) {
   const s = pptx.addSlide();
-  s.background = { color: NEGRO };
+  fondo(s, NEGRO);
   s.addImage({ data: img.portada, x: 0, y: 1.013, w: W, h: 6.487 });
   s.addImage({ data: img.wordmark, x: 1.004, y: 0.402, w: 5.63, h: 0.904 });
   s.addText('Seguimiento', {
@@ -182,7 +192,7 @@ function portadilla(pptx: any, img: Imagenes, d: DatosDeck) {
 
 function laminaTitulo(pptx: any, img: Imagenes, d: DatosDeck) {
   const s = pptx.addSlide();
-  s.background = { color: TAUPE };
+  fondo(s, TAUPE);
   // La plantilla lo pone al 33 % de opacidad: a plena tinta tapa la lámina.
   s.addImage({ data: img.tituloFondo, x: -0.085, y: 4.56, w: 13.418, h: 2.997, transparency: 67 });
   s.addText(d.titulo, {
@@ -194,7 +204,7 @@ function laminaTitulo(pptx: any, img: Imagenes, d: DatosDeck) {
 
 function cierre(pptx: any, img: Imagenes) {
   const s = pptx.addSlide();
-  s.background = { color: NEGRO };
+  fondo(s, NEGRO);
   s.addImage({ data: img.wordmark, x: 0.865, y: 2.286, w: 11.603, h: 1.864 });
 }
 
@@ -220,7 +230,7 @@ function pastillasKpi(s: any, real: number, esp: number, xs: number[], y: number
 
 function resumen(pptx: any, img: Imagenes, d: DatosDeck) {
   const s = pptx.addSlide();
-  s.background = { color: FONDO };
+  fondo(s, FONDO);
   // Marca de agua: en la plantilla va al 17 %.
   s.addImage({ data: img.resumenA, x: 5.519, y: -0.02, w: 7.814, h: 7.538, transparency: 83 });
   sello(s, img);
@@ -319,7 +329,7 @@ function resumen(pptx: any, img: Imagenes, d: DatosDeck) {
 
 function laminaGantt(pptx: any, img: Imagenes, g: NonNullable<DatosDeck['gantt']>, e: EntregableDeck) {
   const s = pptx.addSlide();
-  s.background = { color: FONDO };
+  fondo(s, FONDO);
   sello(s, img);
 
   s.addText(e.titulo, {
