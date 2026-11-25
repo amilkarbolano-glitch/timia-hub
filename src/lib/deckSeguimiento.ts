@@ -18,8 +18,11 @@ export interface ActividadDeck {
   pct: number;
   ini: number;
   fin: number;
-  alerta?: boolean;
-  bloqueante?: boolean;
+  /** Los números que esa actividad arrastra en la lista de alertas. */
+  alertas?: number[];
+  bloqueantes?: number[];
+  /** Hubo bloqueo aunque ya esté cerrado y no tenga número en el resumen. */
+  huboBloqueo?: boolean;
 }
 
 export interface EntregableDeck {
@@ -69,7 +72,7 @@ const W = 13.333, H = 7.5;
 // ── el Gantt, tal y como está dibujado en la plantilla ───────────────────────
 const X_NOM = 0.08, W_NOM = 3.44;          // pastilla con el nombre
 const X_PCT = 3.55, W_PCT = 0.47;          // pastilla con el porcentaje
-const X_ICO = 3.30, W_ICO = 0.172;         // el icono de alerta o bloqueante
+const X_ICO = 3.12, W_ICO = 0.165;         // los iconos de alerta y bloqueante
 const X_SEM = 4.443;                       // donde empieza la rejilla
 const ANCHO_REJILLA = 8.834;               // 14 semanas × 0,631 en el original
 const Y_TABLA = 1.604, ALTO_CAB = 0.666;
@@ -400,18 +403,14 @@ function laminaGantt(pptx: any, img: Imagenes, g: NonNullable<DatosDeck['gantt']
       x: X_NOM, y, w: W_NOM, h: altoFila, rectRadius: 0.05,
       fill: { color: i % 2 === 0 ? TAUPE : NEGRO }, line: { color: NEGRO, width: 0.5 },
     });
+    const nIconos = (a.alertas?.length ? 1 : 0) + (a.huboBloqueo ? 1 : 0);
+    const anchoNombre = W_NOM - 0.12 - nIconos * 0.2;
     s.addText(a.nombre, {
-      x: X_NOM + 0.05, y, w: W_NOM - 0.3, h: altoFila,
-      fontFace: ARIAL, fontSize: tamanoQueCabe(a.nombre, W_NOM - 0.3, altoFila, [9, 8, 7, 6]),
+      x: X_NOM + 0.05, y, w: anchoNombre, h: altoFila,
+      fontFace: ARIAL, fontSize: tamanoQueCabe(a.nombre, anchoNombre, altoFila, [9, 8, 7, 6]),
       color: HUMO, align: 'left', valign: 'middle', margin: 0,
     });
-    if (a.bloqueante || a.alerta) {
-      const tam = Math.min(W_ICO, altoFila - 0.08);
-      s.addImage({
-        data: a.bloqueante ? img.bloqueante : img.alerta,
-        x: X_ICO, y: y + (altoFila - tam) / 2, w: tam, h: tam,
-      });
-    }
+    marcas(s, img, a, y, altoFila);
     s.addShape('roundRect', {
       x: X_PCT, y, w: W_PCT, h: altoFila, rectRadius: 0.05,
       fill: { color: '6AA84F' }, line: { color: NEGRO, width: 0.5 },
@@ -449,6 +448,35 @@ function laminaGantt(pptx: any, img: Imagenes, g: NonNullable<DatosDeck['gantt']
   });
 
   leyenda(s, img);
+}
+
+/**
+ * El icono de alerta o de bloqueante de una actividad, con los números de las
+ * alertas que la afectan en pequeñito justo encima, como en la plantilla: si
+ * la bloquean la 1 y la 2, sobre el icono se lee "1 2".
+ */
+function marcas(s: any, img: Imagenes, a: ActividadDeck, y: number, altoFila: number) {
+  const cuales: { data: string; nums: number[] }[] = [];
+  if (a.alertas?.length) cuales.push({ data: img.alerta, nums: a.alertas });
+  if (a.huboBloqueo) cuales.push({ data: img.bloqueante, nums: a.bloqueantes ?? [] });
+  if (!cuales.length) return;
+
+  // Con filas apretadas no cabe el número encima: queda solo el icono, centrado.
+  const conNumero = altoFila >= 0.26;
+  const tam = Math.min(W_ICO, conNumero ? altoFila - 0.11 : altoFila - 0.06);
+  const yIcono = conNumero ? y + altoFila - tam - 0.02 : y + (altoFila - tam) / 2;
+  let x = X_ICO + (cuales.length === 1 ? 0.19 : 0);
+  for (const c of cuales) {
+    s.addImage({ data: c.data, x, y: yIcono, w: tam, h: tam });
+    if (conNumero && c.nums.length) {
+      s.addText(c.nums.join(' '), {
+        x: x - 0.09, y: y + 0.005, w: tam + 0.18, h: yIcono - y - 0.01,
+        fontFace: ARIAL, fontSize: 6, bold: true, color: HUMO,
+        align: 'center', valign: 'bottom', margin: 0,
+      });
+    }
+    x += 0.19;
+  }
 }
 
 function leyenda(s: any, img: Imagenes) {

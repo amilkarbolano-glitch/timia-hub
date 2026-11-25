@@ -87,7 +87,7 @@ export interface DatosCorreo {
   inicio?: string;               // ISO yyyy-mm-dd, el arranque del plan
 }
 
-export interface ActividadCorreo { nombre: string; pct: number; ini: number; fin: number; alerta?: boolean; bloqueante?: boolean }
+export interface ActividadCorreo { nombre: string; pct: number; ini: number; fin: number; idsAlerta?: string[]; idsBloq?: string[] }
 
 /** Estilos con media query: el diálogo se usa igual desde el escritorio y desde
  *  el teléfono, y en línea no se pueden escribir puntos de corte. */
@@ -137,11 +137,24 @@ export default function GenerarCorreo({ datos, onClose }: { datos: DatosCorreo; 
    *  real que la tabla de resumen para que la presentación no se contradiga. */
   const gantt = useMemo(() => {
     if (!datos.porEntregable?.length || !datos.semanas) return undefined;
+    // El número que le toca a cada alerta y a cada bloqueante es el de la
+    // lámina de resumen, así que sale de esas mismas listas ya ordenadas.
+    const nAlerta = new Map(alertas.map((x, n) => [x.id, n + 1]));
+    const nBloq = new Map(bloqueantes.map((x, n) => [x.id, n + 1]));
+    const numeros = (ids: string[] | undefined, mapa: Map<string, number>) =>
+      (ids ?? []).map(id => mapa.get(id)).filter((n): n is number => !!n).sort((a, b) => a - b);
     const entregables: EntregableDeck[] = fases.map((f, i) => ({
       titulo: nombreEntregable(f.label, i),
       real: f.pct,
       esp: datos.porEntregable?.[i]?.esp ?? f.pct,
-      actividades: datos.porEntregable?.[i]?.actividades ?? [],
+      actividades: (datos.porEntregable?.[i]?.actividades ?? []).map(a => ({
+        nombre: a.nombre, pct: a.pct, ini: a.ini, fin: a.fin,
+        alertas: numeros(a.idsAlerta, nAlerta),
+        // Un bloqueante ya cerrado no está en la lista del resumen y se queda
+        // sin número, pero el icono se mantiene: el bloqueo pasó.
+        bloqueantes: numeros(a.idsBloq, nBloq),
+        huboBloqueo: (a.idsBloq?.length ?? 0) > 0,
+      })),
     }));
     return {
       semanas: datos.semanas,

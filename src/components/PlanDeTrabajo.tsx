@@ -1599,8 +1599,10 @@ function PlanDetail({ plan, getActivityPct: getActivityPctHoy, setActivityPct, e
           pct: getActivityPct(e.id, i, a),
           ini: a.startWeek,
           fin: extensionFor(changes, plan.planKey, e.id, i, a.endWeek, issues, holidays).effEndWeek,
-          bloqueante: suyas.some(x => x.type === 'bloqueante'),
-          alerta: suyas.some(x => x.type === 'alerta' && !x.endDate),
+          // Los ids, no un sí/no: la presentación numera las alertas y pone
+          // encima del icono cuál es cuál, igual que el formato de Juan.
+          idsBloq: suyas.filter(x => x.type === 'bloqueante').map(x => x.id),
+          idsAlerta: suyas.filter(x => x.type === 'alerta' && !x.endDate).map(x => x.id),
         };
       }),
     };
