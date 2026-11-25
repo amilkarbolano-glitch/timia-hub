@@ -11,7 +11,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { X, Copy, Download, Check } from 'lucide-react';
 import { adminStore, type PlanIssue } from '../lib/adminStore';
 import { realFase, type AvanceFase, type PesoModo } from '../lib/avance';
-import { rellenarPlantilla, guardarPlantilla, leerPlantilla, leerCompartida, guardarCompartida, contarLaminas, type PlantillaGuardada, type DatosGantt } from '../lib/plantillaPptx';
+import type { EntregableDeck } from '../lib/deckSeguimiento';
 
 const VINO = '#9a003d';   // el de la barra bajo la A del logo, muestreado del propio archivo
 const TINTA = '#1f2937';
@@ -87,7 +87,7 @@ export interface DatosCorreo {
   inicio?: string;               // ISO yyyy-mm-dd, el arranque del plan
 }
 
-export interface ActividadCorreo { nombre: string; pct: number; ini: number; fin: number }
+export interface ActividadCorreo { nombre: string; pct: number; ini: number; fin: number; alerta?: boolean; bloqueante?: boolean }
 
 /** Estilos con media query: el diálogo se usa igual desde el escritorio y desde
  *  el teléfono, y en línea no se pueden escribir puntos de corte. */
@@ -120,18 +120,7 @@ export default function GenerarCorreo({ datos, onClose }: { datos: DatosCorreo; 
   /** Logo y marca de agua salen de la plantilla real de TIMIA, no redibujados:
    *  así el correo no se parece al formato del banco, es ese formato. */
   const [marca, setMarca] = useState<{ logo?: HTMLImageElement; agua?: HTMLImageElement }>({});
-  const [plantilla, setPlantilla] = useState<PlantillaGuardada | null>(null);
   const [pptx, setPptx] = useState<string>('');
-  const [laminas, setLaminas] = useState<number>(0);
-  useEffect(() => {
-    const compartida = leerCompartida(datos.projectId);
-    const puesta = (p: PlantillaGuardada | null) => {
-      setPlantilla(p);
-      if (p) contarLaminas(p.datos).then(setLaminas); else setLaminas(0);
-    };
-    if (compartida) { puesta(compartida); return; }
-    leerPlantilla(datos.projectId).then(puesta);
-  }, [datos.projectId]);
   const lienzo = useRef<HTMLCanvasElement | null>(null);
 
   const abiertas = datos.issues.filter(i => !i.endDate);
@@ -146,18 +135,19 @@ export default function GenerarCorreo({ datos, onClose }: { datos: DatosCorreo; 
 
   /** Las láminas de Gantt: una por entregable, con el mismo nombre y el mismo
    *  real que la tabla de resumen para que la presentación no se contradiga. */
-  const gantt = useMemo((): DatosGantt | undefined => {
+  const gantt = useMemo(() => {
     if (!datos.porEntregable?.length || !datos.semanas) return undefined;
+    const entregables: EntregableDeck[] = fases.map((f, i) => ({
+      titulo: nombreEntregable(f.label, i),
+      real: f.pct,
+      esp: datos.porEntregable?.[i]?.esp ?? f.pct,
+      actividades: datos.porEntregable?.[i]?.actividades ?? [],
+    }));
     return {
       semanas: datos.semanas,
       semanaHoy: datos.semanaHoy ?? 1,
       inicio: datos.inicio ? new Date(datos.inicio + 'T12:00:00') : undefined,
-      entregables: fases.map((f, i) => ({
-        titulo: nombreEntregable(f.label, i),
-        real: f.pct,
-        esp: datos.porEntregable?.[i]?.esp ?? f.pct,
-        actividades: datos.porEntregable?.[i]?.actividades ?? [],
-      })),
+      entregables,
     };
   }, [datos, fases]);
 
@@ -383,63 +373,43 @@ export default function GenerarCorreo({ datos, onClose }: { datos: DatosCorreo; 
   }
 
   const MES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
-  function valoresPlantilla(): Record<string, string> {
-    const d = new Date(datos.fechaCorte + 'T12:00:00');
-    const v: Record<string, string> = {
-      FECHA: `${d.getDate()} ${MES[d.getMonth()]} ${d.getFullYear()}`,
-      // En la portadilla el título va en dos líneas, como en la plantilla: el
-      // código arriba y el nombre debajo. En una sola se salía de la caja.
-      TITULO: sda.trim() ? `${sda.trim()} -\n${proyecto?.name ?? datos.projectId}` : (proyecto?.name ?? datos.projectId),
-      REAL: un(datos.real), ESP: un(datos.esperado),
-      DIF: `${dif >= 0 ? '+' : '-'}${Math.abs(dif).toFixed(1)}%`,
-      RESP_BBVA: respBBVA || '—', RESP_TIMIA: respTimia || '—',
-      ALERTAS: alertas.length
-        ? alertas.map((i, n) => `${n + 1}. ${[i.title, i.detail].filter(Boolean).join(' ')}${i.responsable ? ` Responsable: ${i.responsable}` : ''}`).join('\n\n')
-        : 'No se tienen alertas por el momento',
-      BLOQUEANTES: bloqueantes.length
-        ? bloqueantes.map((i, n) => `${n + 1}. ${[i.title, i.detail].filter(Boolean).join(' ')}${i.responsable ? ` Responsable: ${i.responsable}` : ''}`).join('\n\n')
-        : 'No se tienen bloqueantes por el momento',
-    };
-    // La plantilla trae siete filas. Si el plan tiene menos, las que sobran
-    // quedan en blanco en vez de con el texto de la semana pasada; si tiene
-    // más, hay que darles valor o las filas de abajo salen con el {{E8}} a la
-    // vista.
-    for (let i = 0; i < Math.max(7, fases.length); i++) {
-      v[`E${i + 1}`] = fases[i] ? nombreEntregable(fases[i].label, i) : '';
-      v[`P${i + 1}`] = fases[i] ? un(fases[i].pct) : '';
-    }
-    return v;
-  }
+  const linea = (i: PlanIssue) =>
+    `${[i.title, i.detail].filter(Boolean).join(' ')}${i.responsable ? ` Responsable: ${i.responsable}` : ''}`;
 
-  async function subirPlantilla(f: File, paraTodos: boolean) {
-    try {
-      const datosArchivo = await f.arrayBuffer();
-      if (paraTodos) {
-        guardarCompartida(datos.projectId, f.name, datosArchivo);
-        setPlantilla({ nombre: f.name, guardadaEn: new Date().toISOString(), datos: datosArchivo, compartida: true });
-        setLaminas(await contarLaminas(datosArchivo));
-        setPptx('Guardada para todo el equipo. Al resto le aparece al volver a entrar.');
-      } else {
-        await guardarPlantilla(datos.projectId, f.name, datosArchivo);
-        setPlantilla(await leerPlantilla(datos.projectId));
-        setLaminas(await contarLaminas(datosArchivo));
-        setPptx('');
-      }
-    } catch (e) { setPptx(`No pude guardar la plantilla: ${e}`); }
-  }
-
+  /**
+   * La presentación se dibuja entera aquí: fondos, rejilla, barras y tablas.
+   * Antes se rellenaba la .pptx que alguien tenía que subir una vez en cada
+   * proyecto, y lo que no estuviera dibujado en esa plantilla no había forma
+   * de añadirlo —los iconos de alerta por actividad, sin ir más lejos—.
+   */
   async function descargarPptx() {
-    if (!plantilla) return;
     setPptx('generando');
     try {
-      const { blob, reemplazos, filasEntregable, ganttHechas } = await rellenarPlantilla(plantilla.datos, valoresPlantilla(), fases.length, gantt);
+      const { construirDeck } = await import('../lib/deckSeguimiento');
+      // En GitHub Pages la app cuelga de /timia-hub/, así que los PNG de los
+      // fondos se piden con la misma raíz que el resto de los estáticos.
+      const raizApp = (import.meta.env.BASE_URL ?? '/').replace(/\/$/, '');
+      const d = new Date(datos.fechaCorte + 'T12:00:00');
+      const nombre = proyecto?.name ?? datos.projectId;
+      const blob = await construirDeck({
+        fecha: `${d.getDate()} ${MES[d.getMonth()]} ${d.getFullYear()}`,
+        titulo: sda.trim() ? `${sda.trim()} - ${nombre}` : nombre,
+        real: datos.real,
+        esp: datos.esperado,
+        alertas: alertas.map(linea),
+        bloqueantes: bloqueantes.map(linea),
+        resumen: fases.map((f, i) => ({ label: nombreEntregable(f.label, i), pct: un(f.pct) })),
+        respBBVA: respBBVA || '—',
+        respTimia: respTimia || '—',
+        gantt,
+      }, raizApp);
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
-      a.download = `Seguimiento-${datos.projectId}-${datos.fechaCorte}.pptx`;
+      a.download = `Seguimiento ${nombre} ${datos.fechaCorte}.pptx`;
       a.click();
       URL.revokeObjectURL(a.href);
       recordar();
-      setPptx(`Listo · ${reemplazos} valores puestos · ${filasEntregable} entregables${ganttHechas ? ` · ${ganttHechas} láminas de Gantt` : ''}`);
+      setPptx(`Listo · ${4 + (gantt?.entregables.length ?? 0)} láminas`);
     } catch (e) { setPptx(String(e instanceof Error ? e.message : e)); }
   }
 
@@ -486,49 +456,15 @@ export default function GenerarCorreo({ datos, onClose }: { datos: DatosCorreo; 
 
         <div style={{ border: `0.5px solid ${LINEA}`, borderRadius: 10, padding: 12, marginBottom: 14, background: '#fafafa' }}>
           <div style={{ fontSize: 12, fontWeight: 600, color: TINTA, marginBottom: 4 }}>Presentación adjunta · {proyecto?.name ?? datos.projectId}</div>
-          {plantilla ? (
-            <>
-              <div style={{ fontSize: 10.5, color: GRIS, marginBottom: 8 }}>
-                Plantilla: <b style={{ color: TINTA }}>{plantilla.nombre}</b> · guardada el {plantilla.guardadaEn.slice(0, 10)}
-                {plantilla.compartida ? ' · compartida con el equipo' : ' · solo en este navegador'}
-                {laminas > 0 && <> · <b style={{ color: laminas >= 11 ? '#047857' : '#b45309' }}>{laminas} láminas</b>
-                  {laminas < 11 && ' (sin las de Gantt)'}</>}.
-                Se rellenan la portada y el resumen; las láminas de Gantt quedan como estén en la plantilla.
-                La tabla se ajusta a los {fases.length} entregables del plan sin cambiar de alto, y el texto de alertas
-                se encoge si no cabe.
-              </div>
-              <div className="gc-acciones">
-                <button onClick={descargarPptx} style={boton(VINO, '#fff')}>
-                  <Download size={13}/>{pptx === 'generando' ? 'Generando…' : 'Descargar presentación'}
-                </button>
-                <label style={{ ...boton('#f1f5f9', TINTA), cursor: 'pointer' }}>
-                  Cambiar plantilla
-                  <input type="file" accept=".pptx" style={{ display: 'none' }}
-                    onChange={e => { const f = e.target.files?.[0]; if (f) subirPlantilla(f, true); }}/>
-                </label>
-              </div>
-            </>
-          ) : (
-            <>
-              <div style={{ fontSize: 10.5, color: GRIS, marginBottom: 8 }}>
-                Sube una vez la plantilla de <b>{proyecto?.name ?? datos.projectId}</b>. Compartida queda guardada con el
-                proyecto y el resto del equipo la recibe sin hacer nada; solo para ti, se queda en este navegador. No va
-                al repositorio ni a una URL pública: es la presentación del banco.
-              </div>
-              <div className="gc-acciones">
-                <label style={{ ...boton(VINO, '#fff'), cursor: 'pointer' }}>
-                  Subir para todo el equipo
-                  <input type="file" accept=".pptx" style={{ display: 'none' }}
-                    onChange={e => { const f = e.target.files?.[0]; if (f) subirPlantilla(f, true); }}/>
-                </label>
-                <label style={{ ...boton('#f1f5f9', TINTA), cursor: 'pointer' }}>
-                  Solo para mí
-                  <input type="file" accept=".pptx" style={{ display: 'none' }}
-                    onChange={e => { const f = e.target.files?.[0]; if (f) subirPlantilla(f, false); }}/>
-                </label>
-              </div>
-            </>
-          )}
+          <div style={{ fontSize: 10.5, color: GRIS, marginBottom: 8 }}>
+            Se arma con lo que está en pantalla: portadilla, resumen con alertas y bloqueantes, una lámina de Gantt
+            por entregable —con sus iconos de alerta y bloqueante— y el cierre. No hay que cargar ninguna plantilla.
+          </div>
+          <div className="gc-acciones">
+            <button onClick={descargarPptx} style={boton(VINO, '#fff')}>
+              <Download size={13}/>{pptx === 'generando' ? 'Generando…' : 'Descargar presentación'}
+            </button>
+          </div>
           {pptx && pptx !== 'generando' && (
             <div style={{ marginTop: 8, fontSize: 10.5, color: pptx.startsWith('Listo') ? '#047857' : '#b91c1c', fontWeight: 600 }}>{pptx}</div>
           )}

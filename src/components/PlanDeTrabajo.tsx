@@ -1588,12 +1588,21 @@ function PlanDetail({ plan, getActivityPct: getActivityPctHoy, setActivityPct, e
       id: e.id,
       real, esp,
       dif: parseFloat((real - esp).toFixed(1)),
-      actividades: e.activities.map((a, i) => ({
-        nombre: a.name,
-        pct: getActivityPct(e.id, i, a),
-        ini: a.startWeek,
-        fin: extensionFor(changes, plan.planKey, e.id, i, a.endWeek, issues, holidays).effEndWeek,
-      })),
+      actividades: e.activities.map((a, i) => {
+        // Las mismas que marca el Gantt de pantalla: el bloqueante se queda
+        // aunque se haya resuelto —el bloqueo ya ocurrió— y la alerta solo
+        // mientras siga abierta.
+        const suyas = issues.filter(x => x.planKey === plan.planKey
+          && issueImpacts(x).some(m => m.entregableId === e.id && m.actIdx === i));
+        return {
+          nombre: a.name,
+          pct: getActivityPct(e.id, i, a),
+          ini: a.startWeek,
+          fin: extensionFor(changes, plan.planKey, e.id, i, a.endWeek, issues, holidays).effEndWeek,
+          bloqueante: suyas.some(x => x.type === 'bloqueante'),
+          alerta: suyas.some(x => x.type === 'alerta' && !x.endDate),
+        };
+      }),
     };
   });
 
