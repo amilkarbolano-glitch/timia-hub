@@ -26,7 +26,7 @@ import {
 import {
   type PesoModo, PESO_MODO_DEFAULT, seriePlanConsolidada, seriePlanFase, marcasDe,
   seriePlanConExtension,
-  enSemana, enDia, realPlan, realFase, type AvanceFase,
+  enSemana, enDia, realPlan, realFase, esperadoFase, type AvanceFase,
 } from '../lib/avance';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -810,7 +810,7 @@ function EntregableSection({ block, projectId, sectionIdx, getActivityPct, setAc
   // exigir el trabajo que toca entregar el viernes.
   const esperadoPorCasillas = (fase: AvanceFase) =>
     todayWeekIdx === undefined ? block.pctExp
-      : parseFloat(enDia(seriePlanFase(fase, semanasFase), todayWeekIdx + 1, diaHabil).toFixed(1));
+      : esperadoFase(fase, Math.max(semanasFase, todayWeekIdx + 1), todayWeekIdx + 1, diaHabil);
 
   const basePctExp = block.activities.length === 0 || todayWeekIdx === undefined
     ? block.pctExp
@@ -1569,6 +1569,17 @@ function PlanDetail({ plan, getActivityPct: getActivityPctHoy, setActivityPct, e
   // está frente a lo acordado.
   const overallDif = kpis.dif;
 
+  // Las fechas de cada columna de semana, calculadas como las de la rejilla:
+  // días hábiles y saltándose los festivos. A siete días por semana la cuarta
+  // caía el 3 de noviembre y en pantalla es el 4, así que la presentación salía
+  // con el corte una semana antes de donde está.
+  const dd = (d: Date) => `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`;
+  const semanasFechas = Array.from({ length: Math.max(planWeeks, semanaHoy) }, (_, i) => {
+    const ini = weekToActualDate(plan.startDate, i + 1, holidays);
+    if (!ini) return { ini: '', fin: '' };
+    return { ini: dd(ini), fin: dd(addBusinessDays(ini, 4, holidays)) };
+  });
+
   // Una entrada por entregable con lo que hace falta en los dos sitios donde se
   // enseña: las tarjetas de arriba y las láminas de Gantt del correo. Antes el
   // cálculo vivía dentro del map de las tarjetas y el correo no lo tenía, que
@@ -1580,10 +1591,15 @@ function PlanDetail({ plan, getActivityPct: getActivityPctHoy, setActivityPct, e
       : porSemana && faseE
         ? parseFloat(realFase(faseE, pesoModo).toFixed(1))
         : parseFloat((e.activities.reduce((s, a, i) => s + getActivityPct(e.id, i, a), 0) / e.activities.length).toFixed(1));
+    // Contra la línea base, igual que la insignia de la fase y que el KPI del
+    // plan: es el compromiso, y es lo que se reporta. Aquí se calculaba contra
+    // la fase replanificada, así que la tarjeta y la presentación daban un
+    // esperado más bajo que la pantalla del entregable —83,3 contra 59— y con
+    // él una diferencia que no era la que se estaba reportando.
     const esp = !e.activities.length ? e.pctExp
-      : porSemana && faseExtE
-        ? parseFloat(enDia(seriePlanFase(faseExtE, Math.max(planWeeks, semanaHoy)), semanaHoy, diaHoy).toFixed(1))
-        : parseFloat((e.activities.reduce((s, a, i) => s + computeActExpPct(a.startWeek, extensionFor(changes, plan.planKey, e.id, i, a.endWeek, issues, holidays).effEndWeek, todayWeekIdx), 0) / e.activities.length).toFixed(1));
+      : porSemana && faseE
+        ? esperadoFase(faseE, Math.max(planWeeks, semanaHoy), semanaHoy, diaHoy)
+        : parseFloat((e.activities.reduce((s, a) => s + computeActExpPct(a.startWeek, a.endWeek, todayWeekIdx), 0) / e.activities.length).toFixed(1));
     return {
       id: e.id,
       real, esp,
@@ -1884,6 +1900,8 @@ function PlanDetail({ plan, getActivityPct: getActivityPctHoy, setActivityPct, e
             issues: issues.filter(i => i.planKey === plan.planKey),
             semanas: Math.max(planWeeks, semanaHoy),
             semanaHoy,
+            diaHoy,
+            semanasFechas,
             inicio: plan.startDate,
             porEntregable: porEntregable.map(x => ({ esp: x.esp, actividades: x.actividades })),
           }}/>

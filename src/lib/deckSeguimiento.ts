@@ -45,6 +45,10 @@ export interface DatosDeck {
   gantt?: {
     semanas: number;
     semanaHoy: number;
+    /** Día hábil en curso, 1..5. Sitúa la raya de hoy dentro de su semana. */
+    diaHoy?: number;
+    /** Las fechas de cada semana tal y como las pinta la rejilla de pantalla. */
+    semanasFechas?: { ini: string; fin: string }[];
     inicio?: Date;
     entregables: EntregableDeck[];
   };
@@ -128,11 +132,39 @@ function tamanoQueCabe(texto: string, ancho: number, alto: number, candidatos: n
   return candidatos[candidatos.length - 1];
 }
 
-/** "S3", "27/10-", "02/11" — las tres líneas de una columna de semana. */
-function etiquetaSemana(inicio: Date | undefined, k: number): string {
-  if (!inicio) return `S${k + 1}`;
-  const d0 = new Date(inicio); d0.setDate(d0.getDate() + k * 7);
-  const d1 = new Date(d0);     d1.setDate(d1.getDate() + 6);
+/**
+ * El tamaño del nombre de una actividad.
+ *
+ * Todas salen al mismo tamaño mientras quepan en dos renglones, que es como se
+ * lee una lista; solo baja cuando el nombre no entra. Antes se exigía que
+ * cupiera en uno, así que en la misma lámina convivían nombres a 9 puntos con
+ * otros a 6 y parecía un error de maquetación.
+ */
+function tamanoNombre(texto: string, ancho: number, alto: number): number {
+  const utilW = (ancho - 0.06) * 72;
+  const utilH = (alto - 0.03) * 72;
+  for (const sz of [9, 8, 7, 6]) {
+    const porLinea = Math.max(8, Math.floor(utilW / (sz * 0.5)));
+    const lineas = Math.max(1, Math.ceil(texto.length / porLinea));
+    if (lineas <= 2 && lineas * sz * 1.05 <= utilH) return sz;
+  }
+  return 6;
+}
+
+/**
+ * "S3", "27/10-", "02/11" — las tres líneas de una columna de semana.
+ *
+ * Las fechas vienen calculadas desde el plan, con sus días hábiles y sus
+ * festivos. Contarlas aquí de siete en siete desde el arranque desplazaba las
+ * columnas en cuanto había un festivo de por medio, y la presentación salía con
+ * el corte en otra semana que la pantalla.
+ */
+function etiquetaSemana(g: { inicio?: Date; semanasFechas?: { ini: string; fin: string }[] }, k: number): string {
+  const f = g.semanasFechas?.[k];
+  if (f?.ini) return `S${k + 1}\n${f.ini}-\n${f.fin}`;
+  if (!g.inicio) return `S${k + 1}`;
+  const d0 = new Date(g.inicio); d0.setDate(d0.getDate() + k * 7);
+  const d1 = new Date(d0);       d1.setDate(d1.getDate() + 6);
   const dd = (d: Date) => `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`;
   return `S${k + 1}\n${dd(d0)}-\n${dd(d1)}`;
 }
@@ -375,7 +407,7 @@ function laminaGantt(pptx: any, img: Imagenes, g: NonNullable<DatosDeck['gantt']
       x: X_SEM + k * wSem, y: Y_TABLA, w: wSem, h: ALTO_CAB,
       fill: { color: MAGENTA }, line: { color: 'FFFFFF', width: 0.75 },
     });
-    s.addText(etiquetaSemana(g.inicio, k), {
+    s.addText(etiquetaSemana(g, k), {
       x: X_SEM + k * wSem, y: Y_TABLA, w: wSem, h: ALTO_CAB,
       fontFace: ARIAL, fontSize: szCab, bold: true, color: 'FFFFFF',
       align: 'center', valign: 'middle', margin: 0, lineSpacingMultiple: 1,
@@ -407,8 +439,8 @@ function laminaGantt(pptx: any, img: Imagenes, g: NonNullable<DatosDeck['gantt']
     const anchoNombre = W_NOM - 0.12 - nIconos * 0.2;
     s.addText(a.nombre, {
       x: X_NOM + 0.05, y, w: anchoNombre, h: altoFila,
-      fontFace: ARIAL, fontSize: tamanoQueCabe(a.nombre, anchoNombre, altoFila, [9, 8, 7, 6]),
-      color: HUMO, align: 'left', valign: 'middle', margin: 0,
+      fontFace: ARIAL, fontSize: tamanoNombre(a.nombre, anchoNombre, altoFila),
+      color: HUMO, align: 'left', valign: 'middle', margin: 0, lineSpacingMultiple: 0.9,
     });
     marcas(s, img, a, y, altoFila);
     s.addShape('roundRect', {
@@ -437,7 +469,10 @@ function laminaGantt(pptx: any, img: Imagenes, g: NonNullable<DatosDeck['gantt']
   });
 
   // ── la línea de hoy ────────────────────────────────────────────────────────
-  const xh = X_SEM + Math.max(0, Math.min(g.semanaHoy - 1, g.semanas)) * wSem;
+  // Dentro de la semana, según el día hábil: un lunes y un viernes de la misma
+  // semana no están en el mismo sitio, y así es como lo pinta la pantalla.
+  const dentro = Math.max(0, Math.min(5, g.diaHoy ?? 5)) / 5;
+  const xh = X_SEM + Math.max(0, Math.min(g.semanaHoy - 1 + dentro, g.semanas)) * wSem;
   s.addShape('line', {
     x: xh, y: Y_TABLA + ALTO_CAB, w: 0, h: altoCuerpo,
     line: { color: MAGENTA, width: 1.25, dashType: 'dash' },
