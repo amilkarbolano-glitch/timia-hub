@@ -81,11 +81,17 @@ ok(!/DIF\. VS REPLAN/.test(fuente) && !/ESPERADO · REPLAN/.test(fuente),
    'el esperado replanificado ya no se enseña: nadie lo entendía, ni el jefe');
 
 console.log('\n── El impacto se cuenta en días ──');
-ok(/label:'IMPACTO EN EL CRONOGRAMA'/.test(fuente), 'el encabezado enseña los días que se corre la entrega');
+ok(/label:'IMPACTO EN LA ENTREGA'/.test(fuente), 'el encabezado enseña los días que se corre la entrega');
 ok(/const diasCorridos = endDate && newEndDate/.test(fuente),
    'medidos entre la fecha de fin de la línea base y la nueva, no sumando tareas');
 ok(/businessDaysBetween\(endDate\.toISOString/.test(fuente), 'y en días hábiles, no naturales');
-ok(/'cabe'/.test(fuente), 'si las fechas corridas caben en el plan, lo dice en vez de inventar un número');
+// Antes esto decía «cabe» cuando las tareas corridas no movían el cierre. Se
+// cambió a propósito por «0 d» con los días perdidos debajo: el impacto se
+// dice siempre en la misma unidad, y «cabe» no se podía comparar con «+5 d».
+ok(/val: changeSummary\.diasCorridos > 0 \? `\+\$\{changeSummary\.diasCorridos\} d` : '0 d'/.test(fuente),
+   'si las fechas corridas caben en el plan dice 0 d, no una palabra que no se puede comparar');
+ok(/d con holgura/.test(fuente),
+   'y lo que se absorbió baja a la segunda línea: con holgura no es gratis');
 ok(/const diasFase = Math\.round\(\(finEfectivo - finBase\) \* 5\)/.test(fuente),
    'cada fase enseña lo que se corre su propio fin');
 ok(/Sumar los días de todas las tareas diría que/.test(fuente),

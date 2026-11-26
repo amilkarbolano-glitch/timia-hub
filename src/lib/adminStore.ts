@@ -277,6 +277,12 @@ export interface PlanIssue {
   notaCierre?: string;
   /** Si nació al escalar otra alerta, el id de aquélla. */
   origenId?: string;
+  /**
+   * Hilos de correo relacionados. Opcional a propósito: muchos bloqueantes
+   * nacen en una reunión o en un chat y nunca tienen correo. Cuando sí lo
+   * tienen, es lo primero que pide quien revisa el seguimiento.
+   */
+  hiloIds?: string[];
 }
 
 /**
@@ -436,6 +442,7 @@ export interface EdicionIssue {
   notaCierre?: string;
   responsable?: string;
   impacts: PlanImpact[];
+  hiloIds?: string[];
 }
 
 /**
@@ -455,6 +462,7 @@ export function aplicarEdicionIssue(i: PlanIssue, e: EdicionIssue, por: string, 
     startDate: e.startDate,
     responsable: e.responsable?.trim() || undefined,
     impacts: e.impacts,
+    hiloIds: e.hiloIds?.length ? e.hiloIds : undefined,
     endDate: fin,
     closedBy: fin ? (i.closedBy ?? por) : undefined,
     closedAt: fin ? (i.closedAt ?? ahora) : undefined,
@@ -487,6 +495,8 @@ export function escalarAlerta(a: PlanIssue, nota: string, por: string, fecha: st
     startDate: fecha,
     responsable: a.responsable,
     impacts: issueImpacts(a),
+    // El correo que venía con la alerta sigue siendo el mismo correo.
+    hiloIds: a.hiloIds?.length ? [...a.hiloIds] : undefined,
     createdBy: por, createdAt: ahora,
     origenId: a.id,
   };
