@@ -43,6 +43,43 @@ console.log('\n── Las imágenes no se guardan en la base ──');
 const bloqueRegistro = api.slice(api.indexOf('registro = {'), api.indexOf('return {"ok": True'));
 ok(!bloqueRegistro.includes('contenido'), 'el registro guarda nombres y lectura, no los bytes');
 
+console.log('\n── Una captura por petición: el minuto de CloudFront ──');
+ok(vist.includes('EN_VUELO'), 'el navegador parte la carga en varias peticiones');
+ok(/capturas:\s*\[\{ nombre: c\.nombre/.test(vist),
+   'y cada petición lleva una sola captura, no el lote entero');
+ok(vist.includes('envio') && api.includes('envio'),
+   'las peticiones de una misma carga van marcadas con el mismo envío');
+ok(api.includes('asyncio.gather') && api.includes('Semaphore'),
+   'el servidor lee en paralelo, con tope, en vez de una detrás de otra');
+ok(/rate_limit\(request, limit=(?:[2-9]\d|\d{3})/.test(api.slice(api.indexOf('async def registrar'))),
+   'el tope de peticiones cuenta imágenes, no cargas: 20 capturas no lo agotan');
+ok(vist.includes('setResultados([...hechos])'),
+   'los resultados se enseñan según llegan, no todos al final');
+
+console.log('\n── Se ve lo que leyó el lector ──');
+ok(vist.includes('function horasDe'), 'hay una lectura de las horas devueltas');
+ok(vist.includes('return filas') && vist.includes('contrato'),
+   'y si no reconoce la forma devuelve nada en vez de inventarla');
+
+console.log('\n── Buscarse por nombre sin publicar el directorio ──');
+ok(api.includes('_correo_tapado'), 'el buscador tapa el correo');
+const bloqueBuscar = api.slice(api.indexOf('async def buscar'), api.indexOf('async def registrar'));
+ok(bloqueBuscar.includes('len(texto) < 2'), 'pide dos letras como mínimo');
+ok(bloqueBuscar.includes('len(encontradas) == 6'), 'y devuelve pocas');
+ok(!/correo\.startswith|correo\.lower\(\)\.startswith/.test(bloqueBuscar),
+   'busca por nombre, no por correo: adivinar correos es lo que no queremos');
+ok(api.includes('find_user_by_id'), 'el registro resuelve la persona por identificador');
+ok(!vist.includes('h.correo}</span>\n') || vist.includes('{h.correo}'),
+   'la vista enseña el correo tapado que le dio el servidor, no lo reconstruye');
+
+console.log('\n── La cuenta de Google solo rellena el campo ──');
+ok(vist.includes('correoDeToken'), 'se saca el correo del token de One Tap');
+ok(vist.includes('NO autentica'), 'y está escrito que eso no autentica a nadie');
+ok(vist.includes("fetch('/api/auth/config')"),
+   'el cliente de Google sale de la configuración, no está escrito en el código');
+ok(vist.includes('comprobarCorreo(c)'),
+   'el correo detectado pasa por la misma validación que el escrito a mano');
+
 console.log('\n── Mensajes para la persona, no códigos ──');
 for (const estado of ['SIN_CONFIGURAR', 'TIMEOUT', 'ERROR_SCRIPT', 'ERROR_RED']) {
   ok(vist.includes(`'${estado}'`), `«${estado}» tiene su explicación en la vista`);

@@ -7,8 +7,8 @@
 // La lectura de la imagen la hace un Apps Script que mantiene otra persona. Su
 // URL vive en el servidor, no aquí.
 
-import React, { useState, useRef } from 'react';
-import { Upload, X, CheckCircle, AlertTriangle, Loader2, Camera } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Upload, X, CheckCircle, AlertTriangle, Loader2, Camera, Search, UserPlus } from 'lucide-react';
 import { TimiaMark, TimiaWordmark } from './TimiaLogo';
 
 const MAX_IMAGENES = 20;
@@ -22,6 +22,50 @@ const EN_VUELO = 3;
 interface Captura { id: string; nombre: string; contenido: string; peso: number }
 interface Resultado { captura: string; estado: string; detalle?: string; respuesta?: unknown }
 interface Fila { dia: string; horas: string }
+interface Hallado { id: string; nombre: string; correo: string }
+
+/** Lo que One Tap deja en `window`. Tipado a mano para no traer el paquete. */
+interface VentanaGoogle extends Window {
+  google?: { accounts?: { id?: {
+    initialize: (c: Record<string, unknown>) => void;
+    prompt: () => void;
+  } } };
+}
+
+const GIS_SRC = 'https://accounts.google.com/gsi/client';
+
+/** Carga el script de Google una sola vez, pase lo que pase. */
+function cargarGis(): Promise<void> {
+  const ya = document.querySelector(`script[src="${GIS_SRC}"]`);
+  if (ya) return (ya as HTMLScriptElement).dataset.listo === '1'
+    ? Promise.resolve()
+    : new Promise(res => ya.addEventListener('load', () => res(), { once: true }));
+  return new Promise((res, rej) => {
+    const sc = document.createElement('script');
+    sc.src = GIS_SRC; sc.async = true;
+    sc.onload = () => { sc.dataset.listo = '1'; res(); };
+    sc.onerror = () => rej(new Error('no se pudo cargar Google'));
+    document.head.appendChild(sc);
+  });
+}
+
+/**
+ * El correo que viene dentro del token de Google.
+ *
+ * Esto NO autentica a nadie: el token no se verifica aquí y no haría falta,
+ * porque lo único que se hace con el correo es rellenar el campo. Quien manda
+ * es el servidor, que lo valida contra el equipo igual que si se escribiera a
+ * mano.
+ */
+function correoDeToken(credential?: string): string | null {
+  if (!credential) return null;
+  try {
+    const carga = credential.split('.')[1];
+    const json = atob(carga.replace(/-/g, '+').replace(/_/g, '/'));
+    const email = JSON.parse(json)?.email;
+    return typeof email === 'string' ? email.toLowerCase() : null;
+  } catch { return null; }
+}
 
 const hoy = () => {
   const d = new Date();
@@ -86,21 +130,80 @@ export default function TrPublico() {
   const [resultados, setResultados] = useState<Resultado[] | null>(null);
   const [errorEnvio, setErrorEnvio] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
+  const [encima, setEncima] = useState(false);
+  // Cuando la persona se elige en el buscador, se manda su identificador: la
+  // vista no llega a ver el correo completo de nadie.
+  const [personaId, setPersonaId] = useState<string | null>(null);
+  const [buscando, setBuscando] = useState(false);
+  const [busqueda, setBusqueda] = useState('');
+  const [hallados, setHallados] = useState<Hallado[] | null>(null);
+  const [deOtro, setDeOtro] = useState(false);
 
-  async function comprobarCorreo() {
-    const c = correo.trim().toLowerCase();
-    setPersona(null); setErrorCorreo('');
+  // La cuenta de Google del navegador, si la hay.
+  //
+  // No hay forma de leer «el correo con el que está iniciado este Chrome»: el
+  // navegador no lo da. Lo más cerca es One Tap, que enseña la cuenta y la
+  // persona la toca una vez; a cambio, no tiene que escribir nada. Si no está
+  // configurado el cliente de Google, esto no hace nada y la vista funciona
+  // como siempre.
+  useEffect(() => {
+    let vivo = true;
+    (async () => {
+      try {
+        const cfg = await (await fetch('/api/auth/config')).json();
+        const clientId: string | undefined = cfg?.googleClientId;
+        if (!clientId || !vivo) return;
+        await cargarGis();
+        const gis = (window as VentanaGoogle).google?.accounts?.id;
+        if (!gis || !vivo) return;
+        gis.initialize({
+          client_id: clientId,
+          auto_select: true,
+          use_fedcm_for_prompt: true,
+          callback: ({ credential }: { credential?: string }) => {
+            const c = correoDeToken(credential);
+            if (c && vivo) { setCorreo(c); comprobarCorreo(c); }
+          },
+        });
+        gis.prompt();
+      } catch { /* sin cuenta detectada: se escribe o se busca, como siempre */ }
+    })();
+    return () => { vivo = false; };
+    // Solo al abrir la vista.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function comprobarCorreo(cual?: string) {
+    const c = (cual ?? correo).trim().toLowerCase();
+    setPersona(null); setPersonaId(null); setErrorCorreo('');
     if (!c) return;
     setComprobando(true);
     try {
       const r = await fetch(`/api/tr/persona?correo=${encodeURIComponent(c)}`);
       if (r.ok) setPersona((await r.json()).nombre);
-      else setErrorCorreo(r.status === 404
-        ? 'Ese correo no está en el equipo. Revísalo o pídele a tu líder que te den de alta.'
-        : 'No se pudo comprobar el correo. Intenta de nuevo.');
+      else if (r.status === 404) {
+        // Pasa con la cuenta personal de Google en el celular. En vez de
+        // dejarlo en «ese correo no sirve», se abre el buscador por nombre.
+        setErrorCorreo('Ese correo no está en el equipo. Búscate por tu nombre.');
+        setBuscando(true);
+      } else setErrorCorreo('No se pudo comprobar el correo. Intenta de nuevo.');
     } catch {
       setErrorCorreo('Sin conexión con el servidor.');
     } finally { setComprobando(false); }
+  }
+
+  async function buscar(q: string) {
+    setBusqueda(q);
+    if (q.trim().length < 2) { setHallados(null); return; }
+    try {
+      const r = await fetch(`/api/tr/buscar?q=${encodeURIComponent(q.trim())}`);
+      setHallados(r.ok ? (await r.json()).personas ?? [] : []);
+    } catch { setHallados([]); }
+  }
+
+  function elegir(h: Hallado) {
+    setPersonaId(h.id); setPersona(h.nombre); setCorreo(h.correo);
+    setErrorCorreo(''); setBuscando(false); setHallados(null); setBusqueda('');
   }
 
   function agregar(files: FileList | null) {
@@ -145,7 +248,9 @@ export default function TrPublico() {
         try {
           const r = await fetch('/api/tr/registro', {
             method:'POST', headers:{'Content-Type':'application/json'},
-            body: JSON.stringify({ correo: correo.trim().toLowerCase(), envio,
+            body: JSON.stringify({
+              ...(personaId ? { persona_id: personaId } : { correo: correo.trim().toLowerCase() }),
+              envio,
               ...(fecha ? { fecha } : {}),
               capturas: [{ nombre: c.nombre, contenido: c.contenido }] }),
           });
@@ -211,7 +316,54 @@ export default function TrPublico() {
               <span style={{ fontSize:11.5, color:'#b91c1c', display:'flex', alignItems:'flex-start', gap:4, marginTop:5, lineHeight:1.5 }}>
                 <AlertTriangle size={12} style={{ flexShrink:0, marginTop:1 }}/> {errorCorreo}</span>
             )}
+            {personaId && deOtro && (
+              <span style={{ fontSize:11, color:'#64748b', marginTop:5, display:'block' }}>
+                Se registrará a nombre de {persona}, no al tuyo.</span>
+            )}
           </label>
+
+          {/* Buscar por nombre: para quien no recuerda su correo exacto y para
+              subir el TR de otra persona. */}
+          {!buscando ? (
+            <button type="button"
+              onClick={() => { setBuscando(true); setDeOtro(!!persona); }}
+              style={{ marginBottom:14, padding:0, border:'none', background:'none', cursor:'pointer',
+                       fontSize:11.5, color:'#6d28d9', fontWeight:600, display:'flex', alignItems:'center', gap:5 }}>
+              {persona ? <><UserPlus size={12}/> Subir el TR de otra persona</>
+                       : <><Search size={12}/> No recuerdo mi correo, buscarme por nombre</>}
+            </button>
+          ) : (
+            <div style={{ marginBottom:14, padding:'12px 13px', borderRadius:10,
+                          background:'#faf8ff', border:'0.5px solid #e9e2fb' }}>
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:8 }}>
+                <span style={{ fontSize:11, fontWeight:600, color:'#5b21b6' }}>
+                  {deOtro ? 'Buscar a la persona' : 'Buscarme por nombre'}</span>
+                <button type="button" onClick={() => { setBuscando(false); setBusqueda(''); setHallados(null); }}
+                  style={{ border:'none', background:'none', cursor:'pointer', color:'#94a3b8', padding:0,
+                           display:'flex' }} title="Cerrar"><X size={13}/></button>
+              </div>
+              <input value={busqueda} autoComplete="off" placeholder="Nombre o apellido"
+                onChange={e => buscar(e.target.value)}
+                style={{ ...input, marginTop:7, borderColor:'#ddd0fb' }}/>
+              {hallados && hallados.length === 0 && busqueda.trim().length >= 2 && (
+                <p style={{ margin:'8px 0 0', fontSize:11, color:'#64748b' }}>
+                  Nadie con ese nombre. Pídele a tu líder que te den de alta.</p>
+              )}
+              {hallados && hallados.length > 0 && (
+                <div style={{ marginTop:8, display:'grid', gap:5 }}>
+                  {hallados.map(h => (
+                    <button key={h.id} type="button" onClick={() => elegir(h)}
+                      style={{ textAlign:'left', padding:'8px 11px', borderRadius:8, cursor:'pointer',
+                               border:'0.5px solid #e2e8f0', background:'#fff', display:'flex',
+                               flexDirection:'column', gap:1 }}>
+                      <span style={{ fontSize:12.5, fontWeight:600, color:'#1e293b' }}>{h.nombre}</span>
+                      <span style={{ fontSize:10.5, color:'#94a3b8' }}>{h.correo}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Capturas */}
           <div style={{ marginBottom:16 }}>
@@ -219,12 +371,18 @@ export default function TrPublico() {
               Capturas{capturas.length > 0 && ` · ${capturas.length} de ${MAX_IMAGENES}`}
             </span>
             <button type="button" onClick={() => fileRef.current?.click()}
+              onDragOver={e => { e.preventDefault(); setEncima(true); }}
+              onDragLeave={() => setEncima(false)}
+              onDrop={e => { e.preventDefault(); setEncima(false); agregar(e.dataTransfer.files); }}
               style={{ width:'100%', marginTop:5, padding:'20px 14px', borderRadius:11, cursor:'pointer',
-                       border:'1.5px dashed #cbd5e1', background:'#fcfcfd', display:'flex',
+                       border:`1.5px dashed ${encima ? '#6d28d9' : '#cbd5e1'}`,
+                       background: encima ? '#faf8ff' : '#fcfcfd', display:'flex',
                        flexDirection:'column', alignItems:'center', gap:6 }}>
-              <Camera size={20} color="#94a3b8"/>
-              <span style={{ fontSize:12.5, color:'#475569', fontWeight:600 }}>Tomar foto o elegir imágenes</span>
-              <span style={{ fontSize:11, color:'#94a3b8' }}>Varias a la vez, de días distintos si hace falta</span>
+              <Camera size={20} color={encima ? '#6d28d9' : '#94a3b8'}/>
+              <span style={{ fontSize:12.5, color:'#475569', fontWeight:600 }}>
+                {encima ? 'Suelta aquí' : 'Tomar foto, elegir o arrastrar imágenes'}</span>
+              <span style={{ fontSize:11, color:'#94a3b8' }}>
+                Hasta {MAX_IMAGENES} a la vez, de días distintos si hace falta</span>
             </button>
             {/* capture permite abrir la cámara directamente en el celular */}
             <input ref={fileRef} type="file" accept="image/*" multiple hidden
