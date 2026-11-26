@@ -2,7 +2,7 @@
 // Se prueba contra el archivo que nos pasaron, no contra datos inventados.
 
 import * as XLSX from 'xlsx';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { leerPlantilla, fechasDeColumnas, normalizaSda, aplicarCorreos, type Hoja } from '../src/lib/trPlanImport';
 import { diasHabiles, esperadoDia, esperadoTrimestre, emparejar, normNombre, personasDelPlan,
          desvios, resumenPersona, diferencias, type TrimestreHoras, type ImputacionReal } from '../src/lib/trPlan';
@@ -10,7 +10,17 @@ import { diasHabiles, esperadoDia, esperadoTrimestre, emparejar, normNombre, per
 let f = 0;
 const ok = (c: boolean, s: string) => { if (!c) f++; console.log(`${c ? '✓' : '✗'} ${s}`); };
 
-const RUTA = '/sessions/charming-trusting-franklin/mnt/uploads/Plantilla_carga_horas.xlsx';
+// La plantilla trae nombres y SDA reales del equipo y este repositorio es
+// público, así que no vive aquí: se busca donde esté y, si no está, la
+// comprobación se omite en vez de romper. Para correrla:
+//   TR_PLANTILLA=/ruta/Plantilla_carga_horas.xlsx npx tsx scripts/verif-tr-plantilla.ts
+const RUTA = process.env.TR_PLANTILLA
+  ?? [`${process.env.HOME}/Plantilla_carga_horas.xlsx`,
+      '/mnt/user-data/uploads/Plantilla_carga_horas.xlsx'].find(existsSync) ?? '';
+if (!RUTA) {
+  console.log('⊘ se omite: no está Plantilla_carga_horas.xlsx (pásala en TR_PLANTILLA)');
+  process.exit(0);
+}
 const wb = XLSX.read(readFileSync(RUTA), { cellDates: true });
 const hoja = XLSX.utils.sheet_to_json<Celda[]>(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: true, defval: null }) as Hoja;
 type Celda = string | number | Date | null;

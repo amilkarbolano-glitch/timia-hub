@@ -1,22 +1,24 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   AlertTriangle, CheckCircle, Clock, ChevronRight, ChevronDown,
   FileDown, X, Users, Check, LayoutList, Search, ExternalLink,
-  Plus, Trash2, Printer, Pencil,
+  Plus, Trash2, Printer, Pencil, Mail, MessageSquare, Link2,
 } from 'lucide-react';
 import { PROJECTS, useAuth, canAccess, canInProject } from '../contexts/AuthContext';
 import { FlowStepper } from './SetupProject';
 import ImpactPicker, { ImpactChips, impactLabel, type PlanOutline } from './ImpactPicker';
-import { HiloBadge, HiloPanel, HiloForm, hilosDeActividad } from './HilosCorreo';
+import { HiloBadge, HiloPanel, HiloForm, hilosDeActividad, ResponsableInput, ResponsableChip, usuariosDeProyecto } from './HilosCorreo';
+import GenerarCorreo from './GenerarCorreo';
 import { persistSet } from '../lib/persist';
 import { snapToBusinessDay, addBusinessDays, computeBusinessWeekIdx, dateToBusinessWeekIdx, businessDaysBetween, diaHabilDeSemana } from '../lib/businessDays';
-import { sincronizarAsignados, reconciliarTablero, type MetaActividad } from '../lib/planTablero';
+import { sincronizarAsignados, reconciliarTablero, tarjetaDesdeActividad, type MetaActividad } from '../lib/planTablero';
 import {
   adminStore,
   type PlanEtapa, type EtapaStates, type PlanHistorialEntry, RESP_ETIQUETA,
   type ActivityAssignees, type AdminUser, type AdminProject, type PlanConfig, type PlanIssue, type PlanImpact, type BitacoraEntry,
   issueImpacts, aplicarEdicionIssue, escalarAlerta, migrarPasos, type PasoPlan, type TipoPaso,
-  changeExtensionDays, makePlanKey, splitPlanKey, planKeyOf, CRONO_MAIN_NAME, type MailHilo,
+  changeExtensionDays, makePlanKey, splitPlanKey, planKeyOf, CRONO_MAIN_NAME, type MailHilo, type MailResponsable,
+  type KanbanComment, type KanbanTask,
 } from '../lib/adminStore';
 import {
   type CambioPct, nuevoCambio, pctsEnFecha, finDelDia, alcanzaElHistorial,
@@ -25,7 +27,7 @@ import {
 import {
   type PesoModo, PESO_MODO_DEFAULT, seriePlanConsolidada, seriePlanFase, marcasDe,
   seriePlanConExtension,
-  enSemana, enDia, realPlan, realFase, type AvanceFase,
+  enSemana, enDia, realPlan, realFase, esperadoFase, type AvanceFase,
 } from '../lib/avance';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -323,7 +325,7 @@ function GanttRow({ act, effectivePct, idx, expanded, onToggle, isSubtask = fals
               style={{ fontSize: 9, padding: '1px 3px', border: '1.5px solid #16a34a', borderRadius: 5,
                        outline: 'none', flexShrink: 0, colorScheme: 'light' }}/>
           ) : (
-            <span onClick={onDoneDateChange ? (e => { e.stopPropagation(); setEditandoFecha(true); }) : undefined}
+            <span data-report-hide onClick={onDoneDateChange ? (e => { e.stopPropagation(); setEditandoFecha(true); }) : undefined}
               title={onDoneDateChange ? 'Clic para corregir la fecha de finalizada' : undefined}
               style={{ fontSize: 9, color: '#15803d', fontWeight: 500, flexShrink: 0, whiteSpace: 'nowrap',
                        cursor: onDoneDateChange ? 'pointer' : 'default', borderRadius: 4,
@@ -365,7 +367,7 @@ function GanttRow({ act, effectivePct, idx, expanded, onToggle, isSubtask = fals
             outline: onPctChange && !isSubtask ? `1.5px dashed ${pctManual ? '#b4530950' : '#0d948850'}` : 'none' }}
             title={pctManual ? 'Avance puesto a mano. Déjalo vacío para volver al que calculan las subtareas.'
                              : (hasEtapas ? 'Lo calculan las subtareas. Clic para fijarlo a mano.' : 'Clic para editar')}>
-            {effectivePct}%{pctManual && <b style={{ marginLeft: 3, fontSize: 8, color: '#b45309' }}>·m</b>}
+            {effectivePct}%{pctManual && <b data-report-hide style={{ marginLeft: 3, fontSize: 8, color: '#b45309' }}>·m</b>}
           </span>
         )}
       </td>
@@ -395,9 +397,14 @@ interface ActivityDrawerProps {
   onAssigneeRemove: (userId: string) => void;
   onJiraSave: (id: string) => void;
   onClose: () => void;
+  /** Los comentarios de la tarjeta del tablero, que son los mismos de esta tarea. */
+  comentarios: KanbanComment[];
+  puedeComentar: boolean;
+  onComentar: (texto: string) => void;
 }
 
-function ActivityDrawer({ projectId, entregableId, actIdx, act, effectivePct, etapaStates, historial, assigneeIds, allUsers, canMark, jiraId, weekLabels, planLabel, issues = [], changes = [], planStartDate, holidays, onEtapaToggle, onAssigneeAdd, onAssigneeRemove, onJiraSave, onClose }: ActivityDrawerProps) {
+function ActivityDrawer({ projectId, entregableId, actIdx, act, effectivePct, etapaStates, historial, assigneeIds, allUsers, canMark, jiraId, weekLabels, planLabel, issues = [], changes = [], planStartDate, holidays, comentarios, puedeComentar, onComentar, onEtapaToggle, onAssigneeAdd, onAssigneeRemove, onJiraSave, onClose }: ActivityDrawerProps) {
+  const [comentario, setComentario] = useState('');
   const [search, setSearch]         = useState('');
   const [searchFocused, setFocused] = useState(false);
   const [editJira, setEditJira]     = useState(false);
@@ -687,6 +694,66 @@ function ActivityDrawer({ projectId, entregableId, actIdx, act, effectivePct, et
             )}
           </div>
 
+          {/* ── Comentarios ───
+              Son los de la tarjeta del tablero, no una copia: el desarrollador
+              los escribe allá y el líder los lee aquí sin cambiar de vista, que
+              era el motivo de traerlos. */}
+          <div style={{ marginBottom: 22 }}>
+            <p style={{ margin: '0 0 10px', fontSize: 11, fontWeight: 700, color: '#374151', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <MessageSquare size={13} color="#2563eb"/> Comentarios
+              {comentarios.length > 0 && <span style={{ fontSize: 9, color: '#94a3b8', fontWeight: 400 }}>({comentarios.length})</span>}
+            </p>
+
+            {comentarios.length === 0 && (
+              <p style={{ margin: '0 0 10px', fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>
+                Sin comentarios todavía.
+              </p>
+            )}
+            {comentarios.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 7, marginBottom: 10 }}>
+                {comentarios.map(c => (
+                  <div key={c.id} style={{ display: 'flex', gap: 8 }}>
+                    <div style={{ width: 24, height: 24, borderRadius: '50%', flexShrink: 0, marginTop: 2,
+                                  background: (c.userColor || '#64748b') + '20', color: c.userColor || '#64748b',
+                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                  fontSize: 9, fontWeight: 700 }}>{c.userInitials}</div>
+                    <div style={{ flex: 1, background: '#f8fafc', border: '0.5px solid #e2e8f0',
+                                  borderRadius: 9, padding: '7px 10px' }}>
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 2 }}>
+                        <span style={{ fontSize: 10.5, fontWeight: 700, color: '#374151' }}>{c.userName}</span>
+                        <span style={{ fontSize: 9, color: '#94a3b8' }}>{c.date}</span>
+                      </div>
+                      <p style={{ margin: 0, fontSize: 11, color: '#475569', lineHeight: 1.55,
+                                  whiteSpace: 'pre-wrap' }}>{c.text}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {puedeComentar && (
+              <div style={{ display: 'flex', gap: 7, alignItems: 'flex-end' }}>
+                <textarea value={comentario} onChange={e => setComentario(e.target.value)}
+                  placeholder="Escribe un comentario…"
+                  onKeyDown={e => {
+                    // Enter envía; con Shift hace salto de línea, como en cualquier chat.
+                    if (e.key === 'Enter' && !e.shiftKey && comentario.trim()) {
+                      e.preventDefault(); onComentar(comentario.trim()); setComentario('');
+                    }
+                  }}
+                  style={{ flex: 1, minHeight: 52, resize: 'vertical', padding: '8px 10px', fontSize: 11,
+                           fontFamily: 'inherit', border: '0.5px solid #e2e8f0', borderRadius: 9,
+                           outline: 'none', color: '#374151' }}/>
+                <button type="button" disabled={!comentario.trim()}
+                  onClick={() => { onComentar(comentario.trim()); setComentario(''); }}
+                  style={{ padding: '8px 12px', fontSize: 11, fontWeight: 600, borderRadius: 9, border: 'none',
+                           background: comentario.trim() ? '#2563eb' : '#e2e8f0',
+                           color: comentario.trim() ? '#fff' : '#94a3b8',
+                           cursor: comentario.trim() ? 'pointer' : 'default' }}>Comentar</button>
+              </div>
+            )}
+          </div>
+
           {/* ── Historial ─── */}
           <div>
             <p style={{ margin: '0 0 10px', fontSize: 11, fontWeight: 700, color: '#374151', display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -809,7 +876,7 @@ function EntregableSection({ block, projectId, sectionIdx, getActivityPct, setAc
   // exigir el trabajo que toca entregar el viernes.
   const esperadoPorCasillas = (fase: AvanceFase) =>
     todayWeekIdx === undefined ? block.pctExp
-      : parseFloat(enDia(seriePlanFase(fase, semanasFase), todayWeekIdx + 1, diaHabil).toFixed(1));
+      : esperadoFase(fase, Math.max(semanasFase, todayWeekIdx + 1), todayWeekIdx + 1, diaHabil);
 
   const basePctExp = block.activities.length === 0 || todayWeekIdx === undefined
     ? block.pctExp
@@ -910,23 +977,6 @@ function EntregableSection({ block, projectId, sectionIdx, getActivityPct, setAc
                   ))}
                 </React.Fragment>
               ))}
-              <tr style={{ background: '#f8fafc' }}>
-                <td colSpan={2 + semanasGrid} style={{ padding:'5px 10px' }}>
-                  <div style={{ display:'flex', gap:14, alignItems:'center', flexWrap:'wrap' }}>
-                    {[
-                      { sw:<div style={{ width:20, height:9, background:'#0d9488', borderRadius:2 }}/>, l:'Ejecutado' },
-                      { sw:<div style={{ width:20, height:9, background:'#16a34a', borderRadius:2, display:'flex', alignItems:'center', justifyContent:'flex-end', paddingRight:2, boxSizing:'border-box', color:'#fff', fontSize:7, fontWeight:700 }}>✓</div>, l:'Finalizada' },
-                      { sw:<div style={{ width:20, height:9, background:'rgba(13,148,136,0.22)', borderRadius:2 }}/>, l:'Planificado' },
-                      { sw:<div style={{ width:20, height:9, background:'repeating-linear-gradient(135deg, #c4b5fd 0 3px, #ede9fe 3px 6px)', borderRadius:2 }}/>, l:'Extensión por cambios (Δ)' },
-                      { sw:<div style={{ width:20, height:9, background:'repeating-linear-gradient(135deg, #fca5a5 0 3px, #fee2e2 3px 6px)', borderRadius:2 }}/>, l:'Días perdidos por bloqueante' },
-                      { sw:<span style={{ fontSize:8, padding:'1px 4px', borderRadius:3, background:'#dbeafe', color:'#1d4ed8', fontWeight:700 }}>BBVA</span>, l:'Depende de BBVA' },
-                      { sw:<LayoutList size={10} color="#0d9488"/>, l:'Tiene etapas (click)' },
-                    ].map(({ sw, l }) => (
-                      <div key={l} style={{ display:'flex', alignItems:'center', gap:5 }}>{sw}<span style={{ fontSize:9, color:'#64748b' }}>{l}</span></div>
-                    ))}
-                  </div>
-                </td>
-              </tr>
             </tbody>
           </table>
         </div>
@@ -950,6 +1000,116 @@ function EntregableSection({ block, projectId, sectionIdx, getActivityPct, setAc
   );
 }
 
+// ─── Secciones plegables: correos y links del proyecto ───────────────────────
+// Van justo debajo de alertas/bloqueantes y pasos porque en la reunión se leen
+// seguidas: «esto está frenado — por este correo — y el documento es este».
+// Plegadas por omisión; lo que importa es tenerlas a un clic, no ocupando
+// media pantalla.
+
+interface LinkProyecto { id: string; projectId: string; title: string; url: string; category: string; descripcion: string }
+
+function leerLinks(): LinkProyecto[] {
+  try { return JSON.parse(localStorage.getItem('timia_links') ?? '[]'); } catch { return []; }
+}
+
+function Plegable({ titulo, icono, cuenta, color, children, accion }: {
+  titulo: string; icono: React.ReactNode; cuenta: number; color: string;
+  children: React.ReactNode; accion?: React.ReactNode;
+}) {
+  const [abierto, setAbierto] = useState(false);
+  return (
+    <div style={{ background:'#fff', border:'0.5px solid #e2e8f0', borderRadius:10, overflow:'hidden' }}>
+      <div style={{ display:'flex', alignItems:'center', gap:7, padding:'9px 12px',
+                    cursor:'pointer', userSelect:'none' }}
+           onClick={() => setAbierto(a => !a)}>
+        {abierto ? <ChevronDown size={13} color="#94a3b8"/> : <ChevronRight size={13} color="#94a3b8"/>}
+        <span style={{ color, display:'flex' }}>{icono}</span>
+        <span style={{ fontSize:11, fontWeight:600, color:'#374151', flex:1 }}>{titulo}</span>
+        <span style={{ fontSize:10, fontWeight:700, color: cuenta ? color : '#cbd5e1',
+                       background: cuenta ? `${color}15` : '#f8fafc', borderRadius:10, padding:'1px 7px' }}>
+          {cuenta}
+        </span>
+        {accion && <span onClick={e => e.stopPropagation()} style={{ display:'flex' }}>{accion}</span>}
+      </div>
+      {abierto && <div style={{ padding:'0 12px 11px', borderTop:'0.5px solid #f1f5f9' }}>{children}</div>}
+    </div>
+  );
+}
+
+function CorreosPlegable({ hilos, holidays, onAbrir, onNuevo }: {
+  hilos: MailHilo[]; holidays: Set<string>;
+  onAbrir?: (h: MailHilo) => void; onNuevo?: () => void;
+}) {
+  const abiertos = hilos.filter(h => h.estado === 'abierto');
+  const orden = [...hilos].sort((a, b) =>
+    (a.estado === b.estado ? 0 : a.estado === 'abierto' ? -1 : 1) || (b.desde ?? '').localeCompare(a.desde ?? ''));
+  return (
+    <Plegable titulo="Correos" icono={<Mail size={12}/>} cuenta={abiertos.length} color="#2563eb"
+      accion={onNuevo && (
+        <button onClick={onNuevo} title="Registrar un hilo de correo"
+          style={{ border:'0.5px solid #bfdbfe', background:'#eff6ff', color:'#2563eb', borderRadius:6,
+                   padding:'2px 7px', fontSize:10, fontWeight:600, cursor:'pointer', display:'flex',
+                   alignItems:'center', gap:3 }}><Plus size={10}/> Hilo</button>
+      )}>
+      {orden.length === 0
+        ? <p style={{ margin:'9px 0 0', fontSize:11, color:'#94a3b8' }}>Sin hilos registrados en este plan.</p>
+        : <div style={{ marginTop:8, display:'flex', flexDirection:'column', gap:5 }}>
+            {orden.map(h => (
+              <div key={h.id} onClick={() => onAbrir?.(h)}
+                style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 9px', borderRadius:8,
+                         background: h.estado === 'abierto' ? '#f8fafc' : '#fff',
+                         border:'0.5px solid #f1f5f9', cursor: onAbrir ? 'pointer' : 'default' }}>
+                <HiloBadge hilos={[h]} holidays={holidays} onClick={() => onAbrir?.(h)}/>
+                <span style={{ fontSize:11, color:'#374151', flex:1, overflow:'hidden',
+                               textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{h.asunto}</span>
+                {h.estado === 'resuelto' && (
+                  <span style={{ fontSize:9, color:'#15803d', background:'#f0fdf4', borderRadius:10,
+                                 padding:'1px 6px', fontWeight:600 }}>resuelto</span>
+                )}
+              </div>
+            ))}
+          </div>}
+    </Plegable>
+  );
+}
+
+function LinksPlegable({ links, onVerTodos }: { links: LinkProyecto[]; onVerTodos?: () => void }) {
+  const porCategoria = new Map<string, LinkProyecto[]>();
+  links.forEach(l => porCategoria.set(l.category || 'Otros', [...(porCategoria.get(l.category || 'Otros') ?? []), l]));
+  return (
+    <Plegable titulo="Links importantes" icono={<Link2 size={12}/>} cuenta={links.length} color="#7c3aed"
+      accion={onVerTodos && (
+        <button onClick={onVerTodos} title="Abrir la vista completa de links"
+          style={{ border:'0.5px solid #e9d5ff', background:'#faf5ff', color:'#7c3aed', borderRadius:6,
+                   padding:'2px 7px', fontSize:10, fontWeight:600, cursor:'pointer' }}>Ver todos</button>
+      )}>
+      {links.length === 0
+        ? <p style={{ margin:'9px 0 0', fontSize:11, color:'#94a3b8' }}>
+            Sin links de este proyecto. Se agregan en Links.</p>
+        : <div style={{ marginTop:8, display:'flex', flexDirection:'column', gap:9 }}>
+            {Array.from(porCategoria.entries()).map(([cat, ls]) => (
+              <div key={cat}>
+                <p style={{ margin:'0 0 4px', fontSize:9, fontWeight:700, color:'#94a3b8',
+                            textTransform:'uppercase', letterSpacing:'.05em' }}>{cat}</p>
+                <div style={{ display:'flex', flexDirection:'column', gap:3 }}>
+                  {ls.map(l => (
+                    <a key={l.id} href={l.url} target="_blank" rel="noopener noreferrer"
+                      title={l.descripcion || l.url}
+                      style={{ display:'flex', alignItems:'center', gap:6, padding:'5px 8px', borderRadius:7,
+                               background:'#f8fafc', border:'0.5px solid #f1f5f9', textDecoration:'none' }}>
+                      <ExternalLink size={11} color="#7c3aed" style={{ flexShrink:0 }}/>
+                      <span style={{ fontSize:11, color:'#374151', overflow:'hidden',
+                                     textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{l.title}</span>
+                    </a>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>}
+    </Plegable>
+  );
+}
+
 // ─── IssuesPanel — alertas y bloqueantes con inicio/fin e impacto ─────────────
 
 const ISSUE_STYLE = {
@@ -966,13 +1126,16 @@ function fmtShort(iso: string): string {
   return `${d.getDate()} ${['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'][d.getMonth()]}`;
 }
 
-function IssuesPanel({ plan, issues, legacy, userName, onChange, outlines, readOnly = false }: {
+function IssuesPanel({ plan, issues, legacy, userName, onChange, outlines, hilos = [], onHiloClick, readOnly = false }: {
   plan: WorkPlan;
   issues: PlanIssue[];
   legacy: { type: 'alerta' | 'bloqueante'; text: string }[];
   userName: string;
   onChange: (next: PlanIssue[]) => void;
   outlines: PlanOutline[];
+  /** Hilos del plan, para poder enlazar un correo a la alerta. */
+  hilos?: MailHilo[];
+  onHiloClick?: (h: MailHilo) => void;
   readOnly?: boolean;
 }) {
   const [picker, setPicker] = useState(false);
@@ -988,7 +1151,7 @@ function IssuesPanel({ plan, issues, legacy, userName, onChange, outlines, readO
   // bloqueante se extiende a otra fase, el título se escribió a la carrera. Sin
   // edición solo quedaba borrar y volver a crear, y eso pierde quién la abrió.
   const [editando, setEditando] = useState<string | null>(null);
-  const empty = { title:'', detail:'', startDate: todayISO, endDate: '', notaCierre:'', responsable:'', impacts: [] as PlanImpact[] };
+  const empty = { title:'', detail:'', startDate: todayISO, endDate: '', notaCierre:'', responsable:'', impacts: [] as PlanImpact[], hiloIds: [] as string[] };
   const [form, setForm] = useState(empty);
 
   const open   = issues.filter(i => !i.endDate).sort((a,b) => (a.type === b.type ? a.startDate.localeCompare(b.startDate) : a.type === 'bloqueante' ? -1 : 1));
@@ -1007,7 +1170,8 @@ function IssuesPanel({ plan, issues, legacy, userName, onChange, outlines, readO
     setAdding(null); setResolving(null); setEditando(i.id); setTipoForm(i.type);
     setForm({ title: i.title, detail: i.detail ?? '', startDate: i.startDate,
               endDate: i.endDate ?? '', notaCierre: i.notaCierre ?? '',
-              responsable: i.responsable ?? '', impacts: issueImpacts(i) });
+              responsable: i.responsable ?? '', impacts: issueImpacts(i),
+              hiloIds: i.hiloIds ?? [] });
   }
 
   function submit() {
@@ -1017,6 +1181,7 @@ function IssuesPanel({ plan, issues, legacy, userName, onChange, outlines, readO
       startDate: form.startDate || todayISO, impacts: form.impacts,
       notaCierre: form.notaCierre.trim() || undefined,
       responsable: form.responsable.trim() || undefined,
+      hiloIds: form.hiloIds.length ? form.hiloIds : undefined,
     };
     if (enEdicion) {
       onChange(issues.map(i => i.id === enEdicion.id
@@ -1073,6 +1238,19 @@ function IssuesPanel({ plan, issues, legacy, userName, onChange, outlines, readO
             {imps.length
               ? <ImpactChips impacts={imps} plans={outlines} max={4}/>
               : <span style={{ fontSize:9, color:'#94a3b8' }}>sin tarea asociada</span>}
+            {(i.hiloIds ?? []).map(id => {
+              const h = hilos.find(x => x.id === id);
+              if (!h) return null;
+              return (
+                <button key={id} onClick={() => onHiloClick?.(h)} title={h.asunto}
+                  style={{ display:'inline-flex', alignItems:'center', gap:3, maxWidth:200, fontSize:9,
+                           padding:'1px 6px', borderRadius:4, cursor: onHiloClick ? 'pointer' : 'default',
+                           border:'0.5px solid #bfdbfe', background:'#eff6ff', color:'#1d4ed8', fontWeight:600 }}>
+                  <Mail size={8} style={{ flexShrink:0 }}/>
+                  <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{h.asunto}</span>
+                </button>
+              );
+            })}
             <span style={{ fontSize:9, color:'#94a3b8' }}>· {i.createdBy.split(' ')[0]}{i.closedBy ? ` · cerró ${i.closedBy.split(' ')[0]}` : ''}</span>
             {i.origenId && <span title="Nació al escalar una alerta" style={{ fontSize:9, color:'#dc2626', background:'#fef2f2', border:'0.5px solid #fecaca', borderRadius:4, padding:'1px 5px', fontWeight:600 }}>escalado de una alerta</span>}
             {issues.some(x => x.origenId === i.id) && <span title="Esta alerta escaló" style={{ fontSize:9, color:'#dc2626', background:'#fef2f2', border:'0.5px solid #fecaca', borderRadius:4, padding:'1px 5px', fontWeight:600 }}>escaló a bloqueante</span>}
@@ -1189,6 +1367,34 @@ function IssuesPanel({ plan, issues, legacy, userName, onChange, outlines, readO
               </div>
             </div>
           </div>
+          {/* Correo asociado — opcional: muchos bloqueantes nacen en una reunión
+              y no tienen ninguno. Cuando sí lo tienen, es lo primero que se
+              busca después. */}
+          {hilos.length > 0 && (
+            <div style={{ marginBottom:6 }}>
+              <span style={{ fontSize:8, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'.05em', display:'block', marginBottom:3 }}>
+                Correo asociado · opcional</span>
+              <div style={{ display:'flex', flexWrap:'wrap', gap:4 }}>
+                {hilos.map(h => {
+                  const puesto = form.hiloIds.includes(h.id);
+                  return (
+                    <button key={h.id} type="button" title={h.asunto}
+                      onClick={() => setForm(f => ({ ...f, hiloIds: puesto
+                        ? f.hiloIds.filter(x => x !== h.id) : [...f.hiloIds, h.id] }))}
+                      style={{ display:'flex', alignItems:'center', gap:4, maxWidth:260,
+                               fontSize:10, padding:'3px 8px', borderRadius:14, cursor:'pointer',
+                               fontWeight: puesto ? 600 : 400,
+                               border:`0.5px solid ${puesto ? '#2563eb' : '#e2e8f0'}`,
+                               background: puesto ? '#eff6ff' : '#fff',
+                               color: puesto ? '#1d4ed8' : '#64748b' }}>
+                      <Mail size={9} style={{ flexShrink:0 }}/>
+                      <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{h.asunto}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           <textarea value={form.detail} onChange={e => setForm(f => ({ ...f, detail:e.target.value }))} rows={2} placeholder="Detalle / contexto (opcional)"
             style={{ width:'100%', padding:'5px 8px', fontSize:10, border:'0.5px solid #e2e8f0', borderRadius:6, resize:'vertical', boxSizing:'border-box', lineHeight:1.5, marginBottom:6 }}/>
           {enEdicion && form.endDate && (
@@ -1241,12 +1447,15 @@ function IssuesPanel({ plan, issues, legacy, userName, onChange, outlines, readO
  * es justo lo que hay que contar en el seguimiento. Ahora se resuelven con
  * fecha y nota, como las alertas, y se pueden editar.
  */
-function PasosPanel({ pasos, userName, onChange, readOnly = false }: {
+function PasosPanel({ pasos, userName, projectId, onChange, readOnly = false }: {
   pasos: PasoPlan[];
   userName: string;
+  projectId: string;
   onChange: (next: PasoPlan[]) => void;
   readOnly?: boolean;
 }) {
+  const usuarios = useMemo(() => usuariosDeProyecto(projectId), [projectId]);
+  const SIN_RESP: MailResponsable = { lado: 'TIMIA', nombre: '' };
   const todayISO = new Date().toISOString().slice(0, 10);
   const [adding, setAdding] = useState(false);
   const [editando, setEditando] = useState<string | null>(null);
@@ -1256,6 +1465,7 @@ function PasosPanel({ pasos, userName, onChange, readOnly = false }: {
   const [resolviendo, setResolviendo] = useState<string | null>(null);
   const [fecha, setFecha] = useState(todayISO);
   const [nota, setNota] = useState('');
+  const [resp, setResp] = useState<MailResponsable>(SIN_RESP);
   const [verHechos, setVerHechos] = useState(false);
 
   const abiertos = pasos.filter(p => !p.hechoEn);
@@ -1263,17 +1473,18 @@ function PasosPanel({ pasos, userName, onChange, readOnly = false }: {
   const nNotas = abiertos.length - nPasos;
   const hechos   = pasos.filter(p => !!p.hechoEn).sort((a,b) => (b.hechoEn ?? '').localeCompare(a.hechoEn ?? ''));
 
-  function cerrarTodo() { setAdding(false); setEditando(null); setResolviendo(null); setTexto(''); setNota(''); }
+  function cerrarTodo() { setAdding(false); setEditando(null); setResolviendo(null); setTexto(''); setNota(''); setResp(SIN_RESP); }
   function agregar() {
     const t = texto.trim(); if (!t) return;
     onChange([...pasos, { id:`pa-${Date.now()}-${Math.random().toString(36).slice(2,6)}`,
       planKey: pasos[0]?.planKey ?? '', texto:t, tipo,
+      ...(resp.nombre.trim() ? { responsable: { ...resp, nombre: resp.nombre.trim() } } : {}),
       creadoPor:userName, creadoEn:new Date().toISOString() }]);
     cerrarTodo();
   }
   function guardarEdicion(id: string) {
     const t = texto.trim(); if (!t) return;
-    onChange(pasos.map(p => p.id === id ? { ...p, texto: t, tipo } : p));
+    onChange(pasos.map(p => p.id === id ? { ...p, texto: t, tipo, responsable: resp.nombre.trim() ? { ...resp, nombre: resp.nombre.trim() } : undefined } : p));
     cerrarTodo();
   }
   function resolver(id: string) {
@@ -1305,6 +1516,7 @@ function PasosPanel({ pasos, userName, onChange, readOnly = false }: {
             <textarea value={texto} onChange={e => setTexto(e.target.value)} rows={2} autoFocus
               onKeyDown={e => { if (e.key==='Enter' && !e.shiftKey) { e.preventDefault(); guardarEdicion(p.id); } if (e.key==='Escape') cerrarTodo(); }}
               style={{ width:'100%', padding:'5px 8px', fontSize:11, border:'0.5px solid #bbf7d0', borderRadius:6, resize:'vertical', boxSizing:'border-box', lineHeight:1.5 }}/>
+            <div style={{ marginTop:5 }}><ResponsableInput value={resp} onChange={setResp} users={usuarios}/></div>
             <div style={{ display:'flex', gap:4, marginTop:4, alignItems:'center' }}>
               <button onClick={() => guardarEdicion(p.id)} style={{ padding:'3px 10px', fontSize:10, background:'#15803d', color:'#fff', border:'none', borderRadius:5, cursor:'pointer', fontWeight:600 }}>Guardar</button>
               <button onClick={cerrarTodo} style={{ padding:'3px 8px', fontSize:10, background:'#f1f5f9', border:'none', borderRadius:5, cursor:'pointer', color:'#374151' }}>Cancelar</button>
@@ -1328,6 +1540,7 @@ function PasosPanel({ pasos, userName, onChange, readOnly = false }: {
                 {!abierto && <span style={{ fontSize:9, fontWeight:600, borderRadius:4, padding:'1px 5px',
                                             color: nota_ ? '#64748b' : '#15803d', background: nota_ ? '#f1f5f9' : '#f0fdf4' }}>
                   {nota_ ? 'archivada' : 'hecho'} {fmtShort(p.hechoEn!)}{p.hechoPor ? ` · ${p.hechoPor.split(' ')[0]}` : ''}</span>}
+                {p.responsable?.nombre && <ResponsableChip r={p.responsable}/>}
                 <span style={{ fontSize:9, color:'#94a3b8' }}>{p.creadoPor.split(' ')[0]}</span>
               </div>
               {p.notaCierre && <div style={{ fontSize:10, color:'#15803d', marginTop:3, lineHeight:1.45 }}>{p.notaCierre}</div>}
@@ -1350,7 +1563,7 @@ function PasosPanel({ pasos, userName, onChange, readOnly = false }: {
             </div>
             {!readOnly && (
               <div style={{ display:'flex', gap:3, flexShrink:0 }}>
-                <button onClick={() => { cerrarTodo(); setEditando(p.id); setTexto(p.texto); setTipo(p.tipo ?? 'paso'); }} title="Editar"
+                <button onClick={() => { cerrarTodo(); setEditando(p.id); setTexto(p.texto); setTipo(p.tipo ?? 'paso'); setResp(p.responsable ?? SIN_RESP); }} title="Editar"
                   style={{ fontSize:9, padding:'2px 6px', background:'#fff', color:'#64748b', border:'0.5px solid #e2e8f0', borderRadius:5, cursor:'pointer', fontWeight:600, display:'flex', alignItems:'center', gap:3 }}><Pencil size={9}/>Editar</button>
                 {abierto
                   ? <button onClick={() => { cerrarTodo(); setResolviendo(p.id); setFecha(todayISO); }}
@@ -1415,6 +1628,7 @@ function PasosPanel({ pasos, userName, onChange, readOnly = false }: {
             onKeyDown={e => { if (e.key==='Enter' && !e.shiftKey) { e.preventDefault(); agregar(); } if (e.key==='Escape') cerrarTodo(); }}
             style={{ width:'100%', padding:'5px 8px', fontSize:11, borderRadius:6, background:'#fff', resize:'vertical', boxSizing:'border-box', outline:'none', lineHeight:1.5,
                      border:`0.5px solid ${tipo==='nota' ? '#e2e8f0' : '#bbf7d0'}` }}/>
+          <div style={{ marginTop:5 }}><ResponsableInput value={resp} onChange={setResp} users={usuarios}/></div>
           <div style={{ display:'flex', gap:4, marginTop:4 }}>
             <button onClick={agregar} style={{ padding:'3px 10px', fontSize:10, background:'#15803d', color:'#fff', border:'none', borderRadius:5, cursor:'pointer', fontWeight:600 }}>Guardar</button>
             <button onClick={cerrarTodo} style={{ padding:'3px 8px', fontSize:10, background:'#f1f5f9', border:'none', borderRadius:5, cursor:'pointer', color:'#374151' }}>Cancelar</button>
@@ -1450,7 +1664,7 @@ function saveNotes(projectId: string, data: { pasos:string[]; alertas:string[]; 
   persistSet(`timia_notes_${projectId}`, data);
 }
 
-function PlanDetail({ plan, getActivityPct: getActivityPctHoy, setActivityPct, esPctManual, onActivityClick, onGoEstimaciones, getDoneDate, getDoneDateISO, onDoneDateChange, hilos: hilosPlan = [], onHiloClick, holidays, issues: issuesHoy, onIssuesChange, userName, changes, outlines, canIssues = true, pctHistorial = [], pctsActuales = {} }: {
+function PlanDetail({ plan, getActivityPct: getActivityPctHoy, setActivityPct, esPctManual, onActivityClick, onGoEstimaciones, getDoneDate, getDoneDateISO, onDoneDateChange, hilos: hilosPlan = [], onHiloClick, onHiloNuevo, onVerLinks, holidays, issues: issuesHoy, onIssuesChange, userName, changes, outlines, canIssues = true, pctHistorial = [], pctsActuales = {} }: {
   plan: WorkPlan;
   canIssues?: boolean;
   issues: PlanIssue[];
@@ -1469,11 +1683,15 @@ function PlanDetail({ plan, getActivityPct: getActivityPctHoy, setActivityPct, e
   onDoneDateChange?: (eid: string, ai: number, ymd: string | undefined) => void;
   hilos?: MailHilo[];
   onHiloClick?: (h: MailHilo) => void;
+  onHiloNuevo?: () => void;
+  onVerLinks?: () => void;
   /** Movimientos de % registrados: con ellos se reconstruye una fecha pasada. */
   pctHistorial?: CambioPct[];
   pctsActuales?: Record<string, number>;
 }) {
   const color = PROJECTS.find(p => p.id === plan.projectId)?.color ?? '#64748b';
+  const linksProyecto = useMemo(
+    () => leerLinks().filter(l => l.projectId === plan.projectId), [plan.projectId]);
   // ── Extra notes (persisted) ─────────────────────────────────────────────────
   const [extraNotes] = useState(() => loadNotes(plan.planKey));
 
@@ -1507,6 +1725,7 @@ function PlanDetail({ plan, getActivityPct: getActivityPctHoy, setActivityPct, e
    * reporta cifras de otro día sin enterarse.
    */
   const [fechaCorte, setFechaCorte] = useState<string>('');
+  const [correoAbierto, setCorreoAbierto] = useState(false);
   const corte = fechaCorte ? new Date(fechaCorte + 'T12:00:00') : undefined;
   const simulando = !!corte && !isNaN(corte.getTime());
 
@@ -1576,6 +1795,65 @@ function PlanDetail({ plan, getActivityPct: getActivityPctHoy, setActivityPct, e
   // está frente a lo acordado.
   const overallDif = kpis.dif;
 
+  // Las fechas de cada columna de semana, calculadas como las de la rejilla:
+  // días hábiles y saltándose los festivos. A siete días por semana la cuarta
+  // caía el 3 de noviembre y en pantalla es el 4, así que la presentación salía
+  // con el corte una semana antes de donde está.
+  const dd = (d: Date) => `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`;
+  const semanasFechas = Array.from({ length: Math.max(planWeeks, semanaHoy) }, (_, i) => {
+    const ini = weekToActualDate(plan.startDate, i + 1, holidays);
+    if (!ini) return { ini: '', fin: '' };
+    return { ini: dd(ini), fin: dd(addBusinessDays(ini, 4, holidays)) };
+  });
+
+  // Una entrada por entregable con lo que hace falta en los dos sitios donde se
+  // enseña: las tarjetas de arriba y las láminas de Gantt del correo. Antes el
+  // cálculo vivía dentro del map de las tarjetas y el correo no lo tenía, que
+  // es como acabaron saliendo números distintos para la misma fase.
+  const porEntregable = plan.entregables.map(e => {
+    const faseE = fasesAvance.find(f => f.id === e.id);
+    const faseExtE = fasesAvanceExt.find(f => f.id === e.id);
+    const real = !e.activities.length ? e.pctReal
+      : porSemana && faseE
+        ? parseFloat(realFase(faseE, pesoModo).toFixed(1))
+        : parseFloat((e.activities.reduce((s, a, i) => s + getActivityPct(e.id, i, a), 0) / e.activities.length).toFixed(1));
+    // Contra la línea base, igual que la insignia de la fase y que el KPI del
+    // plan: es el compromiso, y es lo que se reporta. Aquí se calculaba contra
+    // la fase replanificada, así que la tarjeta y la presentación daban un
+    // esperado más bajo que la pantalla del entregable —83,3 contra 59— y con
+    // él una diferencia que no era la que se estaba reportando.
+    const esp = !e.activities.length ? e.pctExp
+      : porSemana && faseE
+        ? esperadoFase(faseE, Math.max(planWeeks, semanaHoy), semanaHoy, diaHoy)
+        : parseFloat((e.activities.reduce((s, a) => s + computeActExpPct(a.startWeek, a.endWeek, todayWeekIdx), 0) / e.activities.length).toFixed(1));
+    return {
+      id: e.id,
+      real, esp,
+      dif: parseFloat((real - esp).toFixed(1)),
+      actividades: e.activities.map((a, i) => {
+        // Las mismas que marca el Gantt de pantalla: el bloqueante se queda
+        // aunque se haya resuelto —el bloqueo ya ocurrió— y la alerta solo
+        // mientras siga abierta.
+        const suyas = issues.filter(x => x.planKey === plan.planKey
+          && issueImpacts(x).some(m => m.entregableId === e.id && m.actIdx === i));
+        return {
+          nombre: a.name,
+          pct: getActivityPct(e.id, i, a),
+          ini: a.startWeek,
+          // La barra va sobre la línea base, no sobre lo replanificado: en el
+          // reporte se enseña lo que se comprometió. Con el fin efectivo las
+          // barras se estiraban con cada bloqueante y la lámina contaba una
+          // planificación que nadie prometió.
+          fin: a.endWeek,
+          // Los ids, no un sí/no: la presentación numera las alertas y pone
+          // encima del icono cuál es cuál, igual que el formato de Juan.
+          idsBloq: suyas.filter(x => x.type === 'bloqueante').map(x => x.id),
+          idsAlerta: suyas.filter(x => x.type === 'alerta' && !x.endDate).map(x => x.id),
+        };
+      }),
+    };
+  });
+
 
 
   // ── Resumen de cambios funcionales sobre este cronograma ─────────────────
@@ -1622,6 +1900,10 @@ function PlanDetail({ plan, getActivityPct: getActivityPctHoy, setActivityPct, e
           </div>
         </div>
         <div style={{ display:'flex', gap:8, flexShrink:0, alignItems:'center' }}>
+          {/* La fecha y los dos botones van en su propio grupo alineado abajo:
+              sueltos en la fila se alineaban cada uno contra las pastillas de
+              KPI, que son más altas, y el de correo quedaba descolgado. */}
+          <div style={{ display:'flex', gap:8, alignItems:'flex-end' }}>
           {/* Simular el esperado a otra fecha. El seguimiento se arma dos o tres
               días antes, y hay que saber contra qué número te van a comparar. */}
           <label title="Hacia adelante proyecta el esperado; hacia atrás muestra cómo estaba el plan ese día"
@@ -1637,10 +1919,18 @@ function PlanDetail({ plan, getActivityPct: getActivityPctHoy, setActivityPct, e
           </label>
           {simulando && (
             <button onClick={() => setFechaCorte('')} title="Volver al día de hoy"
-              style={{ alignSelf:'flex-end', padding:'5px 10px', fontSize:10.5, fontWeight:600,
+              style={{ padding:'5px 10px', fontSize:10.5, fontWeight:600,
                        border:'0.5px solid #ddd6fe', background:'#f5f3ff', color:'#6d28d9',
                        borderRadius:7, cursor:'pointer' }}>Volver a hoy</button>
           )}
+          <button onClick={() => setCorreoAbierto(true)} data-print-hide
+            title="Arma la imagen de resumen y el texto de alertas y bloqueantes para el correo semanal, con este mismo corte"
+            style={{ display:'flex', alignItems:'center', gap:5, padding:'5px 10px', fontSize:10.5,
+                     fontWeight:600, border:'0.5px solid #e2e8f0', background:'#fff', color:'#475569',
+                     borderRadius:7, cursor:'pointer' }}>
+            <Mail size={11}/> Generar correo
+          </button>
+          </div>
           {[
             { label: mirandoAtras ? `REAL AL ${fmtShort(fechaCorte).toUpperCase()}` : 'AVANCE REAL',
               val:`${overallReal}%`, bg: mirandoAtras ? '#0f766e' : '#374151', c:'#fff', sc: mirandoAtras ? '#99f6e4' : '#9ca3af' },
@@ -1734,22 +2024,11 @@ function PlanDetail({ plan, getActivityPct: getActivityPctHoy, setActivityPct, e
       ); })()}
 
       <div style={{ display:'grid', gridTemplateColumns:`repeat(${plan.entregables.length},1fr)`, gap:8, marginBottom:14 }}>
-        {plan.entregables.map(e => {
-          // Estas tarjetas usaban el promedio simple de los % mientras el KPI de
-          // arriba y el Gantt ya pesaban por casillas: tres números distintos
-          // para la misma fase en la misma pantalla.
-          const faseE = fasesAvance.find(f => f.id === e.id);
-          const faseExtE = fasesAvanceExt.find(f => f.id === e.id);
-          const ePct = !e.activities.length ? e.pctReal
-            : porSemana && faseE
-              ? parseFloat(realFase(faseE, pesoModo).toFixed(1))
-              : parseFloat((e.activities.reduce((s,a,i)=>s+getActivityPct(e.id,i,a),0)/e.activities.length).toFixed(1));
-          // pctExp dinámico por entregable
-          const eExp = !e.activities.length ? e.pctExp
-            : porSemana && faseExtE
-              ? parseFloat(enDia(seriePlanFase(faseExtE, Math.max(planWeeks, semanaHoy)), semanaHoy, diaHoy).toFixed(1))
-              : parseFloat((e.activities.reduce((s,a,i)=>s+computeActExpPct(a.startWeek,extensionFor(changes, plan.planKey, e.id, i, a.endWeek, issues, holidays).effEndWeek,todayWeekIdx),0)/e.activities.length).toFixed(1));
-          const dif = parseFloat((ePct-eExp).toFixed(1));
+        {plan.entregables.map((e, eIdx) => {
+          // Los números salen de `porEntregable`, que es el mismo que alimenta
+          // las láminas de Gantt del correo: antes se calculaban aquí dentro y
+          // la presentación acababa con otras cifras que la pantalla.
+          const { real: ePct, esp: eExp, dif } = porEntregable[eIdx];
           return (
             <div key={e.id} style={{ background:'#fff', border:'0.5px solid #e2e8f0', borderRadius:10, padding:'10px 14px' }}>
               <p style={{ margin:'0 0 8px', fontSize:11, fontWeight:600, color:'#9f1239', lineHeight:1.3 }}>{e.name}</p>
@@ -1788,7 +2067,7 @@ function PlanDetail({ plan, getActivityPct: getActivityPctHoy, setActivityPct, e
 
       {/* Pasos (editables) + Alertas / Bloqueantes con fechas e impacto */}
       <div style={{ display:'grid', gridTemplateColumns:'1fr 2fr', gap:8, marginBottom:20 }}>
-        <PasosPanel userName={userName} onChange={guardarPasos} readOnly={!puedeEditar}
+        <PasosPanel userName={userName} projectId={plan.projectId} onChange={guardarPasos} readOnly={!puedeEditar}
           pasos={pasos
             .filter(p => p.planKey === plan.planKey)
             // Un paso que se cerró después del corte estaba pendiente ese día;
@@ -1803,9 +2082,18 @@ function PlanDetail({ plan, getActivityPct: getActivityPctHoy, setActivityPct, e
                    ...extraNotes.alertas.map((t:string) => ({ type:'alerta' as const, text:t })), ...extraNotes.bloqueantes.map((t:string) => ({ type:'bloqueante' as const, text:t }))]}
           userName={userName}
           outlines={outlines}
+          hilos={hilosPlan.filter(h => h.planKey === plan.planKey)}
+          onHiloClick={onHiloClick}
           readOnly={!puedeEditar}
           onChange={next => onIssuesChange([...issues.filter(i => i.planKey !== plan.planKey), ...next])}
         />
+      </div>
+
+      {/* Correos y links, a un clic de las alertas */}
+      <div data-print-hide style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:20 }}>
+        <CorreosPlegable hilos={hilosPlan.filter(h => h.planKey === plan.planKey)} holidays={holidays}
+          onAbrir={onHiloClick} onNuevo={puedeEditar ? onHiloNuevo : undefined}/>
+        <LinksPlegable links={linksProyecto} onVerTodos={onVerLinks}/>
       </div>
 
       {(() => {
@@ -1832,6 +2120,54 @@ function PlanDetail({ plan, getActivityPct: getActivityPctHoy, setActivityPct, e
           />
         ));
       })()}
+
+      <LeyendaPlan/>
+
+      {correoAbierto && (
+        <GenerarCorreo onClose={() => setCorreoAbierto(false)}
+          datos={{
+            projectId: plan.projectId,
+            respBBVA: plan.respBBVA,
+            respTimia: plan.respTimia,
+            fechaCorte: fechaCorte || new Date().toISOString().slice(0, 10),
+            real: overallReal,
+            esperado: overallExpBase,
+            fases: fasesAvance,
+            pesoModo,
+            // Solo las de este plan: `issues` trae las de todos, y el reporte
+            // de un proyecto salía con las alertas y bloqueantes de otro.
+            issues: issues.filter(i => i.planKey === plan.planKey),
+            semanas: Math.max(planWeeks, semanaHoy),
+            semanaHoy,
+            diaHoy,
+            semanasFechas,
+            inicio: plan.startDate,
+            porEntregable: porEntregable.map(x => ({ esp: x.esp, actividades: x.actividades })),
+          }}/>
+      )}
+    </div>
+  );
+}
+
+// ─── Leyenda del Gantt ───────────────────────────────────────────────────────
+// Va una sola vez al pie del plan: repetida en cada entregable ensuciaba mucho.
+function LeyendaPlan() {
+  const items = [
+    { sw:<div style={{ width:20, height:9, background:'#0d9488', borderRadius:2 }}/>, l:'Ejecutado' },
+    { sw:<div style={{ width:20, height:9, background:'#16a34a', borderRadius:2, display:'flex', alignItems:'center', justifyContent:'flex-end', paddingRight:2, boxSizing:'border-box', color:'#fff', fontSize:7, fontWeight:700 }}>✓</div>, l:'Finalizada' },
+    { sw:<div style={{ width:20, height:9, background:'rgba(13,148,136,0.22)', borderRadius:2 }}/>, l:'Planificado' },
+    { sw:<div style={{ width:20, height:9, background:'repeating-linear-gradient(135deg, #c4b5fd 0 3px, #ede9fe 3px 6px)', borderRadius:2 }}/>, l:'Extensión por cambios (Δ)' },
+    { sw:<div style={{ width:20, height:9, background:'repeating-linear-gradient(135deg, #fca5a5 0 3px, #fee2e2 3px 6px)', borderRadius:2 }}/>, l:'Días perdidos por bloqueante' },
+    { sw:<span style={{ fontSize:8, padding:'1px 4px', borderRadius:3, background:'#dbeafe', color:'#1d4ed8', fontWeight:700 }}>BBVA</span>, l:'Depende de BBVA' },
+    { sw:<LayoutList size={10} color="#0d9488"/>, l:'Tiene etapas (click)' },
+  ];
+  return (
+    <div style={{ display:'flex', gap:14, alignItems:'center', flexWrap:'wrap', padding:'9px 12px', marginTop:4,
+                  background:'#f8fafc', border:'0.5px solid #e2e8f0', borderRadius:8 }}>
+      <span style={{ fontSize:9, color:'#94a3b8', fontWeight:600, textTransform:'uppercase', letterSpacing:0.4 }}>Leyenda</span>
+      {items.map(({ sw, l }) => (
+        <div key={l} style={{ display:'flex', alignItems:'center', gap:5 }}>{sw}<span style={{ fontSize:9, color:'#64748b' }}>{l}</span></div>
+      ))}
     </div>
   );
 }
@@ -2532,13 +2868,19 @@ function kpisDelPlan(
 async function exportPlanPPTX(plan: WorkPlan, getActivityPct: (eid: string, ai: number, a: PlanActivity) => number, screenshots: string[] = [], issues: PlanIssue[] = [], changes: BitacoraEntry[] = []) {
   const pptxgen = (await import('pptxgenjs')).default;
   const pptx = new pptxgen();
-  pptx.layout = 'LAYOUT_WIDE';
+  // Todo el contenido está maquetado sobre 10 pulgadas de ancho, pero la lámina
+  // se declaraba de 13,33: sobraba un tercio de diapositiva a la derecha. Con
+  // una lámina propia de 10 × 5,625 el contenido llena la hoja y además queda
+  // en 16:9, que es el formato de la plantilla y del PDF que manda Juan.
+  pptx.defineLayout({ name: 'TIMIA_16_9', width: 10, height: 5.625 });
+  pptx.layout = 'TIMIA_16_9';
   pptx.title = `Plan de Trabajo · ${planLabel(plan)}`;
 
   // ── Paleta ───────────────────────────────────────────────────────────────────
   const BG_DARK  = '0F172A';                   // portada y última slide
   const WHITE    = 'FFFFFF';
-  const TBL_HDR  = '881337';                   // header row de la tabla (maroon)
+  const VINO_TIMIA = '9A003D';                 // muestreado de la barra bajo la A del logo
+  const TBL_HDR  = VINO_TIMIA;                 // header row de la tabla, con el vino de la marca
   const ROW_ODD  = 'FFFFFF';
   const ROW_EVEN = 'F8FAFC';
   const ROW_BORD = 'E2E8F0';
@@ -2557,6 +2899,20 @@ async function exportPlanPPTX(plan: WorkPlan, getActivityPct: (eid: string, ai: 
   const CARD     = '1E293B';
   const BORDER_D = '334155';
   const ENT_COLORS = [RED,'0D9488','7C3AED','0891B2','BE185D'];
+
+  // ── Plantilla ────────────────────────────────────────────────────────────
+  // El logo y la marca de agua salen del PPTX de seguimiento de TIMIA, así que
+  // la baraja no imita el formato del banco: lleva el formato.
+  const _raiz = (() => { const b = import.meta.env.BASE_URL ?? '/'; return b.endsWith('/') ? b : `${b}/`; })();
+  const LOGO = `${_raiz}plantilla/timia-logo.png`;
+  const MARCA = `${_raiz}plantilla/timia-marca.png`;
+  const RATIO_LOGO = 2048 / 326;
+
+  /** Marca de agua y logo de las láminas de contenido. */
+  const vestir = (sl: any, claro = true) => {
+    sl.addImage({ path: MARCA, x: 7.05, y: 1.95, w: 3.1, h: 2.99, transparency: claro ? 93 : 88 });
+    sl.addImage({ path: LOGO, x: 0.18, y: 0.14, w: 1.15, h: 1.15 / RATIO_LOGO });
+  };
 
   // ── Semanas — dinámico basado en startDate del plan ──────────────────────
   const _holidays = new Set(adminStore.getHolidays().map(h => h.date));
@@ -2587,9 +2943,12 @@ async function exportPlanPPTX(plan: WorkPlan, getActivityPct: (eid: string, ai: 
   const dif = kpis.dif;
 
   // ══ SLIDE 1: Portada ═════════════════════════════════════════════════════════
-  const s1=pptx.addSlide(); s1.background={color:BG_DARK};
-  s1.addShape('rect'as any,{x:0,y:0,w:0.07,h:5.63,fill:{color:RED}});
-  s1.addText('TIMIA',{x:0.4,y:0.28,w:3,fontSize:12,bold:true,color:RED,align:'left'});
+  const s1=pptx.addSlide(); s1.background={color:'000000'};
+  s1.addImage({ path: MARCA, x: 5.6, y: 0.55, w: 4.3, h: 4.15, transparency: 86 });
+  s1.addImage({ path: LOGO, x: 0.4, y: 0.4, w: 2.1, h: 2.1 / RATIO_LOGO });
+  s1.addShape('rect'as any,{x:0,y:5.17,w:10,h:0.46,fill:{color:VINO_TIMIA}});
+  s1.addText(today,{x:0.4,y:5.24,w:9.2,fontSize:11,color:WHITE,align:'right'});
+  s1.addText('Seguimiento',{x:0.4,y:2.2,w:6,fontSize:34,bold:true,color:WHITE,align:'left'});
   s1.addText('Plan de Trabajo',{x:0.4,y:1.05,w:9,fontSize:22,bold:false,color:GRAY,align:'left'});
   s1.addText(`Proyecto ${planLabel(plan)}`,{x:0.4,y:1.55,w:9,fontSize:50,bold:true,color:WHITE,align:'left'});
   s1.addText(today,{x:0.4,y:2.85,w:9,fontSize:12,color:GRAY,align:'left'});
@@ -2613,7 +2972,7 @@ async function exportPlanPPTX(plan: WorkPlan, getActivityPct: (eid: string, ai: 
 
     // ── Si hay screenshot de DOM, usar slide de imagen (más fiel a la app) ──
     if (screenshots[ei]) {
-      const sl=pptx.addSlide(); sl.background={color:WHITE};
+      const sl=pptx.addSlide(); sl.background={color:WHITE}; vestir(sl);
       sl.addText(ent.name,{x:LM,y:0.07,w:7,fontSize:13,bold:true,color:DARK,align:'left'});
       // KPI badges
       const badges=[
@@ -2806,9 +3165,10 @@ async function exportPlanPPTX(plan: WorkPlan, getActivityPct: (eid: string, ai: 
   ].forEach(sec=>{
     sL.addShape('rect'as any,{x:sec.x,y:0.88,w:2.9,h:4.3,fill:{color:CARD},line:{color:BORDER_D,width:0.5}});
     sL.addText(sec.title,{x:sec.x+0.1,y:0.98,w:2.7,fontSize:9.5,bold:true,color:sec.col});
-    sec.items.forEach((item,ii)=>sL.addText(`• ${item}`,{x:sec.x+0.1,y:1.5+ii*0.42,w:2.7,fontSize:9,color:'F1F5F9',wrap:true}));
+    // Numeradas: en la reunión se dice "el bloqueante 2", y sin número no hay
+    // forma de saber a cuál se refieren ni de casarlo con el Gantt.
+    sec.items.forEach((item,ii)=>sL.addText(`${ii+1}. ${item}`,{x:sec.x+0.1,y:1.5+ii*0.42,w:2.7,fontSize:9,color:'F1F5F9',wrap:true}));
   });
-  sL.addText('Generado por Timia Hub',{x:0.4,y:5.1,w:9,fontSize:8,color:MUT,align:'center'});
 
   await pptx.writeFile({fileName:`Plan_${plan.planKey.replace('::','_')}_${new Date().toISOString().slice(0,10)}.pptx`});
 }
@@ -2919,6 +3279,103 @@ export function getPlanSummaries(): PlanSummary[] {
   });
 }
 
+// ─── Detalle para el standup ────────────────────────────────────────────────
+// El resumen por plan sirve para los KPI, pero un standup que solo diga «68 %»
+// no es un standup. Lo que se cuenta en la reunión son tres cosas: qué se
+// movió desde la última vez, qué está en curso y qué arranca. Eso necesita
+// bajar a la actividad, y por eso vive aquí, donde están las fechas hábiles y
+// las extensiones por bloqueo.
+
+export interface ActividadStandup {
+  planKey: string; projectId: string; cronoName: string;
+  entregable: string; nombre: string;
+  pct: number; de?: number;
+  inicio: Date | null; fin: Date | null;
+  responsables: string[];
+  atrasada: boolean;
+}
+
+export interface DetalleStandup {
+  /** Actividades cuyo % cambió dentro de la ventana. */
+  movidas: ActividadStandup[];
+  /** Empezadas y sin terminar hoy. */
+  enCurso: ActividadStandup[];
+  /** Arrancan dentro de la próxima semana hábil. */
+  porVenir: ActividadStandup[];
+  /** Terminadas dentro de la ventana. */
+  cerradas: ActividadStandup[];
+  /** Desde cuándo se está mirando. */
+  desde: Date;
+}
+
+/**
+ * Lo que se movió en los últimos `dias` y lo que viene.
+ *
+ * La ventana por omisión es de una semana: un standup diario repetiría lo de
+ * ayer y uno mensual no cabría en la reunión.
+ */
+export function getStandupDetalle(dias = 7): Map<string, DetalleStandup> {
+  const holidays = new Set(adminStore.getHolidays().map(h => h.date));
+  const etapaStates = adminStore.getEtapaStates();
+  const pcts = adminStore.getPlanPcts();
+  const issues = adminStore.getPlanIssues();
+  const changes = adminStore.getBitacora().filter(c => (c.impacts?.length ?? 0) > 0);
+  const asignados = adminStore.getActivityAssignees();
+  const usuarios = adminStore.getUsers();
+  const historial = adminStore.getPctHistorial();
+
+  const hoy = new Date(); hoy.setHours(12, 0, 0, 0);
+  const desde = new Date(hoy.getTime() - dias * 86400000);
+  const limite = addBusinessDays(hoy, 5, holidays);
+
+  // El % anterior de cada actividad al inicio de la ventana: el primer cambio
+  // registrado dentro de ella sabe de dónde venía.
+  const previo = new Map<string, number>();
+  historial
+    .filter(c => c.en >= desde.toISOString())
+    .sort((a, b) => a.en.localeCompare(b.en))
+    .forEach(c => { if (!previo.has(c.clave) && c.de !== null) previo.set(c.clave, c.de); });
+
+  const out = new Map<string, DetalleStandup>();
+
+  buildEffectivePlans().forEach(p => {
+    const todayIdx = computeCurrentWeekIdx(p.startDate, holidays);
+    const d: DetalleStandup = { movidas: [], enCurso: [], porVenir: [], cerradas: [], desde };
+
+    p.entregables.forEach(e => e.activities.forEach((a, i) => {
+      const clave = `${p.planKey}-${e.id}-${i}`;
+      const pct = purePct(p.planKey, e.id, i, a, etapaStates, pcts);
+      const ex = extensionFor(changes, p.planKey, e.id, i, a.endWeek, issues, holidays);
+      const fin = effectiveEndDate(p.startDate, a.endWeek, ex.days, holidays);
+      const inicio = weekToActualDate(p.startDate, a.startWeek, holidays);
+      const ids = asignados[`${p.planKey}__${e.id}__${i}`] ?? [];
+
+      const act: ActividadStandup = {
+        planKey: p.planKey, projectId: p.projectId,
+        cronoName: p.cronoId ? (p.cronoName ?? p.cronoId) : CRONO_MAIN_NAME,
+        entregable: e.name, nombre: a.name, pct,
+        de: previo.get(clave),
+        inicio, fin,
+        responsables: ids.map(id => usuarios.find(u => u.id === id)?.name).filter(Boolean) as string[],
+        atrasada: pct < 100 && !!fin && fin < hoy,
+      };
+
+      const semovio = previo.has(clave);
+      if (semovio && pct >= 100) d.cerradas.push(act);
+      else if (semovio) d.movidas.push(act);
+
+      if (pct < 100 && todayIdx + 1 >= a.startWeek) d.enCurso.push(act);
+      else if (pct < 100 && inicio && inicio > hoy && inicio <= limite) d.porVenir.push(act);
+    }));
+
+    // Lo más atrasado primero: es de lo que hay que hablar.
+    d.enCurso.sort((x, y) => Number(y.atrasada) - Number(x.atrasada) || x.pct - y.pct);
+    out.set(p.planKey, d);
+  });
+
+  return out;
+}
+
 /** Esqueleto de los planes (para selectores de impacto en otras vistas, ej. Tareas/Bitácora). */
 export function getPlanOutlines(projectId?: string): PlanOutline[] {
   return buildEffectivePlans()
@@ -2990,6 +3447,9 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
     return plans[0]?.planKey ?? '';
   });
   const [drawer,            setDrawer]            = useState<DrawerState | null>(null);
+  // Las tarjetas del tablero: de ahí salen los comentarios que se ven al abrir
+  // una tarea del diagrama. No son una copia — es la misma tarjeta.
+  const [tareas,            setTareas]            = useState<KanbanTask[]>(() => adminStore.getKanbanTasks());
   // Vista consolidada del proyecto (solo aplica si tiene varios cronogramas)
   const [consolidado,       setConsolidado]       = useState<boolean>(false);
   // Vista de cuenta (todos los proyectos): por defecto para gerente de cuenta y PM
@@ -3163,6 +3623,50 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
     }
   }
 
+  /** La tarjeta del tablero vinculada a la actividad abierta, si existe. */
+  function tarjetaDelDrawer(lista = tareas): KanbanTask | undefined {
+    if (!drawer) return undefined;
+    const { projectId: planKey, entregableId, actIdx } = drawer;
+    const { projectId, cronoId } = splitPlanKey(planKey);
+    return lista.find(t => t.projectId === projectId && (t.cronoId ?? undefined) === cronoId
+                        && t.entregableId === entregableId && t.actIdx === actIdx);
+  }
+
+  /**
+   * Deja un comentario en la tarjeta de la actividad abierta.
+   *
+   * Si todavía no hay tarjeta —la actividad no se ha asignado a nadie— se crea
+   * aquí: un comentario sin dónde vivir se perdería, y la tarjeta que nace así
+   * es la misma que habría creado el tablero.
+   */
+  function comentarActividad(texto: string) {
+    if (!drawer || !user) return;
+    const { projectId: planKey, entregableId, actIdx } = drawer;
+    const c: KanbanComment = {
+      id: `c-${Date.now()}`,
+      userId: user.id ?? '',
+      userName: user.name,
+      userInitials: user.initials ?? user.name.slice(0, 2).toUpperCase(),
+      userColor: user.avatarColor ?? '#64748b',
+      text: texto,
+      date: new Date().toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' }),
+    };
+    const actual = tarjetaDelDrawer();
+    let next: KanbanTask[];
+    if (actual) {
+      next = tareas.map(t => t.id === actual.id ? { ...t, comments: [c, ...(t.comments ?? [])] } : t);
+    } else {
+      const meta = metaDelDrawer();
+      if (!meta) return;
+      const nueva = tarjetaDesdeActividad(planKey, entregableId, actIdx,
+                                          activityAssignees[`${planKey}__${entregableId}__${actIdx}`] ?? [],
+                                          meta, holidays);
+      next = [...tareas, { ...nueva, comments: [c] }];
+    }
+    setTareas(next);
+    adminStore.saveKanbanTasks(next);
+  }
+
   /** Datos de la actividad del drawer que la tarjeta del tablero necesita. */
   function metaDelDrawer(): MetaActividad | undefined {
     if (!drawer) return undefined;
@@ -3221,6 +3725,13 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
         try {
           // Temporarily expand overflow so the full Gantt is visible
           const saved: { el: HTMLElement; prop: string; val: string }[] = [];
+          // Lo que la pantalla muestra y el reporte no debe llevar: la marca de
+          // % manual y las etiquetas de fecha de finalizada. Se ocultan solo
+          // durante la captura y se devuelven después, así la vista no cambia.
+          el.querySelectorAll<HTMLElement>('[data-report-hide]').forEach(e => {
+            saved.push({ el: e, prop: 'display', val: e.style.display ?? '' });
+            e.style.display = 'none';
+          });
           const expand = (e: HTMLElement, prop: string) => {
             saved.push({ el: e, prop, val: (e.style as Record<string,string>)[prop] ?? '' });
             (e.style as Record<string,string>)[prop] = 'visible';
@@ -3756,9 +4267,16 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
           <>
             {/* Botones de exportar — se ocultan en print */}
             <div data-print-hide style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:6, marginBottom:10 }}>
-              <div style={{ display:'flex', gap:8 }}>
-                <button onClick={handlePrint} style={{ display:'flex', alignItems:'center', gap:5, padding:'8px 14px', fontSize:12, background:'#0d9488', color:'#fff', border:'none', borderRadius:8, cursor:'pointer', fontWeight:500 }}>
-                  <Printer size={13}/> Imprimir / PDF
+              <div style={{ display:'flex', gap:8, flexWrap:'wrap', justifyContent:'flex-end' }}>
+                {/* Estas dos construyen el archivo en código. La impresión del
+                    navegador depende del motor de cada equipo y salía girada. */}
+                <button onClick={handleExportPptx} disabled={exportingPptx}
+                  style={{ display:'flex', alignItems:'center', gap:5, padding:'8px 14px', fontSize:12, background:'#fff', color:'#334155', border:'0.5px solid #cbd5e1', borderRadius:8, cursor: exportingPptx ? 'default' : 'pointer', fontWeight:500 }}>
+                  <FileDown size={13}/> {exportingPptx ? 'Generando PPTX…' : 'Descargar PPTX'}
+                </button>
+                <button onClick={handlePrint} title="Usa el diálogo de impresión del navegador; el resultado depende de cada equipo"
+                  style={{ display:'flex', alignItems:'center', gap:5, padding:'8px 12px', fontSize:11, background:'#fff', color:'#64748b', border:'0.5px solid #e2e8f0', borderRadius:8, cursor:'pointer' }}>
+                  <Printer size={12}/> Imprimir
                 </button>
               </div>
               {exportError && (
@@ -3817,6 +4335,8 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
               getDoneDateISO={(eid,ai)=>getDoneDateISO(plan.planKey,eid,ai)}
               hilos={mailHilos}
               onHiloClick={setHiloAbierto}
+              onHiloNuevo={() => setHiloNuevo([])}
+              onVerLinks={() => { window.location.href = `${import.meta.env.BASE_URL ?? '/'}links`.replace('//', '/'); }}
               onDoneDateChange={canMark ? ((eid,ai,v)=>setDoneDate(plan.planKey,eid,ai,v)) : undefined}
               holidays={holidays}
               issues={issues}
@@ -3849,6 +4369,9 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
           issues={issues.filter(i => !i.endDate && issueImpacts(i).some(m => m.planKey === drawer.projectId && m.entregableId === drawer.entregableId && m.actIdx === drawer.actIdx))}
           changes={changes.filter(c => (c.impacts ?? []).some(m => m.planKey === drawer.projectId && m.entregableId === drawer.entregableId && m.actIdx === drawer.actIdx))}
           holidays={holidays}
+          comentarios={tarjetaDelDrawer()?.comments ?? []}
+          puedeComentar={!!user && canInProject(user, 'tasks.comment', splitPlanKey(drawer.projectId).projectId)}
+          onComentar={comentarActividad}
           onEtapaToggle={handleEtapaToggle}
           onAssigneeAdd={handleAssigneeAdd}
           onAssigneeRemove={handleAssigneeRemove}

@@ -16,10 +16,11 @@ import {
   Link2,
   Package,
   Layers,
-  Activity, Factory, Mail } from 'lucide-react';
+  Activity, Factory, Mail, NotebookPen } from 'lucide-react';
 import { TimiaMark, TimiaWordmark } from './TimiaLogo';
+import ParchePermisos from './ParchePermisos';
 
-export type View = 'correos' | 'setup-project' | 'setup-team' | 'setup-tasks' | 'dashboard' | 'standards' | 'analytics' | 'audit' | 'bank-status' | 'notifications' | 'roles-permissions' | 'project-templates' | 'admin' | 'circuitos-bbva' | 'bitacora' | 'estimaciones' | 'plan-trabajo' | 'imputaciones' | 'inventario' | 'links' | 'proyectos' | 'activity-report' | 'fabrica';
+export type View = 'correos' | 'notas' | 'setup-project' | 'setup-team' | 'setup-tasks' | 'proyecto-tym' | 'dashboard' | 'standards' | 'analytics' | 'audit' | 'bank-status' | 'notifications' | 'roles-permissions' | 'project-templates' | 'admin' | 'circuitos-bbva' | 'bitacora' | 'estimaciones' | 'plan-trabajo' | 'imputaciones' | 'inventario' | 'links' | 'proyectos' | 'activity-report' | 'fabrica';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -75,6 +76,9 @@ export function menuDe(rol: string): (ItemMenu | GrupoMenu)[] {
       { view: 'inventario', label: 'Inventario',        icon: <Package size={13}/> },
       { view: 'fabrica',    label: 'Fábrica · estatus', icon: <Factory size={13}/>, perm: 'fabrica.view' },
       { view: 'links',      label: 'Links importantes', icon: <Link2 size={13}/> },
+      // Cuaderno personal dentro de la herramienta: lo que uno escribe para sí
+      // mismo no tiene por qué vivir en otra pestaña.
+      { view: 'notas',      label: 'Notas',             icon: <NotebookPen size={13}/> },
     ]),
 
     grupo('Admin', 'Administración', [
@@ -258,6 +262,9 @@ export default function Layout({ children, currentView, onViewChange, userRole }
 
         {/* Main Content */}
         <main className="flex-1 overflow-auto">
+          {/* Repara los permisos de proyectos con guion en el id en cuanto entre
+              alguien que gestione el equipo; invisible si no hay nada que hacer. */}
+          <ParchePermisos global/>
           {children}
         </main>
       </div>

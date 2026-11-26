@@ -12,6 +12,7 @@ import BankStatus from './components/BankStatus';
 import RolesPermissions from './components/RolesPermissions';
 import ProjectTemplates from './components/ProjectTemplates';
 import PMDashboard, { ProyectosPage } from './components/PMDashboard';
+import { CrearTareas, ProyectoTym } from './modules/tym';
 import AdminPanel from './components/AdminPanel';
 import CircuitosBBVA from './components/CircuitosBBVA';
 import Bitacora, { TabLinks } from './components/Bitacora';
@@ -22,6 +23,7 @@ import ActivityReport from './components/ActivityReport';
 import Estimaciones from './components/Estimaciones';
 import PlanDeTrabajo, { planOutlines, holidaysSet } from './components/PlanDeTrabajo';
 import HilosCorreo from './components/HilosCorreo';
+import Notas from './components/Notas';
 import { INITIAL_TEMPLATES } from './lib/templates';
 import { pathFor, parsePath } from './lib/routes';
 import { ProjectTemplate } from './types';
@@ -103,6 +105,13 @@ function AppInner() {
   // Vista de inicio por defecto para el botón "Volver"
   const goHome = () => navigate((ROLE_LANDING[role] as View) ?? 'dashboard');
 
+  /** El proyecto abierto que se está viendo: de la URL, o el último abierto. */
+  const proyectoAbierto = (): string | null => {
+    const { param } = parsePath();
+    if (param) { try { localStorage.setItem('timia_tym_project', param); } catch { /* sin almacenamiento */ } return param; }
+    try { return localStorage.getItem('timia_tym_project'); } catch { return null; }
+  };
+
   const renderView = () => {
     // ── Guards por vista ──────────────────────────────────────────────────────
     const guards: Record<string, string> = {
@@ -122,12 +131,38 @@ function AppInner() {
       case 'setup-project':
         return (
           <SetupProject
-            onNext={() => navigate('estimaciones')}
+            onNext={(tipo, projectId) => {
+              // Un proyecto abierto no pasa por estimar: de crearlo va a sus tareas.
+              if (tipo === 'tym') {
+                try { localStorage.setItem('timia_tym_project', projectId); } catch { /* sin almacenamiento */ }
+                navigate('setup-tasks', projectId);
+              } else {
+                navigate('estimaciones');
+              }
+            }}
             templates={templates}
             selectedTemplateId={selectedTemplateId}
             onSelectTemplate={setSelectedTemplateId}
           />
         );
+
+      case 'setup-tasks': {
+        const id = proyectoAbierto();
+        if (!id) return <AccessDenied onBack={goHome}/>;
+        return (
+          <CrearTareas
+            projectId={id}
+            onAtras={() => navigate('setup-project')}
+            onListo={() => navigate('proyecto-tym', id)}
+          />
+        );
+      }
+
+      case 'proyecto-tym': {
+        const id = proyectoAbierto();
+        if (!id) return <AccessDenied onBack={goHome}/>;
+        return <ProyectoTym projectId={id}/>;
+      }
 
       case 'dashboard':
         return <KanbanBoard userRole={role} setUserRole={() => {}} />;
@@ -236,6 +271,9 @@ function AppInner() {
         return canAccess(role, 'view_plan_trabajo')
           ? <HilosCorreo plans={planOutlines()} holidays={holidaysSet()} />
           : <AccessDenied onBack={goHome}/>;
+
+      case 'notas':
+        return <Notas />;
 
       case 'audit':
         return <AuditLog />;

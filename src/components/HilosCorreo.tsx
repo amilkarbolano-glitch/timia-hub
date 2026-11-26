@@ -46,6 +46,21 @@ export function fmtCorto(iso?: string): string {
   return d.toLocaleDateString('es-CO', { day: 'numeric', month: 'short' });
 }
 
+/**
+ * Los usuarios de un proyecto. El desplegable de Timia solo debe mostrar a la
+ * gente de ese proyecto: con 100+ personas en la plataforma, una lista completa
+ * invita a asignarle el hilo a alguien de otro frente.
+ *
+ * Si el proyecto no tiene a nadie asignado todavía, se devuelven todos los
+ * activos en vez de una lista vacía, que dejaría el hilo sin responsable
+ * posible.
+ */
+export function usuariosDeProyecto(projectId: string): AdminUser[] {
+  const activos = adminStore.getUsers().filter(u => u.active);
+  const delProyecto = activos.filter(u => (u.projectIds ?? []).includes(projectId));
+  return delProyecto.length ? delProyecto : activos;
+}
+
 function hoyISO(): string { return new Date().toISOString().slice(0, 10); }
 function nuevoId(): string { return `h-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`; }
 
@@ -155,7 +170,7 @@ export function HiloForm({ plans, planKey, impactsIniciales = [], hilo, onSave, 
   onClose: () => void;
 }) {
   const { user } = useAuth();
-  const users = useMemo(() => adminStore.getUsers().filter(u => u.active), []);
+  const [pkSel, setPkSel]     = useState<string>(hilo?.planKey ?? planKey ?? impactsIniciales[0]?.planKey ?? plans[0]?.planKey ?? '');
   const [asunto, setAsunto]   = useState(hilo?.asunto ?? '');
   const [resumen, setResumen] = useState(hilo?.resumen ?? '');
   const [jira, setJira]       = useState(hilo?.jira ?? '');
@@ -165,8 +180,18 @@ export function HiloForm({ plans, planKey, impactsIniciales = [], hilo, onSave, 
   const [pickando, setPickando] = useState(false);
   const [error, setError]     = useState('');
 
-  const pk = hilo?.planKey ?? planKey ?? impacts[0]?.planKey ?? plans[0]?.planKey ?? '';
-  const projectId = plans.find(p => p.planKey === pk)?.projectId ?? pk.split('::')[0];
+  const pk = pkSel;
+  const planSel = plans.find(p => p.planKey === pk);
+  const projectId = planSel?.projectId ?? pk.split('::')[0];
+  const users = useMemo(() => usuariosDeProyecto(projectId), [projectId]);
+
+  /** Cambiar de cronograma invalida las tareas elegidas: son de otro plan. */
+  function elegirPlan(nuevo: string) {
+    if (nuevo === pk) return;
+    setPkSel(nuevo);
+    setImpacts([]);
+    if (resp.lado === 'TIMIA') setResp({ lado: 'TIMIA', userId: '', nombre: '' });
+  }
 
   function guardar() {
     if (!asunto.trim())    { setError('Pega el asunto del correo.'); return; }
@@ -191,6 +216,15 @@ export function HiloForm({ plans, planKey, impactsIniciales = [], hilo, onSave, 
         </div>
 
         <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 13 }}>
+          <label style={{ display: 'block' }}>
+            <span style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#334155', marginBottom: 4 }}>Proyecto y cronograma</span>
+            <select value={pk} onChange={e => elegirPlan(e.target.value)} disabled={!!hilo}
+              style={{ width: '100%', fontSize: 12, padding: '8px 9px', borderRadius: 8, border: '1px solid #e2e8f0', color: '#1e293b', background: hilo ? '#f8fafc' : '#fff' }}>
+              {plans.map(p => <option key={p.planKey} value={p.planKey}>{p.projectId}{p.cronoId ? ` · ${p.cronoName ?? p.cronoId}` : ''}</option>)}
+            </select>
+            {!hilo && <span style={{ display: 'block', fontSize: 10, color: '#94a3b8', marginTop: 3 }}>Decide de qué proyecto es el hilo, y con eso quién puede ser el responsable de Timia.</span>}
+          </label>
+
           <label style={{ display: 'block' }}>
             <span style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#334155', marginBottom: 4 }}>Asunto <span style={{ color: '#94a3b8', fontWeight: 400 }}>· pégalo del correo</span></span>
             <input value={asunto} onChange={e => setAsunto(e.target.value)} autoFocus
@@ -245,7 +279,7 @@ export function HiloForm({ plans, planKey, impactsIniciales = [], hilo, onSave, 
       </div>
 
       {pickando && (
-        <ImpactPicker plans={plans} value={impacts} title="Tareas que frena el hilo" accent="#0f6e56"
+        <ImpactPicker plans={planSel ? [planSel] : plans} value={impacts} title="Tareas que frena el hilo" accent="#0f6e56"
           onConfirm={is => { setImpacts(is); setPickando(false); }} onClose={() => setPickando(false)}/>
       )}
     </div>
@@ -264,7 +298,7 @@ export function HiloPanel({ hilo, plans, holidays, puedeEditar, onSave, onEscala
   onClose: () => void;
 }) {
   const { user } = useAuth();
-  const users = useMemo(() => adminStore.getUsers().filter(u => u.active), []);
+  const users = useMemo(() => usuariosDeProyecto(hilo.projectId), [hilo.projectId]);
   const dias = diasEnMano(hilo, holidays);
   const [nota, setNota] = useState('');
   const [resp, setResp] = useState<MailResponsable>(hilo.responsable);
@@ -305,7 +339,9 @@ export function HiloPanel({ hilo, plans, holidays, puedeEditar, onSave, onEscala
         <div style={{ padding: '16px 20px', borderBottom: '0.5px solid #e2e8f0', background: '#fdf2f6' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 9, color: '#9f1239', fontWeight: 700, letterSpacing: '.04em', marginBottom: 3 }}>HILO DE CORREO</div>
+              <div style={{ fontSize: 9, color: '#9f1239', fontWeight: 700, letterSpacing: '.04em', marginBottom: 3 }}>
+                HILO DE CORREO · {hilo.projectId}{hilo.planKey.includes('::') ? ` · ${hilo.planKey.split('::')[1]}` : ''}
+              </div>
               <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#111827', lineHeight: 1.35 }}>{hilo.asunto}</h3>
             </div>
             <button onClick={onClose} aria-label="Cerrar el panel" style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#64748b', display: 'flex' }}><X size={16}/></button>

@@ -257,6 +257,20 @@ export function esperadoHoy(fases: AvanceFase[], totalWeeks: number, todayWeek: 
  * - 'actividad-semana': cada actividad aporta su % sobre el peso de sus casillas.
  * - 'actividad': promedio simple de los % de las actividades.
  */
+/**
+ * El esperado de una fase contra su línea base, interpolado al día hábil.
+ *
+ * Una sola definición porque el número sale en tres sitios —la insignia del
+ * entregable, su tarjeta y la presentación— y cada uno lo calculaba a su
+ * manera: la pantalla contra la línea base y las otras dos contra la fase
+ * replanificada, de modo que el mismo entregable decía 83,3 % arriba y 59 %
+ * en el reporte, y la diferencia que se enviaba al cliente no era la que se
+ * estaba mirando.
+ */
+export function esperadoFase(fase: AvanceFase, horizonte: number, semana: number, dia: number): number {
+  return parseFloat(enDia(seriePlanFase(fase, Math.max(1, horizonte)), semana, dia).toFixed(1));
+}
+
 export function realPlan(fases: AvanceFase[], modo: PesoModo): number {
   const acts = fases.flatMap(f => f.activities);
   if (!acts.length) return 0;

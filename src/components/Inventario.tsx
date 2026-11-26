@@ -684,8 +684,11 @@ function PanelDataX({ user, proyectos, filterProj, search }: {
                       <div key={c.key} style={{ display:'flex', alignItems:'center', gap:8, marginBottom:4 }}>
                         <span style={{ fontSize:10, color:'#94a3b8', width:126, flexShrink:0 }}>{c.label}</span>
                         <div style={{ flex:1, minWidth:0 }}>
-                          <InlineEdit value={(row[c.key] as string) ?? ''} placeholder="—" mono
-                            onSave={v => setCampo(row.id, c.key, v)}/>
+                          {c.enlace
+                            ? <LinkCell value={(row[c.key] as string) ?? ''}
+                                onSave={v => setCampo(row.id, c.key, v)}/>
+                            : <InlineEdit value={(row[c.key] as string) ?? ''} placeholder="—" mono
+                                onSave={v => setCampo(row.id, c.key, v)}/>}
                         </div>
                       </div>
                     ))}

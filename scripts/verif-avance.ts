@@ -1,9 +1,18 @@
 // Verificación: los factores y acumulados de lib/avance deben coincidir con la hoja
 // "Plan de trabajo - Replanificaci" del Excel de seguimiento de SDATOOL-54364.
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { seriePlanFase, seriePlanConsolidada, factorFase, marcasFase, factorGlobal, type AvanceFase } from '../src/lib/avance';
 
-const raw = JSON.parse(readFileSync('/sessions/charming-trusting-franklin/mig2_replan.json', 'utf8'));
+// El plan real del SDA no vive aquí: este repositorio es público. Se busca
+// donde esté y, si no está, la comprobación se omite en vez de reventar.
+//   AVANCE_PLAN=/ruta/mig2_replan.json npx tsx scripts/verif-avance.ts
+const RUTA = process.env.AVANCE_PLAN
+  ?? [`${process.env.HOME}/mig2_replan.json`, '/mnt/user-data/uploads/mig2_replan.json'].find(existsSync) ?? '';
+if (!RUTA) {
+  console.log('⊘ se omite: no está mig2_replan.json (pásalo en AVANCE_PLAN)');
+  process.exit(0);
+}
+const raw = JSON.parse(readFileSync(RUTA, 'utf8'));
 const fases: AvanceFase[] = raw.ents.map((f: any, i: number) => ({
   id: `f${i}`, label: f.label,
   activities: f.activities.map((a: any) => {

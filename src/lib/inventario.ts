@@ -194,6 +194,15 @@ export interface InvDataX {
   // Lado ADA (escritura)
   doWriteWork: string;  doWriteLive: string;
   rutaArchivoAda: string;
+  /**
+   * Enlace directo al DataX de cada lado.
+   *
+   * La ruta dice dónde está el archivo; el enlace lleva al DataX, que es a
+   * donde de verdad hay que ir cuando algo falla. Tenerlo aquí evita el paseo
+   * de buscar el namespace a mano cada vez.
+   */
+  enlaceTantia?: string;
+  enlaceAda?: string;
 }
 
 export const CAMPOS_DATAX_ENTORNO: { key: keyof DataXEntorno & string; label: string }[] = [
@@ -205,7 +214,7 @@ export const CAMPOS_DATAX_ENTORNO: { key: keyof DataXEntorno & string; label: st
   { key: 'rutaLive',      label: 'Ruta · Live' },
 ];
 
-export const GRUPOS_DATAX: { titulo: string; campos: { key: keyof InvDataX & string; label: string }[] }[] = [
+export const GRUPOS_DATAX: { titulo: string; campos: { key: keyof InvDataX & string; label: string; enlace?: boolean }[] }[] = [
   { titulo: 'Tantia · lectura', campos: [
     { key: 'doReadWork',      label: 'Data Object · Work' },
     { key: 'doReadLive',      label: 'Data Object · Live' },
@@ -213,11 +222,13 @@ export const GRUPOS_DATAX: { titulo: string; campos: { key: keyof InvDataX & str
     { key: 'transferLive',    label: 'Transfer · Live' },
     { key: 'rutaArchivoWork', label: 'Ruta archivo · Work' },
     { key: 'rutaArchivoLive', label: 'Ruta archivo · Live' },
+    { key: 'enlaceTantia',    label: 'Enlace al DataX', enlace: true },
   ]},
   { titulo: 'ADA · escritura', campos: [
     { key: 'doWriteWork',    label: 'Data Object · Work' },
     { key: 'doWriteLive',    label: 'Data Object · Live' },
     { key: 'rutaArchivoAda', label: 'Ruta archivo' },
+    { key: 'enlaceAda',      label: 'Enlace al DataX', enlace: true },
   ]},
 ];
 

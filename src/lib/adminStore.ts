@@ -44,6 +44,16 @@ export interface AdminProject {
   id: string; name: string; area: string; color: string;
   priority: Priority; client: string; startDate: string; active: boolean;
   sda?: string;  // Código SDA — solo clientes BBVA Colombia / BBVA Argentina
+  /** Asunto del correo donde se acordó el alcance; se cita en el status semanal. */
+  asuntoAlcance?: string;
+  /** Los dos nombres que firman el status. Van aquí y no salen del equipo
+   *  porque son fijos por proyecto y el equipo cambia. */
+  respBBVA?: string;
+  respTimia?: string;
+  /** 'tym' = proyecto abierto, por tiempo y materiales: ni plantilla ni plan.
+   *  Sin valor es cerrado, que es como estaban todos. Se fija al crear y no
+   *  cambia: pasar un abierto a cerrado obligaría a inventarle un cronograma. */
+  tipo?: 'cerrado' | 'tym';
 }
 
 export interface AdminUser {
@@ -267,6 +277,12 @@ export interface PlanIssue {
   notaCierre?: string;
   /** Si nació al escalar otra alerta, el id de aquélla. */
   origenId?: string;
+  /**
+   * Hilos de correo relacionados. Opcional a propósito: muchos bloqueantes
+   * nacen en una reunión o en un chat y nunca tienen correo. Cuando sí lo
+   * tienen, es lo primero que pide quien revisa el seguimiento.
+   */
+  hiloIds?: string[];
 }
 
 /**
@@ -289,6 +305,9 @@ export interface PasoPlan {
   hechoEn?: string;                // ISO yyyy-mm-dd — sin esto, sigue pendiente
   hechoPor?: string;
   notaCierre?: string;
+  /** Opcional: de quién depende. Mismo formato que los hilos, para no inventar
+   *  dos maneras de decir lo mismo — gente de Timia de la lista, BBVA a mano. */
+  responsable?: MailResponsable;
   creadoPor: string;
   creadoEn: string;                // ISO timestamp
 }
@@ -346,6 +365,65 @@ export interface MailHilo {
   creadoEn: string;                // ISO timestamp
 }
 
+/** Un cuaderno: una carpeta con nombre y color, nada más. Dos niveles bastan. */
+/** Lo que se escribe una vez por proyecto para el correo de status. */
+export interface CorreoConfig {
+  sda?: string;
+  asuntoAlcance?: string;
+  respBBVA?: string;
+  respTimia?: string;
+}
+
+export interface Cuaderno {
+  id: string;
+  nombre: string;
+  color: string;
+  ownerId: string;
+  creadoEn: string;
+}
+
+/**
+ * Una nota.
+ *
+ * El cuerpo es markdown, no bloques: un editor de bloques son semanas y una
+ * dependencia pesada, y markdown da títulos, listas, casillas y código desde
+ * el primer día, además de sobrevivir a un cambio de editor.
+ *
+ * `visibilidad` es de interfaz, no de servidor: el API devuelve la colección
+ * completa a cualquier usuario con sesión, así que «privada» significa que
+ * nadie más la ve en la herramienta, no que nadie más pueda leerla. Para que
+ * sea privacidad de verdad hace falta un endpoint propio que filtre por
+ * usuario en el servidor.
+ */
+/** Qué tan urgente es la nota. Sin marcar es lo normal: no obliga a clasificar
+ *  cada apunte suelto, y así "alta" significa algo cuando aparece. */
+export type NotaImportancia = 'alta' | 'media' | 'baja';
+
+/** En qué punto está lo que cuenta la nota. 'no-requerida' es el caso de algo
+ *  que se evaluó y se decidió no hacer: cerrarlo sin borrarlo deja el rastro. */
+export type NotaEstado = 'borrador' | 'en-curso' | 'en-espera' | 'en-revision' | 'revisada' | 'finalizada' | 'no-requerida';
+
+export interface Nota {
+  id: string;
+  titulo: string;
+  cuerpo: string;
+  cuadernoId?: string;
+  importancia?: NotaImportancia;
+  estado?: NotaEstado;
+  etiquetas?: string[];
+  visibilidad: 'privada' | 'equipo' | 'proyecto';
+  /** Solo si visibilidad es 'proyecto'. */
+  projectId?: string;
+  ownerId: string;
+  ownerNombre: string;
+  favorita?: boolean;
+  /** Borrado lógico: por el API un borrado es definitivo y sin vuelta. */
+  borradaEn?: string;
+  creadaEn: string;
+  actualizadaEn: string;
+  actualizadaPor?: string;
+}
+
 /** Normaliza los impactos de un issue (soporta el formato antiguo de impacto único) */
 export function issueImpacts(i: PlanIssue): PlanImpact[] {
   if (i.impacts && i.impacts.length) return i.impacts;
@@ -364,6 +442,7 @@ export interface EdicionIssue {
   notaCierre?: string;
   responsable?: string;
   impacts: PlanImpact[];
+  hiloIds?: string[];
 }
 
 /**
@@ -383,6 +462,7 @@ export function aplicarEdicionIssue(i: PlanIssue, e: EdicionIssue, por: string, 
     startDate: e.startDate,
     responsable: e.responsable?.trim() || undefined,
     impacts: e.impacts,
+    hiloIds: e.hiloIds?.length ? e.hiloIds : undefined,
     endDate: fin,
     closedBy: fin ? (i.closedBy ?? por) : undefined,
     closedAt: fin ? (i.closedAt ?? ahora) : undefined,
@@ -415,6 +495,8 @@ export function escalarAlerta(a: PlanIssue, nota: string, por: string, fecha: st
     startDate: fecha,
     responsable: a.responsable,
     impacts: issueImpacts(a),
+    // El correo que venía con la alerta sigue siendo el mismo correo.
+    hiloIds: a.hiloIds?.length ? [...a.hiloIds] : undefined,
     createdBy: por, createdAt: ahora,
     origenId: a.id,
   };
@@ -744,6 +826,18 @@ export const adminStore = {
 
   getMailHilos:  (): MailHilo[]       => load('mail_hilos', []),
   saveMailHilos: (h: MailHilo[])      => save('mail_hilos', h),
+
+  getNotas:      (): Nota[]           => load('notas', []),
+  saveNotas:     (n: Nota[])          => save('notas', n),
+  getCuadernos:  (): Cuaderno[]       => load('cuadernos', []),
+  saveCuadernos: (c: Cuaderno[])      => save('cuadernos', c),
+
+  // Ajustes del correo de status, por proyecto. Van aparte y no en el registro
+  // del proyecto: escribir ahí exige projects.manage —crear y renombrar
+  // proyectos— y un líder técnico no tiene ese permiso ni debería tenerlo solo
+  // para teclear el nombre de un responsable.
+  getCorreoConfig:  (): Record<string, CorreoConfig> => load('correo_config', {}),
+  saveCorreoConfig: (c: Record<string, CorreoConfig>) => save('correo_config', c),
 
   // Siguientes pasos (se resuelven, no se borran)
   getPlanPasos:  (): PasoPlan[]       => load('plan_pasos', []),
