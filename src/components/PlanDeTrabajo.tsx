@@ -10,6 +10,7 @@ import ImpactPicker, { ImpactChips, impactLabel, type PlanOutline } from './Impa
 import { HiloBadge, HiloPanel, HiloForm, hilosDeActividad, ResponsableInput, ResponsableChip, usuariosDeProyecto } from './HilosCorreo';
 import GenerarCorreo from './GenerarCorreo';
 import { persistSet } from '../lib/persist';
+import { pathFor } from '../lib/routes';
 import { snapToBusinessDay, addBusinessDays, computeBusinessWeekIdx, dateToBusinessWeekIdx, businessDaysBetween, diaHabilDeSemana } from '../lib/businessDays';
 import { sincronizarAsignados, reconciliarTablero, tarjetaDesdeActividad, type MetaActividad } from '../lib/planTablero';
 import {
@@ -4336,7 +4337,7 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
               hilos={mailHilos}
               onHiloClick={setHiloAbierto}
               onHiloNuevo={() => setHiloNuevo([])}
-              onVerLinks={() => { window.location.href = `${import.meta.env.BASE_URL ?? '/'}links`.replace('//', '/'); }}
+              onVerLinks={() => { window.location.href = pathFor('links'); }}
               onDoneDateChange={canMark ? ((eid,ai,v)=>setDoneDate(plan.planKey,eid,ai,v)) : undefined}
               holidays={holidays}
               issues={issues}
