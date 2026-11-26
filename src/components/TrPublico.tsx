@@ -11,11 +11,17 @@ import React, { useState, useRef } from 'react';
 import { Upload, X, CheckCircle, AlertTriangle, Loader2, Camera } from 'lucide-react';
 import { TimiaMark, TimiaWordmark } from './TimiaLogo';
 
-const MAX_IMAGENES = 10;
+const MAX_IMAGENES = 20;
 const MAX_BYTES = 6 * 1024 * 1024;
+// Cuántas van en vuelo a la vez. Cada captura es su propia petición porque el
+// lector tarda medio minuto larga y CloudFront corta al minuto: dos capturas
+// en la misma petición ya se pasan. Con tres en vuelo, veinte capturas salen
+// en tandas y ninguna petición se acerca al límite.
+const EN_VUELO = 3;
 
 interface Captura { id: string; nombre: string; contenido: string; peso: number }
 interface Resultado { captura: string; estado: string; detalle?: string; respuesta?: unknown }
+interface Fila { dia: string; horas: string }
 
 const hoy = () => {
   const d = new Date();
@@ -36,6 +42,35 @@ function explica(r: Resultado): { tono: 'ok'|'aviso'|'error'; texto: string } {
     case 'ERROR_RED':      return { tono:'error', texto:'No se pudo contactar al lector de capturas.' };
     default:               return { tono:'aviso', texto: r.detalle ?? r.estado };
   }
+}
+
+/**
+ * Las horas que devolvió el lector, si es que vienen.
+ *
+ * Todavía no hay contrato con el Apps Script, así que esto no adivina una
+ * forma: busca las parejas día/horas donde suelen estar y, si no las
+ * reconoce, devuelve nada y la vista enseña la respuesta cruda. Cuando el
+ * contrato exista, se cambia solo esta función.
+ */
+function horasDe(respuesta: unknown): Fila[] {
+  const esDia = (k: string) => /fecha|dia|day|date/i.test(k);
+  const esHora = (k: string) => /hora|hour|cant|valor/i.test(k);
+  const filas: Fila[] = [];
+
+  const mirar = (v: unknown, hondo = 0): void => {
+    if (!v || typeof v !== 'object' || hondo > 3) return;
+    if (Array.isArray(v)) { v.forEach(x => mirar(x, hondo + 1)); return; }
+    const o = v as Record<string, unknown>;
+    const kDia = Object.keys(o).find(esDia);
+    const kHora = Object.keys(o).find(esHora);
+    if (kDia && kHora && typeof o[kHora] !== 'object') {
+      filas.push({ dia: String(o[kDia]), horas: String(o[kHora]) });
+      return;
+    }
+    Object.values(o).forEach(x => mirar(x, hondo + 1));
+  };
+  mirar(respuesta);
+  return filas;
 }
 
 export default function TrPublico() {
@@ -87,25 +122,57 @@ export default function TrPublico() {
     });
   }
 
+  /**
+   * Una petición por captura, de tres en tres.
+   *
+   * El lector tarda medio minuto larga por imagen y CloudFront corta la
+   * petición al minuto, así que mandarlas todas juntas devolvía un 504 en
+   * cuanto eran más de dos, aunque al otro lado se hubieran leído bien.
+   * Partidas, ninguna petición se acerca al límite y los resultados van
+   * apareciendo según llegan en vez de todos al final.
+   */
   async function enviar() {
-    setEnviando(true); setErrorEnvio(''); setResultados(null);
+    setEnviando(true); setErrorEnvio(''); setResultados([]);
+    const envio = `e-${Date.now().toString(36)}`;
+    const pendientes = [...capturas];
+    const hechos: Resultado[] = [];
+    let falloRed = false;
+
+    const obrero = async () => {
+      for (;;) {
+        const c = pendientes.shift();
+        if (!c) return;
+        try {
+          const r = await fetch('/api/tr/registro', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ correo: correo.trim().toLowerCase(), envio,
+              ...(fecha ? { fecha } : {}),
+              capturas: [{ nombre: c.nombre, contenido: c.contenido }] }),
+          });
+          const cuerpo = await r.json().catch(() => ({}));
+          const res: Resultado = r.ok
+            ? (cuerpo.resultados?.[0] ?? { captura: c.nombre, estado: 'OK' })
+            : { captura: c.nombre, estado: 'ERROR_SCRIPT', detalle: cuerpo.detail ?? `Error ${r.status}` };
+          hechos.push(res);
+        } catch {
+          falloRed = true;
+          hechos.push({ captura: c.nombre, estado: 'ERROR_RED' });
+        }
+        // Se vuelca en cada vuelta: con veinte capturas, ver la primera a los
+        // treinta segundos es la diferencia entre esperar y pensar que colgó.
+        setResultados([...hechos]);
+      }
+    };
+
     try {
-      const r = await fetch('/api/tr/registro', {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ correo: correo.trim().toLowerCase(),
-          ...(fecha ? { fecha } : {}),
-          capturas: capturas.map(c => ({ nombre: c.nombre, contenido: c.contenido })) }),
-      });
-      const cuerpo = await r.json().catch(() => ({}));
-      if (!r.ok) { setErrorEnvio(cuerpo.detail ?? `Error ${r.status}`); return; }
-      setResultados(cuerpo.resultados ?? []);
+      await Promise.all(Array.from({ length: Math.min(EN_VUELO, capturas.length) }, obrero));
+      if (falloRed) setErrorEnvio('Algunas capturas no se pudieron enviar. Revisa tu conexión y vuelve a intentarlo con esas.');
       setCapturas([]);
-    } catch {
-      setErrorEnvio('No se pudo enviar. Revisa tu conexión y vuelve a intentarlo.');
     } finally { setEnviando(false); }
   }
 
   const listo = !!persona && capturas.length > 0 && !enviando;
+  const totalEnvio = capturas.length || (resultados?.length ?? 0);
 
   return (
     <div style={{ minHeight:'100vh', background:'#f8fafc', padding:'28px 16px 60px' }}>
@@ -197,7 +264,9 @@ export default function TrPublico() {
                      background: listo ? '#6d28d9' : '#e2e8f0', color: listo ? '#fff' : '#94a3b8',
                      cursor: listo ? 'pointer' : 'not-allowed', display:'flex', alignItems:'center',
                      justifyContent:'center', gap:7 }}>
-            {enviando ? <><Loader2 size={15} className="animate-spin"/> Enviando…</> : <><Upload size={15}/> Enviar</>}
+            {enviando
+              ? <><Loader2 size={15} className="animate-spin"/> Leyendo {(resultados?.length ?? 0) + 1} de {totalEnvio}…</>
+              : <><Upload size={15}/> Enviar {capturas.length > 1 ? `las ${capturas.length} capturas` : ''}</>}
           </button>
 
           {!persona && correo.trim() && !errorCorreo && !comprobando && (
@@ -217,11 +286,25 @@ export default function TrPublico() {
               const col = e.tono === 'ok' ? { bg:'#f0fdf4', bd:'#bbf7d0', tx:'#047857' }
                         : e.tono === 'aviso' ? { bg:'#fffbeb', bd:'#fde68a', tx:'#92400e' }
                         : { bg:'#fef2f2', bd:'#fecaca', tx:'#991b1b' };
+              const filas = horasDe(r.respuesta);
               return (
                 <div key={i} style={{ padding:'9px 12px', borderRadius:9, background:col.bg,
                                       border:`0.5px solid ${col.bd}`, marginBottom:6 }}>
                   <div style={{ fontSize:11.5, fontWeight:600, color:col.tx }}>{r.captura}</div>
                   <div style={{ fontSize:11.5, color:col.tx, marginTop:2, lineHeight:1.5 }}>{e.texto}</div>
+                  {filas.length > 0 && (
+                    <table style={{ width:'100%', marginTop:7, borderCollapse:'collapse', fontSize:11.5 }}>
+                      <tbody>
+                        {filas.map((f, j) => (
+                          <tr key={j}>
+                            <td style={{ padding:'3px 0', color:col.tx, opacity:0.85 }}>{f.dia}</td>
+                            <td style={{ padding:'3px 0', color:col.tx, fontWeight:600, textAlign:'right',
+                                         fontVariantNumeric:'tabular-nums' }}>{f.horas}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
                 </div>
               );
             })}
