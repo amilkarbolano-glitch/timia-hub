@@ -203,6 +203,26 @@ export function persistSet(fullKey: string, value: unknown): void {
   notify();
 }
 
+/**
+ * Vuelve a pedirle una key al servidor.
+ *
+ * `loadStateFromApi` trae todo al arrancar, pero hay colecciones que el
+ * servidor escribe solo —las capturas del TR, que entran por la vista
+ * pública— y esas cambian mientras la sesión ya está abierta. Quien las mire
+ * pide la suya al abrir la vista en vez de recargar la página entera.
+ */
+export async function persistRefresh(fullKey: string): Promise<boolean> {
+  if (state.mode !== 'api' || state.base === null) return false;
+  try {
+    const r = await fetchWithTimeout(`${state.base}/api/state/${encodeURIComponent(fullKey)}`,
+                                     { headers: headers(), cache: 'no-store' }, 8000);
+    if (!r.ok) return false;
+    localStorage.setItem(fullKey, JSON.stringify(await r.json()));
+    notify();
+    return true;
+  } catch { return false; }
+}
+
 /** Lee una key (JSON) de localStorage con default. */
 export function persistGet<T>(fullKey: string, def: T): T {
   try { const v = localStorage.getItem(fullKey); return v ? (JSON.parse(v) as T) : def; } catch { return def; }

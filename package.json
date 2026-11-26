@@ -28,7 +28,8 @@
     "verif:replan": "tsx scripts/verif-replan.ts",
     "verif:q43": "tsx scripts/verif-q43.ts",
     "verif:tipos": "tsx scripts/verif-tipos.ts",
-    "verif:esperado-fase": "tsx scripts/verif-esperado-fase.ts"
+    "verif:esperado-fase": "tsx scripts/verif-esperado-fase.ts",
+    "verif:tr": "tsx scripts/verif-tr-publico.ts && tsx scripts/verif-tr-validacion.ts && tsx scripts/verif-tr-plantilla.ts"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",
