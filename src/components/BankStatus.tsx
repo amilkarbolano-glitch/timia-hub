@@ -10,6 +10,7 @@ import {
   ArrowRight,
   Building2
 } from 'lucide-react';
+import { difTexto } from '../lib/utils';
 
 export default function BankStatus() {
   const estimatedProgress = 75;
@@ -78,7 +79,7 @@ export default function BankStatus() {
           <p className="text-sm font-bold uppercase tracking-wider opacity-80">Desviación</p>
           <div className="flex items-center gap-3">
             {getStatusIcon(diff)}
-            <p className="text-5xl font-black">{diff > 0 ? '+' : ''}{diff.toFixed(1)}%</p>
+            <p className="text-5xl font-black">{difTexto(diff)}</p>
           </div>
           <p className="text-xs font-bold mt-4">
             {diff >= 0 ? 'El proyecto está adelantado o a tiempo.' : 

@@ -30,6 +30,7 @@ import {
   seriePlanConExtension,
   enSemana, enDia, realPlan, realFase, esperadoFase, type AvanceFase,
 } from '../lib/avance';
+import { difTexto } from '../lib/utils';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -116,7 +117,7 @@ function isoAYmd(iso?: string): string {
 
 function difColor(d: number) { return d >= 0 ? '#15803d' : d < -5 ? '#dc2626' : '#d97706'; }
 function difBg(d: number)    { return d >= 0 ? '#dcfce7' : d < -5 ? '#fef2f2' : '#fef9c3'; }
-function fmt1(n: number)     { const d = parseFloat(n.toFixed(1)); return `${d > 0 ? '+' : ''}${d}%`; }
+function fmt1(n: number)     { return difTexto(n); }
 // computeCurrentWeekIdx ahora delega en computeBusinessWeekIdx (días hábiles)
 // para que los festivos de timia_holidays sean tenidos en cuenta.
 // Se llama con el Set de festivos del plan activo.
@@ -2953,7 +2954,7 @@ async function exportPlanPPTX(plan: WorkPlan, getActivityPct: (eid: string, ai: 
   s1.addText('Plan de Trabajo',{x:0.4,y:1.05,w:9,fontSize:22,bold:false,color:GRAY,align:'left'});
   s1.addText(`Proyecto ${planLabel(plan)}`,{x:0.4,y:1.55,w:9,fontSize:50,bold:true,color:WHITE,align:'left'});
   s1.addText(today,{x:0.4,y:2.85,w:9,fontSize:12,color:GRAY,align:'left'});
-  [{label:'AVANCE REAL',val:`${overallReal}%`,col:WHITE},{label:'AVANCE ESPERADO',val:`${overallExp}%`,col:WHITE},{label:'DIFERENCIA',val:`${dif>=0?'+':''}${dif}%`,col:dif>=0?GREEN_L:ERR}].forEach((c,ci)=>{
+  [{label:'AVANCE REAL',val:`${overallReal}%`,col:WHITE},{label:'AVANCE ESPERADO',val:`${overallExp}%`,col:WHITE},{label:'DIFERENCIA',val:difTexto(dif),col:dif>=0?GREEN_L:ERR}].forEach((c,ci)=>{
     const x=0.4+ci*3.1;
     s1.addShape('rect'as any,{x,y:3.4,w:2.9,h:1.1,fill:{color:CARD},line:{color:BORDER_D,width:0.5}});
     s1.addText(c.label,{x,y:3.48,w:2.9,fontSize:7,color:GRAY,align:'center'});
@@ -2979,7 +2980,7 @@ async function exportPlanPPTX(plan: WorkPlan, getActivityPct: (eid: string, ai: 
       const badges=[
         {label:'Avance real',val:`${ePct}%`,bg:DARK,vc:WHITE},
         {label:'Esperado',   val:`${ent.pctExp}%`,bg:DARK,vc:WHITE},
-        {label:'Diferencia', val:`${eDif>=0?'+':''}${eDif}%`,bg:DARK,vc:eDif>=0?GREEN_L:ERR},
+        {label:'Diferencia', val:difTexto(eDif),bg:DARK,vc:eDif>=0?GREEN_L:ERR},
       ];
       badges.forEach((b,bi)=>{
         const bx=8.0+bi*0.67; const bw=0.63;
@@ -3010,7 +3011,7 @@ async function exportPlanPPTX(plan: WorkPlan, getActivityPct: (eid: string, ai: 
       const badges=[
         {label:'Avance real',val:`${ePct}%`, bg:DARK, vc:WHITE},
         {label:'Esperado',   val:`${ent.pctExp}%`,bg:DARK,vc:WHITE},
-        {label:'Diferencia', val:`${eDif>=0?'+':''}${eDif}%`, bg:DARK,vc:eDif>=0?GREEN_L:ERR},
+        {label:'Diferencia', val:difTexto(eDif), bg:DARK,vc:eDif>=0?GREEN_L:ERR},
       ];
       badges.forEach((b,bi)=>{
         const bx=8.0+bi*0.67; // 3 badges in 2"
@@ -3910,7 +3911,7 @@ export default function PlanDeTrabajo({ onGoEstimaciones }: { onGoEstimaciones?:
         const difClr: [number, number, number] = dif >= 0 ? [34, 197, 94] : dif < -5 ? [220, 38, 38] : [245, 158, 11];
         let sx = PW - MR;
         for (const { label, val, clr } of [
-          { label: 'DIF.', val: `${dif > 0 ? '+' : ''}${dif.toFixed(1)}%`, clr: difClr },
+          { label: 'DIF.', val: difTexto(dif), clr: difClr },
           { label: 'ESP.',  val: `${ent.pctExp.toFixed(1)}%`, clr: [180, 190, 210] as [number, number, number] },
           { label: 'REAL', val: `${ePct.toFixed(1)}%`, clr: [255, 255, 255] as [number, number, number] },
         ]) {

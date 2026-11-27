@@ -11,7 +11,7 @@
     "lint": "tsc --noEmit",
     "lint:real": "tsx scripts/lint-real.ts",
     "smoke": "tsx scripts/smoke.tsx",
-    "check": "npm run verif:tipos && npm run lint:real && vite build && npm run smoke",
+    "check": "npm run verif:tipos && npm run lint:real && vite build && npm run smoke && npm run verif:signo",
     "api:dev": "cd ../timia-hub-api && python dev_mock.py",
     "docker:up": "docker compose up -d --build",
     "seed:sync": "cp public/db.json ../timia-hub-api/seed.json",
@@ -30,7 +30,8 @@
     "verif:tipos": "tsx scripts/verif-tipos.ts",
     "verif:esperado-fase": "tsx scripts/verif-esperado-fase.ts",
     "verif:tr": "tsx scripts/verif-tr-publico.ts && tsx scripts/verif-tr-validacion.ts && tsx scripts/verif-tr-plantilla.ts",
-    "verif:dashboard": "tsx scripts/verif-dashboard.ts"
+    "verif:dashboard": "tsx scripts/verif-dashboard.ts",
+    "verif:signo": "tsx scripts/verif-signo.ts"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",

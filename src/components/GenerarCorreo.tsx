@@ -12,6 +12,7 @@ import { X, Copy, Download, Check } from 'lucide-react';
 import { adminStore, type PlanIssue } from '../lib/adminStore';
 import { realFase, type AvanceFase, type PesoModo } from '../lib/avance';
 import type { EntregableDeck } from '../lib/deckSeguimiento';
+import { difTexto } from '../lib/utils';
 
 const VINO = '#9a003d';   // el de la barra bajo la A del logo, muestreado del propio archivo
 const TINTA = '#1f2937';
@@ -273,7 +274,7 @@ export default function GenerarCorreo({ datos, onClose }: { datos: DatosCorreo; 
     // un −1.3% va en verde, porque un atraso pequeño se absorbe. Verde hasta −2
     // puntos, ámbar hasta −5, rojo por debajo.
     const tono = dif >= -2 ? ['#dcfce7', '#15803d'] : dif >= -5 ? ['#fef3c7', '#b45309'] : ['#fee2e2', '#b91c1c'];
-    caja(2, 'Diferencia', `${dif >= 0 ? '+' : '−'}${Math.abs(dif).toFixed(1)}%`, tono[0], tono[1]);
+    caja(2, 'Diferencia', difTexto(dif, 1, true), tono[0], tono[1]);
     yD += 70 + 22;
 
     ctx.fillStyle = VINO; ctx.beginPath(); ctx.roundRect(DER, yD, ANCHO_DER, 30, 6); ctx.fill();

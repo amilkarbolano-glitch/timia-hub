@@ -13,6 +13,8 @@
  * enviando se superponen.
  */
 
+import { difTexto } from './utils';
+
 export interface ActividadDeck {
   nombre: string;
   pct: number;
@@ -114,7 +116,7 @@ export async function cargarImagenes(base = ''): Promise<Imagenes> {
   return cache;
 }
 
-const uno = (n: number) => `${n >= 0 ? '+' : ''}${n.toFixed(1)}%`;
+const uno = (n: number) => difTexto(n);
 const colorDif = (d: number) => (d >= 0 ? VERDE : d < -5 ? ROJO : AMBAR);
 
 /**

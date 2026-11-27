@@ -7,6 +7,7 @@ import { useAuth, canAccess } from '../contexts/AuthContext';
 import { esTym } from '../modules/tym';
 import { adminStore, issueImpacts, type AdminProject, type AdminUser, type PlanIssue } from '../lib/adminStore';
 import { getPlanSummaries, getStandupDetalle, type PlanSummary, type ActividadStandup, type DetalleStandup } from './PlanDeTrabajo';
+import { difTexto } from '../lib/utils';
 
 /**
  * Abrir un proyecto lleva a su vista: los cerrados al plan de trabajo y los
@@ -148,7 +149,7 @@ function ProjectCard({ r, onOpen }: { r: ProjectRow; onOpen?: () => void }) {
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
         <span style={{ fontSize: 22, fontWeight: 700, color: '#111' }}>{r.real.toFixed(0)}%</span>
         <span style={{ fontSize: 10, color: '#94a3b8' }}>real · {r.exp.toFixed(0)}% esperado</span>
-        <span style={{ fontSize: 12, fontWeight: 700, color: difColor(r.dif), marginLeft: 'auto' }}>{r.dif >= 0 ? '+' : ''}{r.dif.toFixed(1)}</span>
+        <span style={{ fontSize: 12, fontWeight: 700, color: difColor(r.dif), marginLeft: 'auto' }}>{difTexto(r.dif)}</span>
       </div>
       <div style={{ height: 6, background: '#f1f5f9', borderRadius: 3, overflow: 'hidden', margin: '6px 0', position: 'relative' }}>
         <div style={{ width: `${Math.min(100, r.real)}%`, height: '100%', background: r.p.color }} />
@@ -343,7 +344,7 @@ export function textoStandup(bloques: BloqueStandup[], dias: number, md: boolean
 
   bloques.forEach(({ r, cerradas, movidas, enCurso, porVenir, abiertas }) => {
     if (!cerradas.length && !movidas.length && !enCurso.length && !porVenir.length && !abiertas.length) return;
-    L.push(`${b(r.p.name)}${r.p.sda ? ` · ${r.p.sda}` : ''} — ${r.real.toFixed(0)}% real / ${r.exp.toFixed(0)}% esperado (${r.dif >= 0 ? '+' : ''}${r.dif.toFixed(1)})`);
+    L.push(`${b(r.p.name)}${r.p.sda ? ` · ${r.p.sda}` : ''} — ${r.real.toFixed(0)}% real / ${r.exp.toFixed(0)}% esperado (${difTexto(r.dif)})`);
 
     const lista = (titulo: string, items: ActividadStandup[], pinta: (a: ActividadStandup) => string) => {
       if (!items.length) return;
@@ -477,7 +478,7 @@ export function StandupModal({ rows, issues, onClose }: { rows: ProjectRow[]; is
                   {r.real.toFixed(0)}% <span style={{ color:'#cbd5e1' }}>/ {r.exp.toFixed(0)}%</span>
                 </span>
                 <span style={{ fontSize:11.5, fontWeight:700, color:difColor(r.dif), fontVariantNumeric:'tabular-nums' }}>
-                  {r.dif >= 0 ? '+' : ''}{r.dif.toFixed(1)}
+                  {difTexto(r.dif)}
                 </span>
               </div>
 
@@ -579,7 +580,7 @@ export default function PMDashboard({ onViewChange }: PMDashboardProps) {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 10, marginBottom: 18 }}>
         <KPI icon={<Briefcase size={18} />} label="Proyectos activos" value={rows.length} sub={`${grupos.length} PM`} color="#7c3aed" />
-        <KPI icon={<TrendingUp size={18} />} label="Avance global" value={`${globalReal.toFixed(0)}%`} sub={`esperado ${globalExp.toFixed(0)}% · ${globalReal - globalExp >= 0 ? '+' : ''}${(globalReal - globalExp).toFixed(1)}`} color={difColor(globalReal - globalExp)} />
+        <KPI icon={<TrendingUp size={18} />} label="Avance global" value={`${globalReal.toFixed(0)}%`} sub={`esperado ${globalExp.toFixed(0)}% · ${difTexto(globalReal - globalExp)}`} color={difColor(globalReal - globalExp)} />
         <KPI icon={<CheckSquare size={18} />} label="Tareas del plan" value={`${rows.reduce((s, r) => s + r.done, 0)}/${totalActs}`} sub={`${rows.reduce((s, r) => s + r.late, 0)} atrasadas`} color="#0369a1" />
         <KPI icon={<AlertTriangle size={18} />} label="Bloqueantes · alertas" value={`${bloq} · ${alerts}`}
           sub={bloq + alerts ? 'ver el detalle' : 'sin bloqueos'}
